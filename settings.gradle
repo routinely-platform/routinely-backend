@@ -1,0 +1,14 @@
+rootProject.name = 'routinely-backend'
+
+include 'libs:common-core'
+include 'libs:common-web'
+include 'libs:common-observability'
+include 'libs:proto'
+
+include 'services:registry-service'
+include 'services:gateway-service'
+include 'services:user-service'
+include 'services:routine-service'
+include 'services:challenge-service'
+include 'services:chat-service'
+include 'services:notification-service'

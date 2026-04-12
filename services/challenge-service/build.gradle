@@ -1,0 +1,27 @@
+plugins {
+	id 'org.springframework.boot' version '4.0.5'
+}
+
+ext {
+	set('springGrpcVersion', "1.0.2")
+}
+
+dependencies {
+	implementation project(':libs:common-web')
+	implementation project(':libs:common-observability')
+	implementation project(':libs:proto')
+	implementation 'org.springframework.boot:spring-boot-starter-kafka'
+	implementation 'io.grpc:grpc-services'
+	implementation 'org.springframework.grpc:spring-grpc-server-spring-boot-starter'
+	implementation 'org.springframework.boot:spring-boot-starter-flyway'
+	runtimeOnly 'org.postgresql:postgresql'
+	testImplementation 'org.springframework.boot:spring-boot-starter-kafka-test'
+	testImplementation 'org.springframework.grpc:spring-grpc-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+dependencyManagement {
+	imports {
+		mavenBom "org.springframework.grpc:spring-grpc-dependencies:${springGrpcVersion}"
+	}
+}

@@ -1,0 +1,13 @@
+plugins {
+	id 'org.springframework.boot' version '4.0.5'
+}
+
+dependencies {
+	implementation project(':libs:common-web')
+	implementation project(':libs:common-observability')
+	implementation 'org.springframework.boot:spring-boot-starter-kafka'
+	implementation 'org.springframework.boot:spring-boot-starter-flyway'
+	runtimeOnly 'org.postgresql:postgresql'
+	testImplementation 'org.springframework.boot:spring-boot-starter-kafka-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}

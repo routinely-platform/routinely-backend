@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- Spring Boot 기본 로그 패턴/레벨 설정 포함 -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- application.yml 값을 logback 컨텍스트 변수로 바인딩 -->
+    <springProperty scope="context" name="appName"  source="spring.application.name" defaultValue="unknown-service"/>
+    <springProperty scope="context" name="lokiUrl"  source="loki.url"                defaultValue="http://localhost:3100"/>
+
+    <!-- ── Console Appender ─────────────────────────────────────────────────── -->
+    <!-- 개발 시 IntelliJ / 터미널 컬러 출력용                                    -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- ── Loki Appender ────────────────────────────────────────────────────── -->
+    <!-- loki4j 내장 배치 + 비동기 전송으로 성능 영향 최소화                       -->
+    <!-- traceId / spanId 는 Micrometer Tracing이 MDC에 자동 주입하므로           -->
+    <!-- 로그 메시지에 포함시켜 Zipkin 딥링크와 연결된다.                           -->
+    <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+        <http>
+            <url>${lokiUrl}/loki/api/v1/push</url>
+            <!-- 연결 실패 시 로그 유실 방지: neverBlock = true (큐 가득 차도 앱 블로킹 안 함) -->
+        </http>
+        <format>
+            <!-- Loki 스트림 레이블: 조회 시 필터링 기준 -->
+            <label>
+                <pattern>service=${appName},level=%level,host=${HOSTNAME:-local}</pattern>
+            </label>
+            <!-- 로그 메시지 본문: JSON 형식으로 구조화 -->
+            <!-- traceId/spanId 포함 → Grafana에서 Zipkin 딥링크 자동 생성 -->
+            <message>
+                <pattern>{"timestamp":"%d{ISO8601}","level":"%level","service":"${appName}","traceId":"%X{traceId:-}","spanId":"%X{spanId:-}","thread":"%thread","logger":"%logger{50}","message":"%message%replace(%ex){'[\r\n]+','\\n'}"}</pattern>
+            </message>
+            <sortByTime>true</sortByTime>
+        </format>
+    </appender>
+
+    <!-- ── Root Logger ──────────────────────────────────────────────────────── -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="LOKI"/>
+    </root>
+
+    <!-- 너무 많은 로그를 내는 라이브러리 레벨 조정 -->
+    <logger name="org.springframework.web"        level="INFO"/>
+    <logger name="org.springframework.security"   level="WARN"/>
+    <logger name="io.grpc"                        level="WARN"/>
+    <logger name="org.hibernate"                  level="WARN"/>
+    <logger name="com.zaxxer.hikari"              level="WARN"/>
+
+</configuration>
