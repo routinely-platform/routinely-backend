@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Routinely — System Architecture</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --surface2: #181c24;
+    --border: #232836;
+    --border-bright: #2e3650;
+    --text: #e2e8f7;
+    --muted: #5a6480;
+    --accent-blue: #4f7cff;
+    --accent-cyan: #00d4ff;
+    --accent-green: #00e5a0;
+    --accent-orange: #ff8c42;
+    --accent-purple: #9d6fff;
+    --accent-red: #ff4f6a;
+    --accent-yellow: #ffd166;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    padding: 40px 32px;
+    overflow-x: auto;
+  }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 48px;
+  }
+
+  header h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--text);
+  }
+
+  header span {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .arch {
+    display: grid;
+    gap: 0;
+    min-width: 1100px;
+  }
+
+  /* ── LAYER ── */
+  .layer {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .layer-label {
+    font-size: 9px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 6px 0 6px 4px;
+    border-left: 2px solid var(--border);
+    margin-bottom: 8px;
+  }
+
+  .layer-row {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+    margin-bottom: 8px;
+  }
+
+  /* ── SERVICE BOX ── */
+  .box {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    background: var(--surface);
+    position: relative;
+    flex: 1;
+    min-width: 140px;
+  }
+
+  .box:hover {
+    border-color: var(--border-bright);
+    background: var(--surface2);
+  }
+
+  .box-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .box-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .box-port {
+    font-size: 9px;
+    color: var(--muted);
+    font-weight: 400;
+    font-family: 'JetBrains Mono', monospace;
+    margin-left: auto;
+    letter-spacing: 0.5px;
+  }
+
+  .box-items {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .box-items li {
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.5;
+    padding-left: 10px;
+    position: relative;
+  }
+
+  .box-items li::before {
+    content: '─';
+    position: absolute;
+    left: 0;
+    color: var(--border-bright);
+    font-size: 9px;
+  }
+
+  .box-items li strong {
+    color: #8898c8;
+    font-weight: 500;
+  }
+
+  /* color variants */
+  .c-blue   { border-color: #4f7cff44; } .c-blue   .box-dot { background: var(--accent-blue); }
+  .c-cyan   { border-color: #00d4ff44; } .c-cyan   .box-dot { background: var(--accent-cyan); }
+  .c-green  { border-color: #00e5a044; } .c-green  .box-dot { background: var(--accent-green); }
+  .c-orange { border-color: #ff8c4244; } .c-orange .box-dot { background: var(--accent-orange); }
+  .c-purple { border-color: #9d6fff44; } .c-purple .box-dot { background: var(--accent-purple); }
+  .c-red    { border-color: #ff4f6a44; } .c-red    .box-dot { background: var(--accent-red); }
+  .c-yellow { border-color: #ffd16644; } .c-yellow .box-dot { background: var(--accent-yellow); }
+
+  .c-blue:hover   { border-color: #4f7cff88; background: #4f7cff08; }
+  .c-cyan:hover   { border-color: #00d4ff88; background: #00d4ff08; }
+  .c-green:hover  { border-color: #00e5a088; background: #00e5a008; }
+  .c-orange:hover { border-color: #ff8c4288; background: #ff8c4208; }
+  .c-purple:hover { border-color: #9d6fff88; background: #9d6fff08; }
+  .c-red:hover    { border-color: #ff4f6a88; background: #ff4f6a08; }
+  .c-yellow:hover { border-color: #ffd16688; background: #ffd16608; }
+
+  /* ── CONNECTOR SECTION ── */
+  .connector-section {
+    margin: 4px 0;
+    padding: 10px 0;
+    display: flex;
+    gap: 32px;
+    align-items: center;
+    border-top: 1px dashed var(--border);
+    border-bottom: 1px dashed var(--border);
+  }
+
+  .conn-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .conn-label {
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .conn-badge {
+    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    border: 1px solid;
+    white-space: nowrap;
+  }
+
+  .conn-blue   { color: var(--accent-blue);   border-color: #4f7cff55; background: #4f7cff10; }
+  .conn-cyan   { color: var(--accent-cyan);   border-color: #00d4ff55; background: #00d4ff10; }
+  .conn-green  { color: var(--accent-green);  border-color: #00e5a055; background: #00e5a010; }
+  .conn-purple { color: var(--accent-purple); border-color: #9d6fff55; background: #9d6fff10; }
+  .conn-orange { color: var(--accent-orange); border-color: #ff8c4255; background: #ff8c4210; }
+
+  .arrow {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* ── DIVIDER ── */
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 20px 0 16px;
+  }
+
+  .divider-line {
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .divider-label {
+    font-size: 9px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  /* ── KAFKA BUS ── */
+  .kafka-bus {
+    background: #1a1020;
+    border: 1px solid #9d6fff33;
+    border-radius: 8px;
+    padding: 14px 20px;
+    margin: 8px 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .kafka-bus-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent-purple);
+    letter-spacing: 1px;
+    white-space: nowrap;
+    padding-top: 2px;
+  }
+
+  .kafka-topics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .kafka-topic {
+    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    background: #9d6fff15;
+    border: 1px solid #9d6fff44;
+    color: #c4a8ff;
+  }
+
+  /* ── DB LEGEND ── */
+  .db-section {
+    margin-top: 24px;
+    padding: 16px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .db-section-title {
+    font-size: 9px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+
+  .db-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+  }
+
+  .db-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+
+  .db-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+
+  .db-info { flex: 1; }
+
+  .db-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .db-detail {
+    font-size: 9px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* ── LEGEND ── */
+  .legend {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .legend-line {
+    width: 24px;
+    height: 2px;
+  }
+
+  .full-width { flex: 0 0 100%; max-width: 100%; }
+
+  /* ── CLIENT BOX ── */
+  .client-box {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .client-pill {
+    padding: 8px 18px;
+    border-radius: 6px;
+    font-size: 11px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .client-pill span { color: var(--text); font-weight: 500; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Routinely</h1>
+  <span>System Architecture · 2026</span>
+</header>
+
+<div class="arch">
+
+  <!-- CLIENT -->
+  <div class="layer-label">CLIENT</div>
+  <div class="client-box">
+    <div class="client-pill">🌐 <span>React + TypeScript</span> &nbsp;|&nbsp; React Query · Zustand · Tailwind</div>
+    <div class="client-pill">🔌 <span>WebSocket (STOMP)</span> &nbsp;|&nbsp; Chat</div>
+    <div class="client-pill">📡 <span>SSE</span> &nbsp;|&nbsp; Notification</div>
+  </div>
+
+  <!-- COMMS: CLIENT → GW -->
+  <div class="connector-section">
+    <div class="conn-group">
+      <div class="conn-label">외부 통신</div>
+      <div class="conn-badge conn-blue">HTTP REST (JWT)</div>
+      <div class="arrow">↓</div>
+      <div class="conn-badge conn-blue">API Gateway :8080</div>
+    </div>
+    <div class="conn-group">
+      <div class="conn-label">실시간</div>
+      <div class="conn-badge conn-cyan">WebSocket (STOMP) → Chat Service</div>
+    </div>
+    <div class="conn-group">
+      <div class="conn-label">알림</div>
+      <div class="conn-badge conn-green">SSE → Notification Service</div>
+    </div>
+  </div>
+
+  <!-- INFRA: GW + EUREKA -->
+  <div class="divider"><div class="divider-line"></div><div class="divider-label">Infra</div><div class="divider-line"></div></div>
+  <div class="layer-row">
+    <div class="box c-blue" style="flex:2">
+      <div class="box-title">
+        <div class="box-dot"></div>
+        API Gateway
+        <span style="font-size:10px;color:var(--muted);font-weight:400">Spring Cloud Gateway (WebMVC)</span>
+        <span class="box-port">:8080</span>
+      </div>
+      <ul class="box-items">
+        <li>단일 진입점 · JWT 인증/인가</li>
+        <li><strong>Rate Limiting</strong> (Redis Token Bucket)</li>
+        <li><strong>Circuit Breaker</strong> (Resilience4j)</li>
+        <li>라우팅 · 공통 필터</li>
+        <li>WebSocket 라우팅</li>
+        <li>내부 서비스에 <strong>X-User-Id</strong> · <strong>X-Gateway-Secret</strong> 전달</li>
+        <li><strong>/api/v1/home</strong> 병렬 집계 (WebClient + Mono.zip)</li>
+      </ul>
+    </div>
+    <div class="box c-cyan" style="flex:1">
+      <div class="box-title">
+        <div class="box-dot"></div>
+        Registry Service
+        <span style="font-size:10px;color:var(--muted);font-weight:400">Eureka Server</span>
+        <span class="box-port">:8761</span>
+      </div>
+      <ul class="box-items">
+        <li>서비스 디스커버리</li>
+        <li>Gateway ↔ Service 동적 연결</li>
+        <li>인스턴스 헬스 체크</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- INTERNAL COMMS -->
+  <div class="connector-section">
+    <div class="conn-group">
+      <div class="conn-label">내부 동기</div>
+      <div class="conn-badge conn-orange">gRPC (멤버 검증 등 즉시 응답)</div>
+    </div>
+    <div class="conn-group">
+      <div class="conn-label">내부 비동기</div>
+      <div class="conn-badge conn-purple">Kafka (서비스 간 이벤트)</div>
+      <div class="conn-badge conn-green">PGMQ (서비스 내부 작업)</div>
+    </div>
+    <div class="conn-group">
+      <div class="conn-label">트랜잭션 보장</div>
+      <div class="conn-badge conn-blue">Outbox Pattern (Kafka 발행 정합성)</div>
+    </div>
+  </div>
+
+  <!-- SERVICES -->
+  <div class="divider"><div class="divider-line"></div><div class="divider-label">Microservices</div><div class="divider-line"></div></div>
+
+  <div class="layer-row">
+    <!-- User Service -->
+    <div class="box c-green">
+      <div class="box-title">
+        <div class="box-dot"></div>
+        User Service
+        <span class="box-port">:8081 / gRPC :9081</span>
+      </div>
+      <ul class="box-items">
+        <li>회원가입 / 로그인</li>
+        <li>JWT 발급 (블랙리스트는 MVP 이후)</li>
+        <li>프로필 관리 (닉네임)</li>
+        <li><strong>spring-security-crypto</strong> 비밀번호 해싱</li>
+      </ul>
+    </div>
+
+    <!-- Challenge Service -->
+    <div class="box c-orange">
+      <div class="box-title">
+        <div class="box-dot"></div>
+        Challenge Service
+        <span class="box-port">:8083 / gRPC :9083</span>
+      </div>
+      <ul class="box-items">
+        <li>그룹 챌린지 생성/관리</li>
+        <li>멤버 참여/탈퇴</li>
+        <li>챌린지 상태 관리</li>
+        <li>초대 링크 처리</li>
+        <li><strong>그룹 랭킹</strong> (Redis ZSET)</li>
+        <li><strong>그룹 평균 달성률</strong> (집계 테이블)</li>
+        <li>Saga <strong>Choreography</strong> 기반</li>
+        <li>gRPC Server (멤버 검증 제공)</li>
+      </ul>
+    </div>
+
+    <!-- Routine Service -->
+    <div class="box c-cyan">
+      <div class="box-title">
+        <div class="box-dot"></div>
+        Routine Service
+        <span class="box-port">:8082 / gRPC :9082</span>
+      </div>
+      <ul class="box-items">
+        <li>루틴 템플릿 관리</li>
+        <li>반복 규칙 기반 자동 생성</li>
+        <li>루틴 수행 완료 처리</li>
+        <li>피드(인증 카드) 생성</li>
+        <li><strong>개인 달성률 / 스트릭</strong> (집계 테이블)</li>
+        <li>Kafka 이벤트 발행 <strong>(Outbox)</strong></li>
+        <li>gRPC Server + Client</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="layer-row">
+    <!-- Notification Service -->
+    <div class="box c-yellow">
+      <div class="box-title">
+        <div class="box-dot"></div>
+        Notification Service
+        <span class="box-port">:8085</span>
+      </div>
+      <ul class="box-items">
+        <li>예약 기반 알림 처리</li>
+        <li><strong>PGMQ</strong> due 기반 발송</li>
+        <li><strong>Next-one chaining</strong> 전략</li>
+        <li>재시도 내장 (visibility timeout)</li>
+        <li><strong>SSE</strong>로 클라이언트 직접 전달</li>
+        <li>Kafka consumer (이벤트 수신)</li>
+      </ul>
+    </div>
+
+    <!-- Chat Service -->
+    <div class="box c-purple">
+      <div class="box-title">
+        <div class="box-dot"></div>
+        Chat Service
+        <span class="box-port">:8084 / gRPC :9084</span>
+      </div>
+      <ul class="box-items">
+        <li>그룹 채팅방 관리</li>
+        <li><strong>WebSocket (STOMP)</strong></li>
+        <li>텍스트 / 이미지 메시지</li>
+        <li>Kafka 기반 멀티 인스턴스 브로드캐스트</li>
+        <li>presence / unread (Redis)</li>
+        <li>gRPC Client (챌린지 멤버 검증)</li>
+      </ul>
+    </div>
+
+    <!-- Feed (Routine 내부) -->
+    <div class="box c-red">
+      <div class="box-title"><div class="box-dot"></div>Feed <span style="font-size:10px;font-weight:400;color:var(--muted)">in Routine Service</span></div>
+      <ul class="box-items">
+        <li>그룹별 인증 카드 조회</li>
+        <li>리액션 (이모지/좋아요)</li>
+        <li>피드 필터 / 정렬</li>
+        <li>루틴 완료 시 카드 자동 생성</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- KAFKA BUS -->
+  <div class="divider"><div class="divider-line"></div><div class="divider-label">Event Bus</div><div class="divider-line"></div></div>
+  <div class="kafka-bus">
+    <div class="kafka-bus-title">⚡ Kafka (KRaft)</div>
+    <div class="kafka-topics">
+      <div class="kafka-topic">routine.execution.done</div>
+      <div class="kafka-topic">challenge.member.joined</div>
+      <div class="kafka-topic">challenge.ended</div>
+      <div class="kafka-topic">chat.message.created</div>
+    </div>
+  </div>
+
+  <!-- DB LAYER -->
+  <div class="divider"><div class="divider-line"></div><div class="divider-label">Data Layer</div><div class="divider-line"></div></div>
+  <div class="db-section">
+    <div class="db-section-title">Database per Service · PostgreSQL × 5 (단일 컨테이너, 로컬) + Redis</div>
+    <div class="db-grid">
+      <div class="db-item">
+        <div class="db-icon" style="background:#00e5a015;color:#00e5a0">🐘</div>
+        <div class="db-info">
+          <div class="db-name" style="color:#00e5a0">user_db · PostgreSQL</div>
+          <div class="db-detail">users · refresh_tokens</div>
+        </div>
+      </div>
+      <div class="db-item">
+        <div class="db-icon" style="background:#00d4ff15;color:#00d4ff">🐘</div>
+        <div class="db-info">
+          <div class="db-name" style="color:#00d4ff">routine_db · PostgreSQL</div>
+          <div class="db-detail">routines · executions · feed_cards · <strong style="color:#8898c8">routine_daily_summary</strong> · outbox</div>
+        </div>
+      </div>
+      <div class="db-item">
+        <div class="db-icon" style="background:#ff8c4215;color:#ff8c42">🐘</div>
+        <div class="db-info">
+          <div class="db-name" style="color:#ff8c42">challenge_db · PostgreSQL</div>
+          <div class="db-detail">challenges · members · <strong style="color:#8898c8">challenge_member_summary</strong></div>
+        </div>
+      </div>
+      <div class="db-item">
+        <div class="db-icon" style="background:#9d6fff15;color:#9d6fff">🐘</div>
+        <div class="db-info">
+          <div class="db-name" style="color:#9d6fff">chat_db · PostgreSQL</div>
+          <div class="db-detail">chat_rooms · chat_room_members · chat_messages</div>
+        </div>
+      </div>
+      <div class="db-item">
+        <div class="db-icon" style="background:#ffd16615;color:#ffd166">🐘</div>
+        <div class="db-info">
+          <div class="db-name" style="color:#ffd166">notification_db · PostgreSQL + PGMQ</div>
+          <div class="db-detail">notification_queue (PGMQ) · 알림 예약/재시도</div>
+        </div>
+      </div>
+      <div class="db-item">
+        <div class="db-icon" style="background:#4f7cff15;color:#4f7cff">⚡</div>
+        <div class="db-info">
+          <div class="db-name" style="color:#4f7cff">Redis (공유)</div>
+          <div class="db-detail">Rate Limiting · 랭킹 ZSET · 그룹 대시보드 캐시 · presence · unread count</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEGEND -->
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-line" style="background:var(--accent-blue)"></div>
+      HTTP REST
+    </div>
+    <div class="legend-item">
+      <div class="legend-line" style="background:var(--accent-orange);height:2px;border-top:2px dashed var(--accent-orange);background:none"></div>
+      gRPC (동기)
+    </div>
+    <div class="legend-item">
+      <div class="legend-line" style="background:var(--accent-purple)"></div>
+      Kafka (비동기)
+    </div>
+    <div class="legend-item">
+      <div class="legend-line" style="background:var(--accent-green)"></div>
+      PGMQ (내부 큐)
+    </div>
+    <div class="legend-item">
+      <div class="legend-line" style="background:var(--accent-cyan)"></div>
+      WebSocket / SSE
+    </div>
+    <div class="legend-item">
+      <div class="legend-line" style="background:var(--accent-yellow)"></div>
+      Outbox Pattern
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
