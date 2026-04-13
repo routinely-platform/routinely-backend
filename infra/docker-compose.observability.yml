@@ -1,0 +1,74 @@
+services:
+
+  # ── Zipkin (분산 추적) ─────────────────────────────────────────────────────────
+  zipkin:
+    image: openzipkin/zipkin:3
+    container_name: routinely-zipkin
+    ports:
+      - "9411:9411"
+    networks:
+      - routinely-net
+
+  # ── Prometheus (메트릭 수집) ──────────────────────────────────────────────────
+  # Spring Boot 서비스는 호스트에서 실행되므로 host.docker.internal 로 스크랩한다.
+  # extra_hosts 설정으로 Linux에서도 host.docker.internal 이 동작한다.
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: routinely-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - routinely-net
+
+  # ── Loki (로그 저장) ───────────────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:3.3.0
+    container_name: routinely-loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - routinely-net
+
+  # ── Grafana Alloy (로그 수집 에이전트) ────────────────────────────────────────
+  # Docker 소켓을 마운트하여 routinely-* 컨테이너 로그를 Loki 로 전달한다.
+  alloy:
+    image: grafana/alloy:v1.5.1
+    container_name: routinely-alloy
+    volumes:
+      - ./config/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: run /etc/alloy/config.alloy
+    networks:
+      - routinely-net
+    depends_on:
+      - loki
+
+  # ── Grafana (시각화) ───────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: routinely-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    networks:
+      - routinely-net
+    depends_on:
+      - prometheus
+      - loki
+
+networks:
+  routinely-net:
+    external: true   # docker-compose.yml 에서 생성한 네트워크를 공유
+
+volumes:
+  grafana_data:

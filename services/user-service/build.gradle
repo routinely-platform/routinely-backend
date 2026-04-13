@@ -1,0 +1,23 @@
+plugins {
+	id 'org.springframework.boot' version '4.0.5'
+}
+
+ext {
+	set('springCloudVersion', "2025.1.1")
+}
+
+dependencies {
+	implementation project(':libs:common-web')
+	implementation project(':libs:common-observability')
+	implementation 'org.springframework.boot:spring-boot-starter-flyway'
+	implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
+	runtimeOnly 'org.postgresql:postgresql'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	implementation 'org.springframework.security:spring-security-crypto'
+}
+
+dependencyManagement {
+	imports {
+		mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+	}
+}

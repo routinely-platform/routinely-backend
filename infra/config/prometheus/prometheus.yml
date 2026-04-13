@@ -1,0 +1,51 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Spring Boot 서비스는 호스트 머신에서 직접 실행된다.
+# Prometheus 컨테이너 → 호스트 서비스 접근: host.docker.internal 사용.
+# (docker-compose.observability.yml 의 extra_hosts 설정으로 Linux 에서도 동작)
+
+scrape_configs:
+
+  - job_name: 'gateway-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+        labels:
+          service: 'gateway-service'
+
+  - job_name: 'user-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8081']
+        labels:
+          service: 'user-service'
+
+  - job_name: 'routine-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8082']
+        labels:
+          service: 'routine-service'
+
+  - job_name: 'challenge-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8083']
+        labels:
+          service: 'challenge-service'
+
+  - job_name: 'chat-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8084']
+        labels:
+          service: 'chat-service'
+
+  - job_name: 'notification-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8085']
+        labels:
+          service: 'notification-service'

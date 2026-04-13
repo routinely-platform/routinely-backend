@@ -1,0 +1,46 @@
+// Routinely — Grafana Alloy 로그 수집 파이프라인
+// routinely-* 컨테이너(postgres, redis, kafka)의 stdout/stderr 를 Loki 로 전달한다.
+
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+// Docker 컨테이너 자동 탐지
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+  filter {
+    name   = "name"
+    values = ["routinely-*"]
+  }
+}
+
+// 레이블 가공: 컨테이너명 → container / service 레이블
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/?(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+}
+
+// Docker 컨테이너 로그 수집
+loki.source.docker "infra_logs" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.containers.output
+  forward_to = [loki.write.local.receiver]
+}
+
+// Loki 전송
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

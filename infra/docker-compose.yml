@@ -1,0 +1,76 @@
+services:
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────────
+  # 서비스별 DB를 단일 인스턴스에서 분리된 Database로 운영한다 (로컬 개발 한정).
+  # 프로덕션에서는 서비스별 독립 인스턴스를 권장한다.
+  postgres:
+    image: postgres:17-alpine
+    container_name: routinely-postgres
+    environment:
+      POSTGRES_USER: routinely
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: user_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./config/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    networks:
+      - routinely-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U routinely -d user_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ─────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: routinely-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - routinely-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ── Kafka (KRaft 모드, Zookeeper 없음) ───────────────────────────────────────
+  # PLAINTEXT (9092) : 같은 Docker 네트워크 내 컨테이너 간 통신
+  # EXTERNAL  (29092): 호스트 머신 (Spring Boot 서비스) 접속용
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    container_name: routinely-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:9093'
+      KAFKA_LISTENERS: 'PLAINTEXT://kafka:9092,CONTROLLER://kafka:9093,EXTERNAL://0.0.0.0:29092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+    ports:
+      - "29092:29092"
+    networks:
+      - routinely-net
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "kafka:9092", "--list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+networks:
+  routinely-net:
+    name: routinely-net
+
+volumes:
+  postgres_data:
