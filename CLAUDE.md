@@ -186,7 +186,7 @@ ApiResponse.fail("CHALLENGE_NOT_FOUND", "...")        // { success: false, messa
 ### Controller 작성 규칙
 
 - `userId`: 항상 `@RequestHeader("X-User-Id")`로 수신 — JWT 재파싱 금지
-- `BindingResult` 파라미터 선언만 하면 됨 — AOP 자동 처리
+- `BindingResult` 파라미터 선언 금지 — 없어야 Spring이 `MethodArgumentNotValidException`을 자동으로 던짐
 - 반환 타입: `ResponseEntity<ApiResponse<T>>`
 
 > 구현 예시 → `docs/conventions/controller.md`
