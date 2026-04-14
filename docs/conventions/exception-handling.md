@@ -4,29 +4,48 @@
 
 | 클래스 | 모듈 | 패키지 |
 |---|---|---|
+| `ErrorStatus` (enum) | common-core | `com.routinely.core.exception` |
 | `ErrorCode` (enum) | common-core | `com.routinely.core.exception` |
 | `BusinessException` | common-core | `com.routinely.core.exception` |
 | `GlobalExceptionHandler` | common-web | `com.routinely.web.handler` |
 
 ---
 
+## ErrorStatus (enum)
+
+`spring-web` 의존 없이 HTTP 상태코드를 표현하기 위한 enum. `common-core`에 위치한다.
+
+```java
+@Getter
+public enum ErrorStatus {
+    BAD_REQUEST(400),
+    UNAUTHORIZED(401),
+    FORBIDDEN(403),
+    NOT_FOUND(404),
+    CONFLICT(409),
+    INTERNAL_SERVER_ERROR(500);
+
+    private final int code;
+}
+```
+
 ## ErrorCode (enum)
 
-각 에러 코드는 `code`, `message`, `httpStatus` 필드를 가진다.
+각 에러 코드는 `code`, `message`, `status` 필드를 가진다.
 
 ```java
 @Getter
 public enum ErrorCode {
-    VALIDATION_FAILED("VALIDATION_FAILED", "유효성 검사에 실패했습니다.", HttpStatus.BAD_REQUEST),
-    CHALLENGE_NOT_FOUND("CHALLENGE_NOT_FOUND", "챌린지를 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
-    CHALLENGE_ALREADY_JOINED("CHALLENGE_ALREADY_JOINED", "이미 참여한 챌린지입니다.", HttpStatus.CONFLICT),
+    VALIDATION_FAILED("VALIDATION_FAILED", "유효성 검사에 실패했습니다.", ErrorStatus.BAD_REQUEST),
+    CHALLENGE_NOT_FOUND("CHALLENGE_NOT_FOUND", "챌린지를 찾을 수 없습니다.", ErrorStatus.NOT_FOUND),
+    CHALLENGE_ALREADY_JOINED("CHALLENGE_ALREADY_JOINED", "이미 참여한 챌린지입니다.", ErrorStatus.CONFLICT),
     // ... 서비스별 추가;
 
     private final String code;
     private final String message;
-    private final HttpStatus httpStatus;
+    private final ErrorStatus status;
 
-    ErrorCode(String code, String message, HttpStatus httpStatus) { ... }
+    ErrorCode(String code, String message, ErrorStatus status) { ... }
 }
 ```
 
@@ -79,7 +98,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<?>> handleBusiness(BusinessException e) {
         ErrorCode errorCode = e.getErrorCode();
         log.warn("Business exception: code={}, message={}", errorCode.getCode(), e.getMessage());
-        return ResponseEntity.status(errorCode.getHttpStatus())
+        return ResponseEntity.status(errorCode.getStatus().getCode())
                 .body(ApiResponse.fail(errorCode.getCode(), e.getMessage()));
     }
 
