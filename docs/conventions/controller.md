@@ -10,11 +10,11 @@ public class ChallengeController {
 
     private final ChallengeService challengeService;
 
-    // userId는 Gateway가 추가한 X-User-Id 헤더에서 수신 — JWT 재파싱 불필요
+    // @Valid 검사 실패 시 MethodArgumentNotValidException 자동 발생 → GlobalExceptionHandler 처리
+    // BindingResult 파라미터 선언 금지 — 없어야 Spring이 자동으로 예외를 던짐
     @PostMapping
     public ResponseEntity<ApiResponse<ChallengeDto.CreateResponse>> create(
             @RequestBody @Valid ChallengeDto.CreateRequest request,
-            BindingResult bindingResult,               // AOP가 자동 처리 — 체크 코드 불필요
             @RequestHeader("X-User-Id") Long userId) {
 
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -36,7 +36,7 @@ public class ChallengeController {
 
 **규칙 요약:**
 - `userId`는 항상 `@RequestHeader("X-User-Id")`로 수신 — 서비스에서 JWT 파싱 금지
-- `BindingResult`는 파라미터 선언만 하면 됨 — AOP가 자동 처리
+- `BindingResult` 파라미터 선언 금지 — 없어야 Spring이 자동으로 예외를 던짐
 - 반환 타입: `ResponseEntity<ApiResponse<T>>`
 
 ---
