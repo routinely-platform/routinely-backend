@@ -1,4 +1,4 @@
-package com.routinely.core.config;
+package com.routinely.jpa.config;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.data.jpa.repository.config.EnableJpaAuditing;

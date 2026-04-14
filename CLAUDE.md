@@ -31,7 +31,8 @@
 ```
 routinely-backend/
 ├── libs/
-│   ├── common-core/          # 공통 유틸, 에러, ApiResponse, BaseEntity
+│   ├── common-core/          # 공통 유틸, 에러, ApiResponse (JPA/Web 의존 없는 순수 도메인)
+│   ├── common-jpa/           # JPA 공통 설정 (BaseEntity, JpaAuditingConfig)
 │   ├── common-web/           # Web 필터, MDC, 공통 ExceptionHandler
 │   ├── common-observability/ # 로깅/트레이싱 Bean 설정
 │   └── proto/                # gRPC Proto 정의 + 생성 스텁
@@ -58,10 +59,12 @@ routinely-backend/
 | 서비스 | 의존하는 libs |
 |---|---|
 | registry-service | 없음 |
-| gateway | common-core, common-web, common-observability |
-| 나머지 서비스 5개 | common-core, common-web, common-observability, proto |
+| gateway-service | common-core, common-observability |
+| user-service | common-web, common-jpa, common-observability |
+| routine-service, challenge-service, chat-service | common-web, common-jpa, common-observability, proto |
+| notification-service | common-web, common-jpa, common-observability |
 
-> Gateway는 Spring WebFlux 기반 — common-web 적용 가능 여부 구현 시 검토
+> gateway-service는 JPA 불필요 → common-jpa 미사용. common-web은 common-core를 전이 포함.
 
 ---
 
@@ -134,7 +137,7 @@ ApiResponse.fail("CHALLENGE_NOT_FOUND", "...")        // { success: false, messa
 ### 예외 처리 전략
 
 - `ErrorCode` enum + `BusinessException` 단일 클래스로 통일 — 도메인별 예외 클래스 다수 생성 금지
-- 유효성 검사는 Controller 레이어에서만 수행 — `ValidationAdvice` AOP가 자동 처리
+- 유효성 검사는 Controller 레이어에서만 수행 — `GlobalExceptionHandler`가 `MethodArgumentNotValidException` 자동 처리
 - 전역 예외 처리는 `GlobalExceptionHandler` (common-web)에서 담당
 
 > 구현 예시 → `docs/conventions/exception-handling.md`
