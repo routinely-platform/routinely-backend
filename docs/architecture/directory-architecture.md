@@ -62,7 +62,9 @@ routinely-backend/
 │       └── adr-0025-eureka-service-registry.md
 │
 ├── libs/                             # 공통 라이브러리 (서비스 간 공유 코드)
-│   ├── common-core/                  # 공통 유틸, 에러, 응답 포맷, 베이스 엔티티
+│   ├── common-core/                  # 공통 유틸, 에러, 응답 포맷 (순수 도메인 — JPA/Web 의존 없음)
+│   │   └── build.gradle
+│   ├── common-jpa/                   # JPA 공통 설정 (BaseEntity, JpaAuditingConfig)
 │   │   └── build.gradle
 │   ├── common-web/                   # Web 필터, MDC, 공통 Exception Handler
 │   │   └── build.gradle
@@ -188,12 +190,12 @@ routinely-backend/
 | 모듈 | 의존하는 libs | 비고 |
 |---|---|---|
 | registry-service | 없음 | 순수 Eureka Server |
-| gateway-service | common-core, common-observability | WebFlux 기반 → common-web 미사용 |
-| user-service | common-web, common-observability | common-web 이 common-core 포함 |
-| routine-service | common-web, common-observability, proto | |
-| challenge-service | common-web, common-observability, proto | |
-| chat-service | common-web, common-observability, proto | |
-| notification-service | common-web, common-observability | gRPC 미사용 → proto 불필요 |
+| gateway-service | common-core, common-observability | JPA 없음 → common-jpa 미사용 |
+| user-service | common-web, common-jpa, common-observability | common-web 이 common-core 포함 |
+| routine-service | common-web, common-jpa, common-observability, proto | |
+| challenge-service | common-web, common-jpa, common-observability, proto | |
+| chat-service | common-web, common-jpa, common-observability, proto | |
+| notification-service | common-web, common-jpa, common-observability | gRPC 미사용 → proto 불필요 |
 
 ---
 
@@ -224,7 +226,8 @@ com.routinely.{service}/
 
 | 모듈 | 역할 | 분리 이유 |
 |---|---|---|
-| `common-core` | 공통 유틸, 에러, 응답 포맷, 베이스 엔티티 | Spring Web 의존 없이 모든 서비스가 사용 |
+| `common-core` | 공통 유틸, 에러, 응답 포맷 | JPA/Web 의존 없이 모든 서비스가 사용 가능한 순수 도메인 모듈 |
+| `common-jpa` | BaseEntity, JpaAuditingConfig | JPA가 필요 없는 서비스(gateway)의 클래스패스 오염 방지 |
 | `common-web` | Web 필터, MDC, Exception Handler | Web 의존이 불필요한 서비스의 오염 방지 |
 | `common-observability` | 로깅/트레이싱 설정 | 관찰 가능성 관련 설정을 중앙화 |
 | `proto` | gRPC Proto 정의 + 생성 스텁 | 서비스 간 계약을 단일 위치에서 관리 |

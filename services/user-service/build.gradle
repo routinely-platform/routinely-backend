@@ -8,6 +8,7 @@ ext {
 
 dependencies {
 	implementation project(':libs:common-web')
+	implementation project(':libs:common-jpa')
 	implementation project(':libs:common-observability')
 	implementation 'org.springframework.boot:spring-boot-starter-flyway'
 	implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
