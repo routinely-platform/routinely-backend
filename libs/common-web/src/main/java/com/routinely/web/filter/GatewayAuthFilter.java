@@ -1,6 +1,5 @@
 package com.routinely.web.filter;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.routinely.core.constant.HeaderConstants;
 import com.routinely.core.exception.ErrorCode;
 import com.routinely.core.response.ApiResponse;
@@ -14,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
