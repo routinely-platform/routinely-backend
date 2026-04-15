@@ -1,4 +1,4 @@
-package com.routinely.core.entity;
+package com.routinely.jpa.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.EntityListeners;
