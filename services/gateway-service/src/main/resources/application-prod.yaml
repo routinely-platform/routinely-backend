@@ -1,7 +1,7 @@
 eureka:
   client:
     service-url:
-      defaultZone: ${EUREKA_DEFAULT_ZONE}
+      defaultZone: http://${EUREKA_HOST:registry-service}:8761/eureka/
 
 gateway:
   secret: ${GATEWAY_SECRET}
