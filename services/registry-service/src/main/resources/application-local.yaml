@@ -1,0 +1,7 @@
+eureka:
+  instance:
+    hostname: localhost
+  server:
+    enable-self-preservation: false
+    wait-time-in-ms-when-sync-empty: 0
+    eviction-interval-timer-in-ms: 3000

@@ -1,0 +1,5 @@
+eureka:
+  instance:
+    hostname: ${EUREKA_HOST:registry-service}
+  server:
+    enable-self-preservation: true
