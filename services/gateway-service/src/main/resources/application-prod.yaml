@@ -1,0 +1,10 @@
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE}
+
+gateway:
+  secret: ${GATEWAY_SECRET}
+
+jwt:
+  secret: ${JWT_SECRET}
