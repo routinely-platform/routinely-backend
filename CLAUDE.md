@@ -18,7 +18,7 @@
 | Cache | Redis | Rate Limiting, ZSET 랭킹, 캐시 |
 | File Storage | AWS S3 | `FileStorage` 인터페이스로 추상화 |
 | Resilience | Resilience4j | timeout / retry / circuit breaker |
-| API 문서 | Swagger (springdoc openapi) | local/dev 프로파일에서만 활성화 |
+| API 문서 | Swagger (springdoc openapi) | `local`, `local,observability` 프로파일에서만 활성화 |
 | 분산 추적 | Micrometer Tracing + Zipkin | traceId/spanId 자동 주입 |
 | 로그 수집 | Grafana Alloy → Loki | JSON 구조 로그 stdout 출력 |
 | 메트릭 | Prometheus + Grafana | |
@@ -26,7 +26,36 @@
 
 ---
 
-## 2. 멀티모듈 구조
+## 2. 스프링 프로파일 정책
+
+| 프로파일 | 역할 |
+|---|---|
+| `local` | 로컬 개발 환경 설정 (GatewayAuthFilter 비활성화 등) |
+| `prod` | 배포 환경 설정 |
+| `observability` | Observability 스택 활성화 — 단독 사용 불가, 반드시 `local` 또는 `prod`와 조합 |
+
+`observability`는 독립적인 애드온 프로파일이다. 환경 프로파일(`local` / `prod`)과 조합해서 사용한다.
+
+| 조합 | 사용 시점 |
+|---|---|
+| `local` | 평소 로컬 개발 (기본값) |
+| `local,observability` | 로컬에서 Observability 스택까지 함께 확인할 때 |
+| `prod` | 배포 |
+| `prod,observability` | 배포 환경에서 Observability 스택 활성화 |
+
+```bash
+# 평소 개발
+./gradlew :services:user-service:bootRun --args='--spring.profiles.active=local'
+
+# 로컬에서 Observability 스택 확인 (./scripts/local-up.sh --obs 와 함께)
+./gradlew :services:user-service:bootRun --args='--spring.profiles.active=local,observability'
+```
+
+> Swagger UI, DEBUG 로그 등 개발 전용 기능은 `local` 계열 프로파일(`local`, `local,observability`)에서만 활성화한다.
+
+---
+
+## 3. 멀티모듈 구조
 
 ```
 routinely-backend/
@@ -68,7 +97,7 @@ routinely-backend/
 
 ---
 
-## 3. 서비스별 DB 및 포트
+## 4. 서비스별 DB 및 포트
 
 | 서비스 | HTTP 포트 | gRPC 포트 | PostgreSQL DB |
 |---|:---:|:---:|---|
@@ -81,7 +110,7 @@ routinely-backend/
 
 ---
 
-## 4. 서비스 내부 패키지 구조
+## 5. 서비스 내부 패키지 구조
 
 ```
 com.routinely.{service}/
@@ -100,7 +129,7 @@ com.routinely.{service}/
 
 ---
 
-## 5. 코딩 컨벤션
+## 6. 코딩 컨벤션
 
 ### 공통 응답 포맷
 
@@ -233,7 +262,7 @@ Kafka 토픽명, 헤더 키 등은 common-core의 interface(`KafkaTopics`, `Head
 | `ERROR` | 예상치 못한 예외, 외부 시스템 장애 (gRPC 실패, Outbox 발행 실패) |
 | `WARN` | 비즈니스 예외, 재시도 (BusinessException, 유효성 검사 실패) |
 | `INFO` | 주요 비즈니스 이벤트 (챌린지 생성, 루틴 완료) |
-| `DEBUG` | 개발 디버깅용 (local/dev 프로파일에서만) |
+| `DEBUG` | 개발 디버깅용 (`local`, `local,observability` 프로파일에서만) |
 
 - 파라미터는 로그 메시지에 포함 — 문자열 연결 금지 (`log.info("...", value)`)
 - 민감 정보(비밀번호, 토큰) 로그 출력 금지

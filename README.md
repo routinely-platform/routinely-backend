@@ -113,10 +113,13 @@ cp infra/.env.example infra/.env
 
 `infra/.env`는 `docker compose`, `./scripts/local-up.sh`, `./scripts/local-down.sh`에서 사용하는 **인프라용 환경 변수 파일**입니다.
 
-- `DB_PASSWORD`: PostgreSQL 컨테이너 비밀번호
-- `JWT_SECRET`: Gateway JWT 검증용 시크릿
-- `GATEWAY_SECRET`: Gateway ↔ 내부 서비스 간 공통 시크릿
-- `GRAFANA_PASSWORD`: Grafana 관리자 비밀번호 (미설정 시 기본값 `admin`)
+| 변수 | 필수 | 설명 |
+|---|:---:|---|
+| `DB_PASSWORD` | ✓ | PostgreSQL 컨테이너 비밀번호 |
+| `JWT_SECRET` | ✓ | Gateway JWT 서명 검증용 시크릿 (`openssl rand -base64 32`) |
+| `GATEWAY_SECRET` | ✓ | X-Gateway-Secret 헤더 값. 내부 서비스 직접 호출 여부 검증 (`openssl rand -hex 32`) |
+| `GRAFANA_PASSWORD` | — | Grafana 관리자 비밀번호 (미설정 시 기본값 `admin`) |
+| `EUREKA_HOST` | prod only | registry-service 호스트명. `prod` 프로파일 전용, 로컬에서는 불필요 |
 
 > `bootRun` 또는 IDE로 개별 서비스를 직접 실행할 때 `infra/.env`가 자동으로 로드되지는 않습니다.
 
@@ -132,13 +135,32 @@ cp infra/.env.example infra/.env
 
 ### 3. 서비스 실행
 
+#### 스프링 프로파일 정책
+
+| 프로파일 | 역할 |
+|---|---|
+| `local` | 로컬 개발 환경 설정 (GatewayAuthFilter 비활성화 등) |
+| `prod` | 배포 환경 설정 |
+| `observability` | Observability 스택(Zipkin·Prometheus·Grafana·Loki) 활성화 — 단독 사용 불가, 반드시 다른 프로파일과 조합 |
+
+`observability`는 독립적인 애드온 프로파일이다. `local` 또는 `prod`와 조합해서 사용한다.
+
+| 조합 | 사용 시점 |
+|---|---|
+| `local` | 평소 로컬 개발 (기본값) |
+| `local,observability` | 로컬에서 Observability 스택까지 함께 확인할 때 |
+| `prod` | 배포 |
+| `prod,observability` | 배포 환경에서 Observability 스택 활성화 |
+
 ```bash
 # 전체 빌드
 ./gradlew build
 
-# 개별 서비스 실행 (예: user-service)
-# common-web를 사용하는 내부 서비스는 local 프로파일로 실행 권장
+# 평소 개발 (local 프로파일)
 ./gradlew :services:user-service:bootRun --args='--spring.profiles.active=local'
+
+# 로컬에서 Observability 스택까지 확인할 때 (local-up.sh --obs 와 함께 사용)
+./gradlew :services:user-service:bootRun --args='--spring.profiles.active=local,observability'
 ```
 
 `user-service`, `routine-service`, `challenge-service`, `chat-service`, `notification-service`는 `common-web`의 `GatewayAuthFilter`를 사용합니다.
@@ -162,9 +184,9 @@ cp infra/.env.example infra/.env
 |---|---|
 | API Gateway | http://localhost:8080 |
 | Eureka Dashboard | http://localhost:8761 |
-| Zipkin | http://localhost:9411 (`./scripts/local-up.sh --obs` 실행 시) |
-| Prometheus | http://localhost:9090 (`./scripts/local-up.sh --obs` 실행 시) |
-| Grafana | http://localhost:3000 (`./scripts/local-up.sh --obs` 실행 시) |
+| Zipkin | http://localhost:9411 (`local,observability` 프로파일 + `--obs` 실행 시) |
+| Prometheus | http://localhost:9090 (`local,observability` 프로파일 + `--obs` 실행 시) |
+| Grafana | http://localhost:3000 (`local,observability` 프로파일 + `--obs` 실행 시) |
 
 ---
 
