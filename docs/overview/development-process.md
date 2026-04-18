@@ -3,19 +3,19 @@
 ## 전체 진행 단계
 
 ```
-Step 1  요구사항 정의         ✅ 완료
-Step 2  설계 및 아키텍처 결정  ✅ 완료
-Step 3  문서화                ✅ 완료
-Step 4  개발 환경 구성        🔲 진행 예정
-Step 5  백엔드 개발           🔲 진행 예정
-Step 6  프론트엔드 개발       🔲 진행 예정
-Step 7  통합 및 테스트        🔲 진행 예정
-Step 8  마무리                🔲 진행 예정
+Step 1  요구사항 정의          ✅ 완료
+Step 2  설계 및 아키텍처 결정   ✅ 완료
+Step 3  문서화                 ✅ 완료
+Step 4  개발 환경 구성         ✅ 완료
+Step 5  백엔드 개발            🔄 진행 중
+Step 6  프론트엔드 개발        🔲 진행 예정
+Step 7  통합 및 테스트         🔲 진행 예정
+Step 8  마무리                 🔲 진행 예정
 ```
 
 ---
 
-## Step 4 — 개발 환경 구성
+## Step 4 — 개발 환경 구성 ✅
 
 ### 4-1. 루트 Gradle 설정
 
@@ -72,23 +72,23 @@ Spring Initializr에서 받은 zip을 통째로 쓰지 않는다.
 ### 4-3. 모듈별 Initializr 의존성
 
 > Lombok, spring-boot-starter-test는 루트 build.gradle subprojects 블록에서 전체 적용.
-> common-web (java-library + api)을 의존하면 Spring Web, Validation, JPA가 서비스에 자동 전달.
-> 따라서 서비스 Initializr에서 Spring Web, Spring Data JPA, Validation은 선택 불필요.
-> gRPC는 공식 Spring gRPC (`org.springframework.grpc`) 사용. Initializr에서 "Spring gRPC Server" / "Spring gRPC Client" 선택.
+> common-web (java-library + api)을 의존하면 Spring Web, Validation이 서비스에 자동 전달.
+> gRPC는 공식 Spring gRPC (`org.springframework.grpc`) 사용.
 
 | 모듈 | Initializr 선택 의존성 | 수동 추가 |
 |---|---|---|
-| `libs/common-core` | (Initializr 불필요, 수동 생성) | `api spring-boot-starter-validation`, `api spring-boot-starter-data-jpa` |
-| `libs/common-web` | (Initializr 불필요, 수동 생성) | `api common-core`, `api spring-boot-starter-web`, `impl spring-boot-starter-aop` |
+| `libs/common-core` | (Initializr 불필요, 수동 생성) | `api spring-boot-starter-validation` |
+| `libs/common-web` | (Initializr 불필요, 수동 생성) | `api common-core`, `api spring-boot-starter-web` |
+| `libs/common-jpa` | (Initializr 불필요, 수동 생성) | `api spring-boot-starter-data-jpa` |
 | `libs/common-observability` | (Initializr 불필요, 수동 생성) | `micrometer-tracing-bridge-brave`, `zipkin-reporter-brave`, `micrometer-registry-prometheus` |
 | `libs/proto` | (Initializr 불필요, 수동 생성) | protobuf 플러그인 (grpc-guide.md 참고) |
 | `services/registry-service` | Eureka Server | — |
 | `services/gateway` | Gateway, Eureka Discovery Client | `common-core`, `common-observability` |
-| `services/user-service` | PostgreSQL Driver, Flyway | `common-web`, `common-observability`, `spring-security-crypto` |
-| `services/routine-service` | PostgreSQL Driver, Flyway, Kafka, **Spring gRPC Server, Spring gRPC Client** | `common-web`, `common-observability`, `proto` |
-| `services/challenge-service` | PostgreSQL Driver, Flyway, Kafka, **Spring gRPC Server** | `common-web`, `common-observability`, `proto` |
-| `services/chat-service` | WebSocket, PostgreSQL Driver, Flyway, Kafka, **Spring gRPC Client** | `common-web`, `common-observability`, `proto` |
-| `services/notification-service` | PostgreSQL Driver, Flyway, Kafka | `common-web`, `common-observability` |
+| `services/user-service` | PostgreSQL Driver, Flyway | `common-web`, `common-jpa`, `common-observability`, `spring-security-crypto` |
+| `services/routine-service` | PostgreSQL Driver, Flyway, Kafka, **Spring gRPC Server, Spring gRPC Client** | `common-web`, `common-jpa`, `common-observability`, `proto` |
+| `services/challenge-service` | PostgreSQL Driver, Flyway, Kafka, **Spring gRPC Server** | `common-web`, `common-jpa`, `common-observability`, `proto` |
+| `services/chat-service` | WebSocket, PostgreSQL Driver, Flyway, Kafka, **Spring gRPC Client** | `common-web`, `common-jpa`, `common-observability`, `proto` |
+| `services/notification-service` | PostgreSQL Driver, Flyway, Kafka | `common-web`, `common-jpa`, `common-observability` |
 
 ### 4-4. Docker Compose 구성
 
@@ -133,7 +133,6 @@ config/grafana/provisioning/      # Grafana 데이터소스 자동 등록
 ### 4-5. 환경 변수
 
 `infra/.env` 파일은 `.gitignore` 처리, `infra/.env.example`만 커밋한다.
-Docker Compose가 자동으로 같은 디렉터리의 `.env`를 읽어 `${VARIABLE}` 치환에 사용한다.
 
 ```bash
 # infra/.env.example
@@ -145,88 +144,61 @@ GRAFANA_PASSWORD=   # Grafana 관리자 비밀번호 (기본: admin)
 
 ---
 
-## Step 5 — 백엔드 개발
+## Step 5 — 백엔드 개발 🔄
 
 ### 전체 개발 순서
 
 ```
-Phase 0  libs 공통 모듈     common-core → common-web → common-observability → proto
-Phase 1  인프라 서비스       registry-service → gateway
-Phase 2  핵심 서비스        user-service
-Phase 3  도메인 서비스       challenge-service → routine-service
-Phase 4  실시간 서비스       chat-service → notification-service
+Phase 0  libs 공통 모듈     common-core ✅ → common-web ✅ → common-jpa ✅ → common-observability 🔲 → proto 🔲
+Phase 1  인프라 서비스       registry-service ✅ → gateway JWT 필터 🔄 → Rate Limiting 🔲
+Phase 2  핵심 서비스        user-service 🔲
+Phase 3  도메인 서비스       challenge-service 🔲 → routine-service 🔲
+Phase 4  실시간 서비스       notification-service 🔲 → chat-service 🔲
+공통     횡단 관심사         Circuit Breaker 🔲 (Phase 4 이후) → 홈 집계 엔드포인트 🔲
 ```
 
 > **핵심 원칙**: Kafka / gRPC / Outbox는 기본 CRUD 완성 후 붙인다.
-> libs 4개가 먼저 완성되어야 서비스 개발이 수월하다.
 
 ---
 
 ### Phase 0 — libs 공통 모듈
 
-#### common-core
+#### common-core ✅
 
 ```
 com.routinely.core/
 ├── exception/
-│   ├── ErrorCode.java          # enum: code, message, httpStatus
-│   ├── BusinessException.java  # RuntimeException + ErrorCode
-│   └── ValidationException.java
+│   ├── ErrorCode.java
+│   ├── ErrorStatus.java
+│   └── BusinessException.java
 ├── response/
 │   └── ApiResponse.java        # ok() / fail() static factory
-└── entity/
-    └── BaseEntity.java         # @MappedSuperclass: createdAt, updatedAt
+└── constant/
+    ├── HeaderConstants.java
+    └── KafkaTopics.java
 ```
 
-**`BaseEntity.java`** (miri-miri 패턴)
-```java
-@Getter
-@MappedSuperclass
-@EntityListeners(AuditingEntityListener.class)
-public abstract class BaseEntity {
-
-    @CreatedDate
-    @Column(updatable = false)
-    private LocalDateTime createdAt;
-
-    @LastModifiedDate
-    private LocalDateTime updatedAt;
-}
-```
-
-**`ApiResponse.java`**
-```java
-@Getter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class ApiResponse<T> {
-    private boolean success;
-    private String  message;
-    private String  errorCode;
-    private T       data;
-
-    public static <T> ApiResponse<T> ok(String message, T data) { ... }
-    public static <T> ApiResponse<T> ok(String message) { ... }
-    public static <T> ApiResponse<T> fail(String errorCode, String message) { ... }
-    public static <T> ApiResponse<T> fail(String errorCode, String message, T data) { ... }
-}
-```
-
-#### common-web
+#### common-web ✅
 
 ```
 com.routinely.web/
-├── aop/
-│   └── ValidationAdvice.java    # @Around POST/PUT/PATCH → BindingResult 자동 처리
 ├── handler/
 │   └── GlobalExceptionHandler.java  # @RestControllerAdvice
 └── filter/
-    └── GatewayAuthFilter.java    # X-Gateway-Secret 검증 (ADR-0019)
-                                  # @Profile("!local") 로 local 프로파일에서 비활성화
+    └── GatewayAuthFilter.java       # X-Gateway-Secret 검증 (ADR-0019)
 ```
 
-> **GatewayAuthFilter**: Spring Security 없이 `OncePerRequestFilter` 하나로 X-Gateway-Secret 헤더 검증
+#### common-jpa ✅
 
-#### common-observability
+```
+com.routinely.jpa/
+├── entity/
+│   └── BaseEntity.java         # @MappedSuperclass: createdAt, updatedAt
+└── config/
+    └── JpaAuditingConfig.java
+```
+
+#### common-observability 🔲
 
 ```
 com.routinely.observability/
@@ -234,56 +206,45 @@ com.routinely.observability/
     └── ObservabilityConfig.java   # Micrometer Tracing Bean 설정
 ```
 
-`logback-spring.xml` 은 각 서비스에서 공통으로 사용할 템플릿을 여기에 두거나,
-각 서비스 `src/main/resources/`에 복사하여 사용한다.
+각 서비스 `src/main/resources/logback-spring.xml` 템플릿도 여기서 관리한다.
 
-#### proto
+#### proto 🔲
 
 `.proto` 파일 작성 및 빌드 설정은 [`docs/architecture/grpc-guide.md`](../architecture/grpc-guide.md) 참고.
+
+> **주의**: challenge-service gRPC 서버 개발 전에 반드시 완료해야 한다.
 
 ---
 
 ### Phase 1 — 인프라 서비스
 
-#### registry-service
+#### registry-service ✅
 
-파일 2개면 완성.
+**완료 기준:** `http://localhost:8761` Eureka 대시보드 확인
 
-```java
-@SpringBootApplication
-@EnableEurekaServer
-public class RegistryServiceApplication { ... }
-```
+#### gateway 🔄
 
-```yaml
-server.port: 8761
-eureka.client.register-with-eureka: false
-eureka.client.fetch-registry: false
-```
-
-**완료 기준:** `http://localhost:8761` 접속 → Eureka 대시보드 확인
-
-#### gateway
-
-구현 순서:
-1. `application.yml` 라우팅 규칙 (`lb://service-name`)
-2. `JwtAuthenticationFilter` — JWT 검증 + `X-User-Id` / `X-Gateway-Secret` 헤더 추가
-3. `RateLimitFilter` — Redis Token Bucket (나중에 추가)
-4. Home Aggregation 엔드포인트 (`Mono.zip()`) — 서비스 완성 후 추가
+| 항목 | 상태 |
+|---|---|
+| 라우팅 설정 (`application.yml lb://`) | ✅ |
+| JWT 인증 필터 (`JwtAuthenticationFilter`) | 🔄 진행 중 |
+| Rate Limiting (Redis Token Bucket) | 🔲 |
+| Circuit Breaker (Resilience4j) | 🔲 — Phase 4 이후 |
+| 홈 집계 엔드포인트 (`/api/v1/home`) | 🔲 — 전 서비스 완성 후 |
 
 **완료 기준:** gateway 기동 → Eureka 대시보드에 `gateway` 등록 확인
 
 ---
 
-### Phase 2 — user-service
+### Phase 2 — user-service 🔲
 
-의존 서비스 없음 → 가장 먼저 구현.
+의존 서비스 없음.
 
 **구현 순서:**
 1. `User` 엔티티 + `UserRepository`
-3. 회원가입 — BCrypt 비밀번호 해시, JWT Access/Refresh 토큰 발급
-4. 로그인 / 로그아웃 / 토큰 갱신
-5. 프로필 조회 / 수정 / 아바타 업로드 (S3)
+2. 회원가입 — BCrypt 비밀번호 해시
+3. 로그인 / JWT Access·Refresh 토큰 발급 / 토큰 갱신 / 로그아웃
+4. 프로필 조회 / 닉네임 수정
 
 **완료 기준:** Postman으로 회원가입 → 로그인 → JWT 발급 확인
 
@@ -291,50 +252,64 @@ eureka.client.fetch-registry: false
 
 ---
 
-### Phase 3 — challenge-service / routine-service
+### Phase 3 — challenge-service / routine-service 🔲
 
-#### challenge-service (gRPC 서버)
+#### challenge-service (gRPC 서버) 🔲
+
+> `proto` 모듈이 먼저 완성되어야 한다.
 
 **구현 순서:**
 1. 챌린지 CRUD (생성 / 조회 / 수정 / 종료)
-3. 멤버 관리 (참여 / 탈퇴 / 추방)
-4. **gRPC 서버 구현** — `CheckMembership`, `GetChallengeContext`
-5. Outbox Worker + Kafka 발행 (`challenge.member.joined`, `challenge.member.left`)
+2. 멤버 관리 (참여 / 탈퇴 / 추방 / 초대 링크)
+3. **gRPC 서버** — `CheckMembership`, `GetChallengeContext`
+4. Outbox Worker + Kafka 발행 (`challenge.member.joined`, `challenge.member.left`)
+5. Redis ZSET 기반 랭킹 API
 
 **완료 기준:** `grpcurl`로 `CheckMembership` RPC 호출 성공 확인
 
-#### routine-service (gRPC 서버 + 클라이언트)
+#### routine-service (gRPC 클라이언트) 🔲
+
+> `challenge-service` gRPC 서버가 먼저 완성되어야 한다.
+> 사진 업로드를 위한 S3 공통 구현 (`FileStorage` 인터페이스 + S3 구현체)을 먼저 작성한다.
 
 **구현 순서:**
 1. 루틴 템플릿 CRUD
-3. 루틴 인스턴스 관리 (생성 / 조회 / 비활성화)
-4. 루틴 실행 기록 (CRUD + 완료 처리)
-5. **gRPC 클라이언트** — challenge-service `GetChallengeContext` 호출
-6. 피드 카드 + 반응(이모지)
-7. 통계 (일별 / 주별 / 월별)
-8. Outbox Worker + Kafka 발행
-
-> `challenge-service` gRPC 서버가 먼저 완성되어야 한다.
+2. 루틴 인스턴스 관리 (반복 규칙 기반 자동 생성 / 비활성화)
+3. 루틴 실행 기록 (완료 처리, S3 사진 업로드, 메모)
+4. **gRPC 클라이언트** — challenge-service `GetChallengeContext` 호출
+5. 피드 (개인 피드, 그룹 피드, 인증 카드, 이모지 리액션)
+6. 통계 (일/주/월 달성률, 스트릭, 그룹 평균)
+7. Outbox Worker + Kafka 발행 (`routine.execution.completed`)
 
 ---
 
-### Phase 4 — chat-service / notification-service
+### Phase 4 — notification-service / chat-service 🔲
 
-#### chat-service
-
-**구현 순서:**
-1. 채팅방 REST API (목록 / 생성)
-3. **WebSocket/STOMP** — 연결, 메시지 발송, 구독
-4. **gRPC 클라이언트** — challenge-service `CheckMembership` 호출
-5. Kafka Consumer — `chat.message.created` (다중 인스턴스 브로드캐스트, ADR-0016)
-6. Kafka Consumer — `challenge.member.joined` / `challenge.member.left`
-
-#### notification-service
+#### notification-service 🔲
 
 **구현 순서:**
 1. 알림 이력 조회 REST API + SSE 연결
-3. Kafka Consumer — `routine.execution.completed`, `challenge.member.joined`
-4. PGMQ 워커 — `sendAt` 기반 알림 발송 (Next-One Chaining, ADR-0017)
+2. Kafka Consumer — `routine.execution.completed`, `challenge.member.joined`
+3. PGMQ 워커 — `sendAt` 기반 알림 발송 (Next-One Chaining, ADR-0017)
+
+#### chat-service 🔲
+
+**구현 순서:**
+1. 채팅방 REST API (목록 / 생성)
+2. **WebSocket/STOMP** — 연결, 메시지 발송, 구독
+3. **gRPC 클라이언트** — challenge-service `CheckMembership` 호출
+4. Kafka Consumer — `chat.message.created` (다중 인스턴스 브로드캐스트, ADR-0016)
+5. Kafka Consumer — `challenge.member.joined` / `challenge.member.left`
+
+---
+
+### 횡단 관심사 — Phase 4 이후 🔲
+
+| 작업 | 시점 |
+|---|---|
+| Circuit Breaker (Resilience4j) — gateway / routine-service / chat-service | Phase 4 완료 후 |
+| gateway 홈 집계 엔드포인트 (`/api/v1/home`, WebClient + Mono.zip()) | 전 서비스 완성 후 |
+| 각 서비스 common-observability 적용 | 서비스 완성 시마다 순차 적용 |
 
 ---
 
@@ -342,16 +317,16 @@ eureka.client.fetch-registry: false
 
 ```
 1. application.yml 기본 설정 (DB 접속, Eureka, 포트)
-   └─ Flyway는 서비스 기동 시 src/main/resources/db/migration/V1__init.sql을 자동 실행
+   └─ Flyway: 기동 시 db/migration/V1__init.sql 자동 실행
 2. domain/        Entity + Repository 인터페이스
 3. infrastructure/persistence/  JPA Repository 구현
-4. application/   Service 인터페이스 + Impl (비즈니스 로직)
+4. application/   Service 인터페이스 + Impl
 5. presentation/rest/  Controller + DTO
 6. 기본 CRUD 로컬 테스트 (Postman)
 7. Kafka / gRPC / Outbox 추가
 ```
 
-### miri-miri에서 가져온 코딩 패턴
+### 코딩 패턴
 
 | 패턴 | 적용 위치 | 설명 |
 |---|---|---|
@@ -363,29 +338,102 @@ eureka.client.fetch-registry: false
 
 ---
 
-## Step 6 — 프론트엔드 개발
+## Step 6 — 프론트엔드 개발 🔲
 
-user-service 완성 이후 백엔드와 **병행 개발** 가능.
+### 개발 전략
+
+백엔드 서비스 전체 완성을 기다리지 않는다.
+**API 하나가 완성되는 시점에 해당 화면을 바로 붙인다** (기능 슬라이스 병행).
+
+> user-service 완성 이후부터 백엔드와 병행 가능.
+
+### 기술 스택
 
 - React + TypeScript + Vite
-- React Query (서버 상태 관리)
+- React Query (서버 상태)
 - Zustand (전역 UI 상태)
 - STOMP (채팅 WebSocket)
 - Tailwind CSS + shadcn/ui
 
 ---
 
-## Step 7 — 통합 및 테스트
+### Stage 0 — 프론트엔드 기반 (user-service 완성 후)
 
-| 단계 | 내용 |
-|------|------|
-| Unit Test | 서비스 레이어, 도메인 로직 단위 테스트 |
-| Integration Test | DB · Kafka · Redis 연동 테스트 (`@SpringBootTest`) |
-| E2E Test | 주요 사용자 시나리오 기반 엔드 투 엔드 테스트 |
+백엔드 진행: challenge-service
+
+| 작업 | 비고 |
+|---|---|
+| 프로젝트 세팅 (Vite + React + TypeScript + Tailwind) | |
+| Axios 인터셉터 (토큰 자동 첨부 / 401 → Refresh 갱신 / 실패 → 로그아웃) | gateway JWT 흐름과 직결 |
+| React Router 구조 및 Protected Route | 미인증 → /login 리디렉션 |
+| 공통 레이아웃 (헤더, 네비게이션 shell) | |
+| 로그인 / 회원가입 페이지 | user-service API |
+| 로그아웃 처리 | |
+| 프로필 조회 / 닉네임 수정 페이지 | user-service API |
 
 ---
 
-## Step 8 — 마무리
+### Stage 1 — challenge 화면 (challenge-service 백엔드와 병행)
+
+| 백엔드 API 완성 시점 | 프론트엔드 작업 |
+|---|---|
+| 챌린지 CRUD API | 챌린지 생성 / 목록 / 상세 화면 |
+| 멤버 참여 / 초대 API | 초대 링크, 멤버 관리 화면 |
+| 랭킹 API | 랭킹 화면 |
+| gRPC 서버 | 화면 없음 (내부용) |
+
+---
+
+### Stage 2 — routine 화면 (routine-service 백엔드와 병행)
+
+| 백엔드 API 완성 시점 | 프론트엔드 작업 |
+|---|---|
+| 루틴 CRUD API | 루틴 생성 / 목록 / 수정 화면 |
+| 실행 기록 API | 오늘의 루틴 체크 화면, 사진 업로드 |
+| 개인 피드 API | 개인 피드 화면 |
+| 그룹 피드 API | 그룹 피드, 인증 카드, 이모지 리액션 화면 |
+| 통계 API | 달성률 / 스트릭 / 그룹 평균 화면 |
+
+---
+
+### Stage 3 — 알림 화면 (notification-service 백엔드와 병행)
+
+| 백엔드 API 완성 시점 | 프론트엔드 작업 |
+|---|---|
+| SSE 연결 API | 헤더 알림 아이콘 + SSE 연결 훅 |
+| 알림 이력 조회 API | 알림 목록 드로어/페이지 |
+
+---
+
+### Stage 4 — 채팅 화면 (chat-service 백엔드와 병행)
+
+| 백엔드 API 완성 시점 | 프론트엔드 작업 |
+|---|---|
+| 채팅방 REST API | 채팅방 목록 화면 |
+| STOMP 메시지 발송 | 채팅 UI (말풍선, 입력창) |
+
+---
+
+### Stage 5 — 홈 화면 (전 서비스 완성 후)
+
+| 작업 |
+|---|
+| `/api/v1/home` 홈 집계 API 연동 |
+| 홈 화면 (루틴 요약, 챌린지 현황, 알림 미리보기) |
+
+---
+
+## Step 7 — 통합 및 테스트 🔲
+
+| 단계 | 내용 |
+|---|---|
+| Unit Test | 서비스 레이어, 도메인 로직 단위 테스트 |
+| Integration Test | DB · Kafka · Redis 연동 (`@SpringBootTest`) |
+| E2E Test | 주요 사용자 시나리오 엔드 투 엔드 테스트 |
+
+---
+
+## Step 8 — 마무리 🔲
 
 - **API 문서 최종 정리**: Swagger UI, AsyncAPI, protoc-gen-doc
 - **Grafana 대시보드 완성** 및 AlertManager 규칙 정교화
