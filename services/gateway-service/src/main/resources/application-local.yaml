@@ -7,4 +7,4 @@ gateway:
   secret: ${GATEWAY_SECRET:local-secret}
 
 jwt:
-  secret: ${JWT_SECRET:local-jwt-secret}
+  secret: ${JWT_SECRET:dGVzdC1zZWNyZXQta2V5LWZvci1obWFjLXNoYTI1Ni1hbGdvcml0aG0h}
