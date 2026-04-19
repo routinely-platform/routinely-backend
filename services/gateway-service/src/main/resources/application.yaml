@@ -34,6 +34,17 @@ spring:
           predicates:
             - Path=/api/v1/notifications/**
 
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+
+rate-limit:
+  capacity: ${RATE_LIMIT_CAPACITY:30}
+  refill-period-seconds: ${RATE_LIMIT_REFILL_PERIOD_SECONDS:60}
+  trusted-proxies: ${RATE_LIMIT_TRUSTED_PROXIES:}
+  fail-open-on-redis-error: ${RATE_LIMIT_FAIL_OPEN_ON_REDIS_ERROR:false}
+
 jwt:
   secret: ${JWT_SECRET}
 

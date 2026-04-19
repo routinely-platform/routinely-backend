@@ -1,3 +1,14 @@
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+rate-limit:
+  capacity: 30
+  refill-period-seconds: 60
+  fail-open-on-redis-error: false
+
 eureka:
   client:
     service-url:
