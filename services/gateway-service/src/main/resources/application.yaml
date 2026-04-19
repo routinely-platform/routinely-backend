@@ -8,31 +8,92 @@ spring:
     web-application-type: reactive
   cloud:
     gateway:
-      routes:
-        - id: user-service
-          uri: lb://user-service
-          predicates:
-            - Path=/api/v1/auth/**,/api/v1/users/**
+      server:
+        webflux:
+          routes:
+            - id: user-service
+              uri: lb://user-service
+              predicates:
+                - Path=/api/v1/auth/**,/api/v1/users/**
+              filters:
+                # 각 라우트별 circuit breaker 연결 설정
+                # name: resilience4j 인스턴스 이름
+                # fallbackUri: 장애 발생 시 gateway 내부 fallback endpoint로 forward
+                # statusCodes: 예외뿐 아니라 해당 HTTP 상태코드도 실패로 집계
+                - name: CircuitBreaker
+                  args:
+                    name: user-service-cb
+                    fallbackUri: forward:/fallback/user-service
+                    statusCodes:
+                      - 500
+                      - 502
+                      - 503
+                      - 504
 
-        - id: routine-service
-          uri: lb://routine-service
-          predicates:
-            - Path=/api/v1/routine-templates/**,/api/v1/routine-executions/**,/api/v1/routines/**,/api/v1/feed/**,/api/v1/statistics/**
+            - id: routine-service
+              uri: lb://routine-service
+              predicates:
+                - Path=/api/v1/routine-templates/**,/api/v1/routine-executions/**,/api/v1/routines/**,/api/v1/feed/**,/api/v1/statistics/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: routine-service-cb
+                    fallbackUri: forward:/fallback/routine-service
+                    statusCodes:
+                      - 500
+                      - 502
+                      - 503
+                      - 504
 
-        - id: challenge-service
-          uri: lb://challenge-service
-          predicates:
-            - Path=/api/v1/challenges/**
+            - id: challenge-service
+              uri: lb://challenge-service
+              predicates:
+                - Path=/api/v1/challenges/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: challenge-service-cb
+                    fallbackUri: forward:/fallback/challenge-service
+                    statusCodes:
+                      - 500
+                      - 502
+                      - 503
+                      - 504
 
-        - id: chat-service
-          uri: lb://chat-service
-          predicates:
-            - Path=/api/v1/chat/**,/ws/chat/**
+            - id: notification-service
+              uri: lb://notification-service
+              predicates:
+                - Path=/api/v1/notifications/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: notification-service-cb
+                    fallbackUri: forward:/fallback/notification-service
+                    statusCodes:
+                      - 500
+                      - 502
+                      - 503
+                      - 504
 
-        - id: notification-service
-          uri: lb://notification-service
-          predicates:
-            - Path=/api/v1/notifications/**
+            - id: chat-service
+              uri: lb://chat-service
+              predicates:
+                - Path=/api/v1/chat/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: chat-service-cb
+                    fallbackUri: forward:/fallback/chat-service
+                    statusCodes:
+                      - 500
+                      - 502
+                      - 503
+                      - 504
+
+            - id: chat-ws-service
+              uri: lb://chat-service
+              predicates:
+                - Path=/ws/chat/**
 
   data:
     redis:
@@ -57,3 +118,56 @@ eureka:
     fetch-registry: true
     service-url:
       defaultZone: http://registry-service:8761/eureka/
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        # 최근 N개의 "호출 결과"를 기준으로 실패율을 계산
+        slidingWindowType: COUNT_BASED
+        # 최근 10건 요청을 통계 집계 대상으로 사용
+        slidingWindowSize: 10
+        # 최소 5건 이상 쌓여야 실패율을 계산하고 OPEN 전환 여부를 판단
+        minimumNumberOfCalls: 5
+        # 실패 비율이 50% 이상이면 circuit을 OPEN 상태로 전환
+        failureRateThreshold: 50
+        # OPEN 상태에서는 10초 동안 업스트림 호출을 막고 즉시 fallback 처리
+        waitDurationInOpenState: 10s
+        # HALF_OPEN 상태에서 3건만 시험 호출해 회복 여부를 확인
+        permittedNumberOfCallsInHalfOpenState: 3
+        # 10초가 지나면 새 요청이 없어도 자동으로 HALF_OPEN으로 전환
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+    instances:
+      # 각 라우트에서 참조하는 breaker 인스턴스 목록
+      user-service-cb:
+        baseConfig: default
+      routine-service-cb:
+        baseConfig: default
+        # 이 시간보다 오래 걸린 호출을 "느린 호출"로 간주
+        slowCallDurationThreshold: 4s
+        # 느린 호출 비율이 70% 이상이면 OPEN 전환 대상이 됨
+        slowCallRateThreshold: 70
+      challenge-service-cb:
+        baseConfig: default
+      chat-service-cb:
+        baseConfig: default
+      notification-service-cb:
+        baseConfig: default
+  timelimiter:
+    configs:
+      default:
+        # 업스트림 응답이 3초를 넘기면 timeout 실패로 처리
+        timeoutDuration: 3s
+    instances:
+      # breaker 인스턴스와 같은 이름으로 timelimiter를 연결
+      user-service-cb:
+        baseConfig: default
+      challenge-service-cb:
+        baseConfig: default
+      notification-service-cb:
+        baseConfig: default
+      chat-service-cb:
+        baseConfig: default
+      routine-service-cb:
+        # routine-service는 상대적으로 느릴 수 있어 timeout을 조금 더 여유 있게 설정
+        timeoutDuration: 5s
