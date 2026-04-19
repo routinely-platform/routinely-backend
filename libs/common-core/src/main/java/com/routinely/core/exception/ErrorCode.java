@@ -10,6 +10,8 @@ public enum ErrorCode {
     UNAUTHORIZED("UNAUTHORIZED", "인증이 필요합니다.", ErrorStatus.UNAUTHORIZED),
     FORBIDDEN("FORBIDDEN", "접근 권한이 없습니다.", ErrorStatus.FORBIDDEN),
     INTERNAL_SERVER_ERROR("INTERNAL_SERVER_ERROR", "서버 오류가 발생했습니다.", ErrorStatus.INTERNAL_SERVER_ERROR),
+    TOO_MANY_REQUESTS("TOO_MANY_REQUESTS", "요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.", ErrorStatus.TOO_MANY_REQUESTS),
+    SERVICE_UNAVAILABLE("SERVICE_UNAVAILABLE", "일시적인 서버 문제로 요청을 처리할 수 없습니다. 잠시 후 다시 시도해주세요.", ErrorStatus.SERVICE_UNAVAILABLE),
 
     // User
     USER_NOT_FOUND("USER_NOT_FOUND", "사용자를 찾을 수 없습니다.", ErrorStatus.NOT_FOUND),

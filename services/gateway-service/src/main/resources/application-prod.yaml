@@ -3,6 +3,12 @@ eureka:
     service-url:
       defaultZone: http://${EUREKA_HOST:registry-service}:8761/eureka/
 
+rate-limit:
+  capacity: ${RATE_LIMIT_CAPACITY:30}
+  refill-period-seconds: ${RATE_LIMIT_REFILL_PERIOD_SECONDS:60}
+  trusted-proxies: ${RATE_LIMIT_TRUSTED_PROXIES}
+  fail-open-on-redis-error: ${RATE_LIMIT_FAIL_OPEN_ON_REDIS_ERROR:false}
+
 gateway:
   secret: ${GATEWAY_SECRET}
 
