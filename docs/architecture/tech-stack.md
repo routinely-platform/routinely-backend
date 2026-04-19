@@ -84,7 +84,7 @@
 **캐시 / 세션 / Rate Limit**
 
 - `Redis`
-  - Rate Limiting (Token Bucket) — Gateway 레벨
+  - Rate Limiting (Fixed Window Counter) — Gateway 레벨
   - 랭킹 캐시 (ZSET 기반)
     - 키: `ranking:group:{groupId}`, 값: memberId, score: 완료 수
     - `ZINCRBY`로 루틴 완료 시 업데이트, `ZREVRANGE`로 Top N 조회

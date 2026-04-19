@@ -140,6 +140,12 @@ DB_PASSWORD=        # PostgreSQL POSTGRES_PASSWORD 로 사용
 JWT_SECRET=         # Gateway JWT 서명 검증 키
 GATEWAY_SECRET=     # X-Gateway-Secret 헤더 값 (ADR-0019)
 GRAFANA_PASSWORD=   # Grafana 관리자 비밀번호 (기본: admin)
+
+# Gateway Rate Limiting
+RATE_LIMIT_CAPACITY=              # 윈도우 내 최대 허용 요청 수 (기본: 30)
+RATE_LIMIT_REFILL_PERIOD_SECONDS= # 윈도우 크기 초 단위 (기본: 60)
+RATE_LIMIT_TRUSTED_PROXIES=       # 신뢰할 프록시 IP (prod 필수, 미설정 시 기동 실패)
+RATE_LIMIT_FAIL_OPEN_ON_REDIS_ERROR= # Redis 장애 시 요청 통과 여부 (기본: false)
 ```
 
 ---
@@ -150,7 +156,7 @@ GRAFANA_PASSWORD=   # Grafana 관리자 비밀번호 (기본: admin)
 
 ```
 Phase 0  libs 공통 모듈     common-core ✅ → common-web ✅ → common-jpa ✅ → common-observability 🔲 → proto 🔲
-Phase 1  인프라 서비스       registry-service ✅ → gateway JWT 필터 🔄 → Rate Limiting 🔲
+Phase 1  인프라 서비스       registry-service ✅ → gateway JWT 필터 ✅ → Rate Limiting ✅
 Phase 2  핵심 서비스        user-service 🔲
 Phase 3  도메인 서비스       challenge-service 🔲 → routine-service 🔲
 Phase 4  실시간 서비스       notification-service 🔲 → chat-service 🔲
@@ -227,8 +233,8 @@ com.routinely.observability/
 | 항목 | 상태 |
 |---|---|
 | 라우팅 설정 (`application.yml lb://`) | ✅ |
-| JWT 인증 필터 (`JwtAuthenticationFilter`) | 🔄 진행 중 |
-| Rate Limiting (Redis Token Bucket) | 🔲 |
+| JWT 인증 필터 (`JwtAuthenticationFilter`) | ✅ |
+| Rate Limiting (Redis Fixed Window Counter) | ✅ |
 | Circuit Breaker (Resilience4j) | 🔲 — Phase 4 이후 |
 | 홈 집계 엔드포인트 (`/api/v1/home`) | 🔲 — 전 서비스 완성 후 |
 

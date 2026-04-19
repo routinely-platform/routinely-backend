@@ -120,6 +120,10 @@ cp infra/.env.example infra/.env
 | `GATEWAY_SECRET` | ✓ | X-Gateway-Secret 헤더 값. 내부 서비스 직접 호출 여부 검증 (`openssl rand -hex 32`) |
 | `GRAFANA_PASSWORD` | — | Grafana 관리자 비밀번호 (미설정 시 기본값 `admin`) |
 | `EUREKA_HOST` | prod only | registry-service 호스트명. `prod` 프로파일 전용, 로컬에서는 불필요 |
+| `RATE_LIMIT_CAPACITY` | — | 윈도우 내 최대 허용 요청 수 (기본: 30) |
+| `RATE_LIMIT_REFILL_PERIOD_SECONDS` | — | 윈도우 크기 초 단위 (기본: 60) |
+| `RATE_LIMIT_TRUSTED_PROXIES` | prod only | 신뢰할 프록시 IP. `prod` 프로파일 전용, 미설정 시 기동 실패 |
+| `RATE_LIMIT_FAIL_OPEN_ON_REDIS_ERROR` | — | Redis 장애 시 요청 통과 여부 (기본: false) |
 
 > `bootRun` 또는 IDE로 개별 서비스를 직접 실행할 때 `infra/.env`가 자동으로 로드되지는 않습니다.
 
