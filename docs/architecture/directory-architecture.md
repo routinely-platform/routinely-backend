@@ -201,22 +201,104 @@ routinely-backend/
 
 ## 서비스 내부 패키지 구조
 
-모든 서비스는 아래 패키지 구조를 기준으로 구성한다.
+모든 서비스는 **Pragmatic Clean Architecture** 기준의 4계층 구조로 구성한다.  
+상세 설계 원칙은 [`docs/conventions/clean-architecture.md`](../conventions/clean-architecture.md)를 참고한다.
+
+### 기본 구조 (user-service 기준)
 
 ```
-com.routinely.{service}/
-├── domain/                   # 핵심 도메인 (Entity, VO, Domain Service, Repository Interface)
-├── application/              # Use Case / Service (비즈니스 로직 조합)
-├── infrastructure/           # 외부 의존성 구현체
-│   ├── persistence/          # JPA Repository 구현, QueryDSL
-│   ├── kafka/                # Producer (Outbox), Consumer (Inbox + @RetryableTopic)
-│   ├── grpc/                 # gRPC Server / Client Stub
-│   └── pgmq/                 # PGMQ Worker (notification-service 전용)
-├── presentation/             # 외부 진입점
-│   ├── rest/                 # REST Controller, Request/Response DTO
-│   └── grpc/                 # gRPC Service 구현 (proto 기반)
-└── {Service}Application.java
+com.routinely.user_service
+├── domain/
+│   ├── User.java                      # @Entity — 도메인 객체 = JPA 엔티티 (pragmatic)
+│   ├── UserRole.java                  # enum
+│   └── UserRepository.java            # interface extends JpaRepository<User, Long>
+├── application/
+│   ├── service/
+│   │   └── UserService.java
+│   └── dto/
+│       ├── SignUpCommand.java          # 입력 DTO (presentation → application)
+│       ├── LoginCommand.java
+│       ├── UpdateProfileCommand.java
+│       └── UserResult.java            # 출력 DTO (application → presentation)
+├── infrastructure/
+│   ├── jwt/
+│   │   └── JwtTokenProvider.java
+│   └── config/
+│       ├── SecurityConfig.java
+│       └── JwtProperties.java
+└── presentation/
+    └── rest/
+        ├── UserController.java
+        └── dto/
+            ├── request/
+            │   ├── SignUpRequest.java
+            │   ├── LoginRequest.java
+            │   └── UpdateProfileRequest.java
+            └── response/
+                ├── UserProfileResponse.java
+                └── TokenResponse.java
 ```
+
+### 다중 도메인 서비스 (routine-service 기준)
+
+도메인이 여러 개인 서비스는 `domain/` 하위를 기능별로 sub-package로 분리한다.
+
+```
+com.routinely.routine_service
+├── domain/
+│   ├── routine/
+│   │   ├── Routine.java
+│   │   ├── RoutineStatus.java
+│   │   └── RoutineRepository.java
+│   ├── record/
+│   │   ├── RoutineRecord.java
+│   │   └── RoutineRecordRepository.java
+│   └── feed/
+│       └── FeedRepository.java
+├── application/
+│   ├── service/
+│   │   ├── RoutineService.java
+│   │   ├── RoutineRecordService.java
+│   │   └── RoutineStatsService.java
+│   └── dto/
+│       ├── CreateRoutineCommand.java
+│       ├── RecordRoutineCommand.java
+│       ├── RoutineResult.java
+│       └── RoutineStatsResult.java
+├── infrastructure/
+│   ├── messaging/
+│   │   ├── producer/
+│   │   │   └── RoutineEventProducer.java
+│   │   ├── consumer/
+│   │   │   └── ChallengeEventConsumer.java
+│   │   └── outbox/
+│   │       └── RoutineOutboxEntity.java
+│   ├── grpc/
+│   │   ├── client/
+│   │   │   └── UserGrpcClient.java    # 다른 서비스 호출
+│   │   └── server/
+│   │       └── RoutineGrpcServiceImpl.java  # gRPC 엔드포인트 노출
+│   └── config/
+│       ├── KafkaConfig.java
+│       └── GrpcConfig.java
+└── presentation/
+    └── rest/
+        ├── RoutineController.java
+        ├── RoutineRecordController.java
+        └── dto/
+            ├── request/
+            └── response/
+```
+
+### 서비스별 계층 차이
+
+| 서비스 | domain | infrastructure 특이사항 | presentation |
+|---|---|---|---|
+| user-service | 단일 도메인 | jwt/, config/ | rest/ |
+| routine-service | 기능별 sub-package | messaging/, grpc/ | rest/ |
+| challenge-service | 기능별 sub-package | messaging/, grpc/, redis/ | rest/ |
+| chat-service | 단일 도메인 | messaging/, websocket/ | **websocket/** (rest/ 없음) |
+| notification-service | 단일 도메인 | messaging/, pgmq/, grpc/ | **없음** (스케줄러 기반) |
 
 ---
 
