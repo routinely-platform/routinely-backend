@@ -91,7 +91,7 @@ public class ApiResponse<T> {
 | `/api/v1/feed/**` | routine-service |
 | `/api/v1/statistics/**` | routine-service |
 | `/api/v1/chat/**` | chat-service |
-| `/ws/chat` | chat-service (WebSocket) |
+| `/ws/chat/**` | chat-service (WebSocket) |
 | `/api/v1/notifications/**` | notification-service |
 
 ---
@@ -823,7 +823,7 @@ public class ApiResponse<T> {
 
 ### 3-5. 피드
 
-#### `GET /api/v1/challenges/{challengeId}/feed` — 챌린지 피드 조회
+#### `GET /api/v1/feed/challenges/{challengeId}` — 챌린지 피드 조회
 - Auth: ✅
 - Query: `page`, `size`, `sort` (latest/popular)
 
