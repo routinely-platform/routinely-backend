@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: jdbc:tc:postgresql:17-alpine:///user_db
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+    username: routinely
+    password: test
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+jwt:
+  secret: dGVzdC1zZWNyZXQta2V5LWZvci1obWFjLXNoYTI1Ni1hbGdvcml0aG0h
+  expiration-ms: 86400000
+
+eureka:
+  client:
+    enabled: false

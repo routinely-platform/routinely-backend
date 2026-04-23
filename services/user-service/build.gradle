@@ -11,9 +11,13 @@ dependencies {
 	implementation project(':libs:common-jpa')
 	implementation project(':libs:common-observability')
 	implementation 'org.springframework.boot:spring-boot-starter-flyway'
+	implementation 'org.flywaydb:flyway-database-postgresql'
 	implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
 	runtimeOnly 'org.postgresql:postgresql'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+	testImplementation 'org.testcontainers:testcontainers-jdbc'
+	testImplementation 'org.testcontainers:testcontainers-postgresql'
 	implementation 'org.springframework.security:spring-security-crypto'
 }
 
