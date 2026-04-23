@@ -32,7 +32,7 @@ public class User extends BaseEntity {
     @Column(unique = true, nullable = false, length = 255)
     private String email;
 
-    @Column(nullable = false, length = 255)
+    @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 
     @Column(unique = true, nullable = false, length = 20)
@@ -42,12 +42,22 @@ public class User extends BaseEntity {
     @Column(nullable = false, length = 10)
     private UserRole role;
 
-    @Column(length = 500)
+    @Column(name = "profile_image_url", length = 500)
     private String profileImageUrl;
 
-    @Column(nullable = false)
+    @Column(name = "is_active", nullable = false)
     @Builder.Default
     private boolean isActive = true;
+
+    public static User createUser(String email, String passwordHash, String nickname) {
+        return User.builder()
+                .email(email)
+                .passwordHash(passwordHash)
+                .nickname(nickname)
+                .role(UserRole.USER)
+                .profileImageUrl(null)
+                .build();
+    }
 
     public void deactivate() {
         this.isActive = false;
