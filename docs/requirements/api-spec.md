@@ -100,7 +100,7 @@ public class ApiResponse<T> {
 
 ### 1-1. 인증
 
-#### `POST /api/v1/auth/register` — 회원가입
+#### `POST /api/v1/auth/signup` — 회원가입
 - Auth: ❌
 
 **Request**

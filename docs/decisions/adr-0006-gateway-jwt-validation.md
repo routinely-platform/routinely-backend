@@ -28,8 +28,8 @@ Client ──> Gateway ──> User Service(검증) ──> Gateway ──> Targ
 ```java
 @PostMapping("/validate")
 public ResponseEntity<User> validateToken(@RequestBody TokenRequest tokenRequest) {
-    Claims claims = jwtService.parseJwtClaims(tokenRequest.getToken());
-    return ResponseEntity.ok(userService.getUserByEmail(claims.getSubject()).orElseThrow());
+  Claims claims = jwtService.parseJwtClaims(tokenRequest.getToken());
+  return ResponseEntity.ok(userService.getUserByEmail(claims.getSubject()).orElseThrow());
 }
 ```
 
@@ -133,47 +133,47 @@ Gateway 필터에서 JWT 검증 전, 해당 요청이 인증이 필요한 요청
 @Component
 public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
-    // 인증이 필요 없는 공개 경로 (화이트리스트)
-    private static final List<String> PUBLIC_PATHS = List.of(
-        "/api/v1/auth/login",
-        "/api/v1/auth/register",
-        "/api/v1/auth/refresh"
-    );
+  // 인증이 필요 없는 공개 경로 (화이트리스트)
+  private static final List<String> PUBLIC_PATHS = List.of(
+          "/api/v1/auth/login",
+          "/api/v1/auth/signup",
+          "/api/v1/auth/refresh"
+  );
 
-    @Override
-    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        String path = exchange.getRequest().getPath().value();
+  @Override
+  public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+    String path = exchange.getRequest().getPath().value();
 
-        // 공개 경로면 JWT 검증 없이 통과
-        if (isPublicPath(path)) {
-            return chain.filter(exchange);
-        }
+    // 공개 경로면 JWT 검증 없이 통과
+    if (isPublicPath(path)) {
+      return chain.filter(exchange);
+    }
 
-        // 인증 필요 경로: 토큰 추출 및 검증
-        String token = extractToken(exchange);
-        if (token == null) {
-            return unauthorized(exchange); // 401
-        }
+    // 인증 필요 경로: 토큰 추출 및 검증
+    String token = extractToken(exchange);
+    if (token == null) {
+      return unauthorized(exchange); // 401
+    }
 
-        // Gateway에서 직접 검증 (네트워크 호출 없음)
-        Claims claims = Jwts.parser()
+    // Gateway에서 직접 검증 (네트워크 호출 없음)
+    Claims claims = Jwts.parser()
             .verifyWith(key)
             .build()
             .parseSignedClaims(token)
             .getPayload();
 
-        // claims 기반으로 사용자 컨텍스트 전달
-        ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()
+    // claims 기반으로 사용자 컨텍스트 전달
+    ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()
             .header("X-User-Id", claims.get("id").toString())
             .header("X-Gateway-Secret", gatewaySecret)  // 내부 서비스 직접 접근 방지 (ADR-0019)
             .build();
 
-        return chain.filter(exchange.mutate().request(mutatedRequest).build());
-    }
+    return chain.filter(exchange.mutate().request(mutatedRequest).build());
+  }
 
-    private boolean isPublicPath(String path) {
-        return PUBLIC_PATHS.stream().anyMatch(path::startsWith);
-    }
+  private boolean isPublicPath(String path) {
+    return PUBLIC_PATHS.stream().anyMatch(path::startsWith);
+  }
 }
 ```
 
@@ -200,11 +200,11 @@ Jwts.builder()
 ### Option B: User Service 위임 검증 (Not selected)
 
 - 장점:
-    - 매 요청 시 DB 조회를 통해 최신 사용자 상태/차단 여부 반영 가능
-    - "검증 + 사용자 조회"가 항상 필요한 요구가 있을 때 합리적
+  - 매 요청 시 DB 조회를 통해 최신 사용자 상태/차단 여부 반영 가능
+  - "검증 + 사용자 조회"가 항상 필요한 요구가 있을 때 합리적
 - 단점:
-    - 네트워크 홉 증가, 지연 증가
-    - User Service 장애가 전체 장애로 전파(SPOF)
+  - 네트워크 홉 증가, 지연 증가
+  - User Service 장애가 전체 장애로 전파(SPOF)
 
 ## Summary Table
 
