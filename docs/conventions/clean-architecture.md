@@ -170,23 +170,23 @@ application이 반환한 Result를 외부 응답으로 변환하는 계층이다
 - `Response` DTO — HTTP 응답 출력
 
 ```java
-// presentation/rest/UserController.java
+// presentation/rest/auth/AuthController.java
 @RestController
-@RequestMapping("/api/v1/users")
+@RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
-public class UserController {
+public class AuthController {
 
-    private final UserService userService;
+    private final AuthService authService;
 
-    @PostMapping("/signup")
-    public ResponseEntity<ApiResponse<UserProfileResponse>> signUp(
+    @PostMapping("/register")
+    public ResponseEntity<ApiResponse<UserResponse>> register(
             @RequestBody @Valid SignUpRequest request) {
 
         SignUpCommand command = request.toCommand();          // Request → Command 변환
-        UserResult result = userService.signUp(command);
+        UserResult result = authService.signUp(command);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("회원가입에 성공했습니다.",
-                        UserProfileResponse.from(result)));  // Result → Response 변환
+                        UserResponse.from(result)));          // Result → Response 변환
     }
 }
 
