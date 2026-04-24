@@ -1187,20 +1187,30 @@ data: {"notificationId":2,"type":"CHALLENGE_EVENT","title":"새 멤버가 참여
 
 ## 부록 — errorCode 목록
 
+> `common-core/.../exception/ErrorCode.java` 기준 (코드와 동기화 유지)
+
 | errorCode | HTTP | 설명 |
 |---|---|---|
-| `INVALID_INPUT` | 400 | 유효성 검사 실패 |
+| `VALIDATION_FAILED` | 400 | 유효성 검사 실패 |
 | `UNAUTHORIZED` | 401 | 토큰 없음 / 만료 |
+| `INVALID_CREDENTIALS` | 401 | 이메일 또는 비밀번호 불일치 |
 | `FORBIDDEN` | 403 | 권한 없음 |
+| `NOT_CHALLENGE_MEMBER` | 403 | 챌린지 멤버가 아님 |
+| `CHAT_NOT_MEMBER` | 403 | 채팅방 멤버가 아님 |
 | `USER_NOT_FOUND` | 404 | 사용자 없음 |
 | `CHALLENGE_NOT_FOUND` | 404 | 챌린지 없음 |
+| `ROUTINE_TEMPLATE_NOT_FOUND` | 404 | 루틴 템플릿 없음 |
 | `ROUTINE_NOT_FOUND` | 404 | 루틴 없음 |
 | `EXECUTION_NOT_FOUND` | 404 | 루틴 실행 기록 없음 |
-| `FEED_CARD_NOT_FOUND` | 404 | 피드 카드 없음 |
 | `CHAT_ROOM_NOT_FOUND` | 404 | 채팅방 없음 |
+| `NOTIFICATION_NOT_FOUND` | 404 | 알림 없음 |
 | `EMAIL_ALREADY_EXISTS` | 409 | 이메일 중복 |
 | `NICKNAME_ALREADY_EXISTS` | 409 | 닉네임 중복 |
-| `ALREADY_JOINED` | 409 | 이미 참여 중인 챌린지 |
+| `CHALLENGE_ALREADY_JOINED` | 409 | 이미 참여한 챌린지 |
 | `CHALLENGE_FULL` | 409 | 챌린지 인원 초과 |
-| `ALREADY_COMPLETED` | 409 | 이미 완료 처리된 루틴 |
-| `ALREADY_REACTED` | 409 | 이미 동일 이모지 리액션 존재 |
+| `CHALLENGE_ALREADY_ENDED` | 409 | 이미 종료된 챌린지 |
+| `CHALLENGE_NOT_STARTED` | 409 | 아직 시작되지 않은 챌린지 |
+| `EXECUTION_ALREADY_COMPLETED` | 409 | 이미 완료된 수행 기록 |
+| `TOO_MANY_REQUESTS` | 429 | Rate Limit 초과 |
+| `INTERNAL_SERVER_ERROR` | 500 | 서버 내부 오류 |
+| `SERVICE_UNAVAILABLE` | 503 | 일시적 서버 문제 (Circuit Breaker 등) |

@@ -201,8 +201,7 @@ public FileStorage localFileStorage() {
 ```yaml
 # 프로파일별 application.yml
 # application-local.yml    — 로컬 IntelliJ 직접 실행
-# application-dev.yml      — Docker Compose 환경
-# application-prod.yml     — AWS 배포 환경
+# application-prod.yml     — 배포 환경
 
 # application-local.yml 예시
 spring:
