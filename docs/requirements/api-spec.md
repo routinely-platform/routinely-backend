@@ -144,12 +144,13 @@ public class ApiResponse<T> {
   "success": true,
   "message": "로그인에 성공했습니다.",
   "data": {
-    "accessToken": "eyJhbGci...",
-    "refreshToken": "eyJhbGci...",
-    "expiresIn": 3600
+    "accessToken": "eyJhbGci..."
   }
 }
 ```
+> Refresh Token은 응답 바디에 포함되지 않는다.  
+> `Set-Cookie: refresh_token=<UUID>; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth` 헤더로 전달된다.  
+> Refresh Token은 opaque token(UUID)으로 Redis에 저장된다.
 
 ---
 
@@ -157,11 +158,7 @@ public class ApiResponse<T> {
 - Auth: ❌
 
 **Request**
-```json
-{
-  "refreshToken": "eyJhbGci..."
-}
-```
+> 요청 바디 없음. Refresh Token은 HttpOnly 쿠키(`refresh_token`)로 자동 전송된다.
 
 **Response** `200`
 ```json
@@ -169,8 +166,7 @@ public class ApiResponse<T> {
   "success": true,
   "message": "토큰이 갱신되었습니다.",
   "data": {
-    "accessToken": "eyJhbGci...",
-    "expiresIn": 3600
+    "accessToken": "eyJhbGci..."
   }
 }
 ```
