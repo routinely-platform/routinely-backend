@@ -1,11 +1,16 @@
 package com.routinely.user_service.application.auth;
 
 import com.routinely.core.exception.BusinessException;
+import com.routinely.user_service.application.auth.dto.LoginCommand;
+import com.routinely.user_service.application.auth.dto.LoginResult;
 import com.routinely.user_service.application.auth.dto.SignUpCommand;
 import com.routinely.user_service.application.auth.dto.UserResult;
 import com.routinely.user_service.domain.User;
 import com.routinely.user_service.domain.UserRepository;
 import com.routinely.user_service.domain.UserRole;
+import com.routinely.user_service.infrastructure.jwt.JwtProvider;
+import com.routinely.user_service.infrastructure.redis.RefreshTokenStore;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,13 +31,17 @@ class AuthServiceTest {
 
     private UserRepository userRepository;
     private PasswordEncoder passwordEncoder;
+    private JwtProvider jwtProvider;
+    private RefreshTokenStore refreshTokenStore;
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
         userRepository = mock(UserRepository.class);
         passwordEncoder = mock(PasswordEncoder.class);
-        authService = new AuthService(userRepository, passwordEncoder);
+        jwtProvider = mock(JwtProvider.class);
+        refreshTokenStore = mock(RefreshTokenStore.class);
+        authService = new AuthService(userRepository, passwordEncoder, jwtProvider, refreshTokenStore);
     }
 
     @Test
@@ -76,6 +85,74 @@ class AuthServiceTest {
         assertThat(result.userId()).isEqualTo(1L);
         assertThat(result.email()).isEqualTo("new-user@routinely.com");
         assertThat(result.nickname()).isEqualTo("루틴러");
+    }
+
+    @Test
+    @DisplayName("로그인_성공하면_accessToken과_refreshToken을_발급한다")
+    void login_whenCredentialsAreValid_returnsTokens() {
+        LoginCommand command = new LoginCommand("user@routinely.com", "password123!");
+        User user = User.builder()
+                .id(1L)
+                .email(command.email())
+                .passwordHash("encoded-password")
+                .nickname("루틴러")
+                .role(UserRole.USER)
+                .isActive(true)
+                .build();
+
+        when(userRepository.findByEmailAndIsActiveTrue(command.email())).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches(command.password(), user.getPasswordHash())).thenReturn(true);
+        when(jwtProvider.generateAccessToken(user.getId(), user.getRole())).thenReturn("access-token");
+        when(refreshTokenStore.save(user.getId())).thenReturn("refresh-token");
+
+        LoginResult result = authService.login(command);
+
+        assertThat(result.accessToken()).isEqualTo("access-token");
+        assertThat(result.refreshToken()).isEqualTo("refresh-token");
+    }
+
+    @Test
+    @DisplayName("토큰갱신_성공하면_refreshToken을_원자적으로_소비하고_새토큰을_발급한다")
+    void refresh_whenTokenIsValid_consumesTokenAndReturnsNewTokens() {
+        User user = User.builder()
+                .id(1L)
+                .email("user@routinely.com")
+                .passwordHash("encoded-password")
+                .nickname("루틴러")
+                .role(UserRole.USER)
+                .isActive(true)
+                .build();
+
+        when(refreshTokenStore.consumeUserId("refresh-token")).thenReturn(1L);
+        when(userRepository.findByIdAndIsActiveTrue(1L)).thenReturn(java.util.Optional.of(user));
+        when(jwtProvider.generateAccessToken(user.getId(), user.getRole())).thenReturn("new-access-token");
+        when(refreshTokenStore.save(1L)).thenReturn("new-refresh-token");
+
+        LoginResult result = authService.refresh("refresh-token");
+
+        assertThat(result.accessToken()).isEqualTo("new-access-token");
+        assertThat(result.refreshToken()).isEqualTo("new-refresh-token");
+        verify(refreshTokenStore, never()).delete("refresh-token");
+    }
+
+    @Test
+    @DisplayName("토큰갱신_실패하면_새_refreshToken을_발급하지않는다")
+    void refresh_whenTokenIsInvalid_throwsException() {
+        when(refreshTokenStore.consumeUserId("invalid-refresh-token")).thenReturn(null);
+
+        assertThatThrownBy(() -> authService.refresh("invalid-refresh-token"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("인증이 필요합니다.");
+
+        verify(refreshTokenStore, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("로그아웃하면_refreshToken을_삭제한다")
+    void logout_deletesRefreshToken() {
+        authService.logout("refresh-token");
+
+        verify(refreshTokenStore).delete("refresh-token");
     }
 
     @Test
