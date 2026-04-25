@@ -13,6 +13,8 @@ spring:
 jwt:
   secret: dGVzdC1zZWNyZXQta2V5LWZvci1obWFjLXNoYTI1Ni1hbGdvcml0aG0h
   expiration-ms: 86400000
+  refresh-expiration-ms: 604800000
+  refresh-cookie-secure: false
 
 eureka:
   client:

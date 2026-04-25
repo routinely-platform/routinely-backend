@@ -19,10 +19,16 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
 
 jwt:
   secret: ${JWT_SECRET}
-  expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  expiration-ms: ${JWT_EXPIRATION_MS:900000}
+  refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:604800000}
+  refresh-cookie-secure: ${JWT_REFRESH_COOKIE_SECURE:true}
 
 gateway:
   secret: ${GATEWAY_SECRET}

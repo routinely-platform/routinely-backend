@@ -151,10 +151,15 @@ public ApiResponse<LoginResponse> login(@RequestBody LoginRequest request) {
         throw new BusinessException(ErrorCode.INVALID_CREDENTIALS, ...);
     }
 
-    String accessToken  = jwtProvider.createAccessToken(user.getId(), user.getRole());
-    String refreshToken = jwtProvider.createRefreshToken(user.getId());
+    String accessToken  = jwtProvider.generateAccessToken(user.getId(), user.getRole());
+    String refreshToken = refreshTokenStore.save(user.getId());  // opaque UUID, Redis에 TTL 7일로 저장
 
-    return ApiResponse.ok("로그인에 성공했습니다.", new LoginResponse(accessToken, refreshToken));
+    ResponseCookie cookie = ResponseCookie.from("refresh_token", refreshToken)
+        .httpOnly(true).secure(true).sameSite("Strict").path("/api/v1/auth").build();
+
+    return ResponseEntity.ok()
+        .header(HttpHeaders.SET_COOKIE, cookie.toString())
+        .body(ApiResponse.ok("로그인에 성공했습니다.", new LoginResponse(accessToken)));
 }
 ```
 

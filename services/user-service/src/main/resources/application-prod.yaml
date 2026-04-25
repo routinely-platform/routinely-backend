@@ -6,6 +6,7 @@ spring:
 
 jwt:
   secret: ${JWT_SECRET}
+  refresh-cookie-secure: ${JWT_REFRESH_COOKIE_SECURE:true}
 
 gateway:
   secret: ${GATEWAY_SECRET}

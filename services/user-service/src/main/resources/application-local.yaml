@@ -8,8 +8,16 @@ spring:
         format_sql: true
     show-sql: true
 
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
 jwt:
   secret: ${JWT_SECRET:dGVzdC1zZWNyZXQta2V5LWZvci1obWFjLXNoYTI1Ni1hbGdvcml0aG0h}
+  expiration-ms: ${JWT_EXPIRATION_MS:900000}
+  refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:604800000}
+  refresh-cookie-secure: ${JWT_REFRESH_COOKIE_SECURE:false}
 
 gateway:
   secret: ${GATEWAY_SECRET:local-secret}
