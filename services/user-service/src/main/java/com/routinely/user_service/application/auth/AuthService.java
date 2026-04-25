@@ -3,10 +3,14 @@ package com.routinely.user_service.application.auth;
 import static com.routinely.core.exception.ErrorCode.*;
 
 import com.routinely.core.exception.BusinessException;
+import com.routinely.user_service.application.auth.dto.LoginCommand;
+import com.routinely.user_service.application.auth.dto.LoginResult;
 import com.routinely.user_service.application.auth.dto.SignUpCommand;
 import com.routinely.user_service.application.auth.dto.UserResult;
 import com.routinely.user_service.domain.User;
 import com.routinely.user_service.domain.UserRepository;
+import com.routinely.user_service.infrastructure.jwt.JwtProvider;
+import com.routinely.user_service.infrastructure.redis.RefreshTokenStore;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -18,10 +22,17 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtProvider jwtProvider;
+    private final RefreshTokenStore refreshTokenStore;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public AuthService(UserRepository userRepository,
+                       PasswordEncoder passwordEncoder,
+                       JwtProvider jwtProvider,
+                       RefreshTokenStore refreshTokenStore) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.jwtProvider = jwtProvider;
+        this.refreshTokenStore = refreshTokenStore;
     }
 
     @Transactional
@@ -42,6 +53,42 @@ public class AuthService {
         } catch (DataIntegrityViolationException e) {
             throw translateDuplicateException(e);
         }
+    }
+
+    public LoginResult login(LoginCommand command) {
+        User user = userRepository.findByEmailAndIsActiveTrue(command.email())
+                .orElseThrow(() -> new BusinessException(INVALID_CREDENTIALS));
+
+        if (!passwordEncoder.matches(command.password(), user.getPasswordHash())) {
+            throw new BusinessException(INVALID_CREDENTIALS);
+        }
+
+        String accessToken = jwtProvider.generateAccessToken(user.getId(), user.getRole());
+        String refreshToken = refreshTokenStore.save(user.getId());
+
+        return new LoginResult(accessToken, refreshToken);
+    }
+
+    public LoginResult refresh(String refreshToken) {
+        Long userId = refreshTokenStore.consumeUserId(refreshToken);
+        if (userId == null) {
+            throw new BusinessException(UNAUTHORIZED);
+        }
+
+        User user = userRepository.findByIdAndIsActiveTrue(userId)
+                .orElseThrow(() -> new BusinessException(UNAUTHORIZED));
+
+        String newRefreshToken = refreshTokenStore.save(userId);
+        String accessToken = jwtProvider.generateAccessToken(user.getId(), user.getRole());
+
+        return new LoginResult(accessToken, newRefreshToken);
+    }
+
+    public void logout(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            return;
+        }
+        refreshTokenStore.delete(refreshToken);
     }
 
     private RuntimeException translateDuplicateException(DataIntegrityViolationException e) {
