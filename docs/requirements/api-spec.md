@@ -200,22 +200,23 @@ public class ApiResponse<T> {
     "userId": 1,
     "email": "user@example.com",
     "nickname": "김루틴",
-    "profileImageUrl": null,
-    "createdAt": "2025-01-01T00:00:00Z"
+    "profileImageUrl": null
   }
 }
 ```
 
 ---
 
-#### `PATCH /api/v1/users/me` — 프로필 수정
+#### `PATCH /api/v1/users/me` — 닉네임 수정
 - Auth: ✅
+- Content-Type: `application/json`
+
+> 현재 엔드포인트는 닉네임만 수정한다. 프로필 이미지는 추후 별도 이슈에서 `/api/v1/users/me/profile-image` 하위 리소스로 처리한다.
 
 **Request**
 ```json
 {
-  "nickname": "새닉네임",
-  "profileImageUrl": "https://s3.../profile.jpg"
+  "nickname": "새닉네임"
 }
 ```
 
@@ -225,8 +226,64 @@ public class ApiResponse<T> {
   "success": true,
   "message": "사용자 정보 변경이 완료되었습니다.",
   "data": {
+    "userId": 1,
+    "email": "user@example.com",
     "nickname": "새닉네임",
-    "profileImageUrl": "https://s3.../profile.jpg"
+    "profileImageUrl": null
+  }
+}
+```
+
+---
+
+#### `PUT /api/v1/users/me/profile-image` — 프로필 이미지 생성/교체
+- Auth: ✅
+- Content-Type: `multipart/form-data`
+- 구현 시점: 추후 별도 이슈
+
+**구현 메모**
+- 이미지 저장소의 객체 삭제/교체를 위해 `users.profile_image_object_key VARCHAR(500) NULL` 컬럼을 추가한다.
+- `profileImageUrl`은 클라이언트 표시용 URL이며, `profileImageObjectKey`는 S3/R2/MinIO 등 object storage 내부 객체 식별자로 사용한다.
+- 권장 저장 key 예시: `users/{userId}/profile/{uuid}.webp`
+
+**Request**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `image` | file | ✅ | `image/jpeg`, `image/png`, `image/webp` |
+
+**Response** `200`
+```json
+{
+  "success": true,
+  "message": "프로필 이미지가 변경되었습니다.",
+  "data": {
+    "userId": 1,
+    "email": "user@example.com",
+    "nickname": "새닉네임",
+    "profileImageUrl": "https://cdn.example.com/users/1/profile/uuid.webp"
+  }
+}
+```
+
+---
+
+#### `DELETE /api/v1/users/me/profile-image` — 프로필 이미지 삭제
+- Auth: ✅
+- 구현 시점: 추후 별도 이슈
+
+삭제 시 DB의 `profile_image_url`, `profile_image_object_key`를 함께 `NULL`로 변경하고, 트랜잭션 커밋 이후 기존 storage 객체를 삭제한다.
+
+**Response** `200`
+```json
+{
+  "success": true,
+  "message": "프로필 이미지가 삭제되었습니다.",
+  "data": {
+    "userId": 1,
+    "email": "user@example.com",
+    "nickname": "새닉네임",
+    "profileImageUrl": null
   }
 }
 ```
