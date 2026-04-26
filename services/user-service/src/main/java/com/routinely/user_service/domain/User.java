@@ -63,10 +63,9 @@ public class User extends BaseEntity {
         this.isActive = false;
     }
 
-    public void updateProfile(String nickname, String profileImageUrl) {
+    public void updateNickname(String nickname) {
         validateNickname(nickname);
         this.nickname = nickname;
-        this.profileImageUrl = profileImageUrl;
     }
 
     private void validateNickname(String nickname) {
