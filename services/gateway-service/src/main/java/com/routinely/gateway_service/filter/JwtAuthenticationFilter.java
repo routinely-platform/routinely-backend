@@ -21,7 +21,6 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 
 @Component
 @Profile("!local")
@@ -32,7 +31,8 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     private static final Set<String> PUBLIC_ENDPOINTS = Set.of(
             "POST /api/v1/auth/signup",
             "POST /api/v1/auth/login",
-            "POST /api/v1/auth/refresh"
+            "POST /api/v1/auth/refresh",
+            "POST /api/v1/auth/logout"
     );
 
     private final JwtTokenProvider jwtTokenProvider;
