@@ -53,7 +53,8 @@ class JwtAuthenticationFilterTest {
     @ValueSource(strings = {
             "/api/v1/auth/login",
             "/api/v1/auth/signup",
-            "/api/v1/auth/refresh"
+            "/api/v1/auth/refresh",
+            "/api/v1/auth/logout"
     })
     @DisplayName("공개경로_JWT없이_통과하고_X-Gateway-Secret_주입")
     void filter_publicPath_passesWithoutJwtAndInjectsGatewaySecret(String path) {
