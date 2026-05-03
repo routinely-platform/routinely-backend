@@ -109,6 +109,10 @@ class AuthServiceTest {
 
         assertThat(result.accessToken()).isEqualTo("access-token");
         assertThat(result.refreshToken()).isEqualTo("refresh-token");
+        assertThat(result.userId()).isEqualTo(1L);
+        assertThat(result.email()).isEqualTo("user@routinely.com");
+        assertThat(result.nickname()).isEqualTo("루틴러");
+        assertThat(result.profileImageUrl()).isNull();
     }
 
     @Test
@@ -132,6 +136,10 @@ class AuthServiceTest {
 
         assertThat(result.accessToken()).isEqualTo("new-access-token");
         assertThat(result.refreshToken()).isEqualTo("new-refresh-token");
+        assertThat(result.userId()).isEqualTo(1L);
+        assertThat(result.email()).isEqualTo("user@routinely.com");
+        assertThat(result.nickname()).isEqualTo("루틴러");
+        assertThat(result.profileImageUrl()).isNull();
         verify(refreshTokenStore, never()).delete("refresh-token");
     }
 
