@@ -4,7 +4,7 @@ import com.routinely.core.constant.HeaderConstants;
 import com.routinely.core.response.ApiResponse;
 import com.routinely.user_service.application.user.UserService;
 import com.routinely.user_service.application.user.dto.ProfileResult;
-import com.routinely.user_service.presentation.rest.user.dto.request.UpdateNicknameRequest;
+import com.routinely.user_service.presentation.rest.user.dto.request.UpdateProfileRequest;
 import com.routinely.user_service.presentation.rest.user.dto.response.ProfileResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -35,11 +35,11 @@ public class UserController {
     }
 
     @PatchMapping("/me")
-    public ResponseEntity<ApiResponse<ProfileResponse>> updateNickname(
+    public ResponseEntity<ApiResponse<ProfileResponse>> updateProfile(
             @RequestHeader(HeaderConstants.USER_ID) Long userId,
-            @RequestBody @Valid UpdateNicknameRequest request) {
+            @RequestBody @Valid UpdateProfileRequest request) {
 
-        ProfileResult result = userService.updateNickname(request.toCommand(userId));
+        ProfileResult result = userService.updateProfile(request.toCommand(userId));
         return ResponseEntity.ok(ApiResponse.ok("사용자 정보 변경이 완료되었습니다.", ProfileResponse.from(result)));
     }
 

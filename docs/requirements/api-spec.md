@@ -200,25 +200,34 @@ public class ApiResponse<T> {
     "userId": 1,
     "email": "user@example.com",
     "nickname": "김루틴",
-    "profileImageUrl": null
+    "bio": null,
+    "profileImageUrl": null,
+    "createdAt": "2024-03-15T10:00:00Z",
+    "nicknameUpdatedAt": null
   }
 }
 ```
 
+> `bio`가 null이면 클라이언트에서 한 줄 소개 영역을 미표시한다.  
+> `createdAt` 기반 "함께한 지 N일째" 계산은 클라이언트에서 수행한다.  
+> `nicknameUpdatedAt`은 30일 쿨다운 잔여일 계산에 사용한다.
+
 ---
 
-#### `PATCH /api/v1/users/me` — 닉네임 수정
+#### `PATCH /api/v1/users/me` — 프로필 수정 (닉네임 + 한 줄 소개)
 - Auth: ✅
 - Content-Type: `application/json`
-
-> 현재 엔드포인트는 닉네임만 수정한다. 프로필 이미지는 추후 별도 이슈에서 `/api/v1/users/me/profile-image` 하위 리소스로 처리한다.
 
 **Request**
 ```json
 {
-  "nickname": "새닉네임"
+  "nickname": "새닉네임",
+  "bio": "매일 조금씩 성장하는 중"
 }
 ```
+
+> `bio`를 빈 문자열 또는 null로 전송하면 소개가 삭제된다.  
+> 닉네임 30일 쿨다운은 #106 이슈에서 구현 예정 (`NICKNAME_CHANGE_TOO_SOON` 409).
 
 **Response** `200`
 ```json
@@ -229,7 +238,9 @@ public class ApiResponse<T> {
     "userId": 1,
     "email": "user@example.com",
     "nickname": "새닉네임",
-    "profileImageUrl": null
+    "bio": "매일 조금씩 성장하는 중",
+    "profileImageUrl": null,
+    "createdAt": "2024-03-15T10:00:00Z"
   }
 }
 ```
@@ -290,8 +301,9 @@ public class ApiResponse<T> {
 
 ---
 
-#### `DELETE /api/v1/users/me` — 회원 탈퇴
+#### `DELETE /api/v1/users/me` — 회원 탈퇴 [v2]
 - Auth: ✅
+- `is_active = false` 소프트 딜리트, 이메일/닉네임 재사용 불가
 
 **Response** `200`
 ```json
@@ -1259,6 +1271,7 @@ data: {"notificationId":2,"type":"CHALLENGE_EVENT","title":"새 멤버가 참여
 | `NOTIFICATION_NOT_FOUND` | 404 | 알림 없음 |
 | `EMAIL_ALREADY_EXISTS` | 409 | 이메일 중복 |
 | `NICKNAME_ALREADY_EXISTS` | 409 | 닉네임 중복 |
+| `NICKNAME_CHANGE_TOO_SOON` | 409 | 닉네임 변경 30일 쿨다운 미경과 |
 | `CHALLENGE_ALREADY_JOINED` | 409 | 이미 참여한 챌린지 |
 | `CHALLENGE_FULL` | 409 | 챌린지 인원 초과 |
 | `CHALLENGE_ALREADY_ENDED` | 409 | 이미 종료된 챌린지 |

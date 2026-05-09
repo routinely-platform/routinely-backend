@@ -5,7 +5,7 @@ import static com.routinely.core.exception.ErrorCode.USER_NOT_FOUND;
 
 import com.routinely.core.exception.BusinessException;
 import com.routinely.user_service.application.user.dto.ProfileResult;
-import com.routinely.user_service.application.user.dto.UpdateNicknameCommand;
+import com.routinely.user_service.application.user.dto.UpdateProfileCommand;
 import com.routinely.user_service.domain.User;
 import com.routinely.user_service.domain.UserRepository;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -28,23 +28,22 @@ public class UserService {
     }
 
     @Transactional
-    public ProfileResult updateNickname(UpdateNicknameCommand command) {
+    public ProfileResult updateProfile(UpdateProfileCommand command) {
         User user = getActiveUser(command.userId());
 
-        if (user.getNickname().equals(command.nickname())) {
-            return ProfileResult.from(user);
+        if (!user.getNickname().equals(command.nickname())) {
+            if (userRepository.existsByNickname(command.nickname())) {
+                throw new BusinessException(NICKNAME_ALREADY_EXISTS);
+            }
+            try {
+                user.updateNickname(command.nickname());
+                userRepository.flush();
+            } catch (DataIntegrityViolationException e) {
+                throw translateDuplicateException(e);
+            }
         }
 
-        if (userRepository.existsByNickname(command.nickname())) {
-            throw new BusinessException(NICKNAME_ALREADY_EXISTS);
-        }
-
-        try {
-            user.updateNickname(command.nickname());
-            userRepository.flush();
-        } catch (DataIntegrityViolationException e) {
-            throw translateDuplicateException(e);
-        }
+        user.updateBio(command.bio());
 
         return ProfileResult.from(user);
     }
