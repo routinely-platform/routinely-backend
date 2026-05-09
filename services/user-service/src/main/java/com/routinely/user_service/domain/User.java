@@ -45,6 +45,9 @@ public class User extends BaseEntity {
     @Column(name = "profile_image_url", length = 500)
     private String profileImageUrl;
 
+    @Column(length = 100)
+    private String bio;
+
     @Column(name = "is_active", nullable = false)
     @Builder.Default
     private boolean isActive = true;
@@ -66,6 +69,10 @@ public class User extends BaseEntity {
     public void updateNickname(String nickname) {
         validateNickname(nickname);
         this.nickname = nickname;
+    }
+
+    public void updateBio(String bio) {
+        this.bio = (bio != null && bio.isBlank()) ? null : bio;
     }
 
     private void validateNickname(String nickname) {
