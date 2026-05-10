@@ -203,14 +203,14 @@ public class ApiResponse<T> {
     "bio": null,
     "profileImageUrl": null,
     "createdAt": "2024-03-15T10:00:00Z",
-    "nicknameUpdatedAt": null
+    "nicknameChangeableAt": null
   }
 }
 ```
 
 > `bio`가 null이면 클라이언트에서 한 줄 소개 영역을 미표시한다.  
 > `createdAt` 기반 "함께한 지 N일째" 계산은 클라이언트에서 수행한다.  
-> `nicknameUpdatedAt`은 30일 쿨다운 잔여일 계산에 사용한다.
+> `nicknameChangeableAt`이 null이면 즉시 변경 가능, non-null이면 해당 시각 이후 변경 가능 (`nicknameUpdatedAt + 30일` 계산값).
 
 ---
 
@@ -227,7 +227,8 @@ public class ApiResponse<T> {
 ```
 
 > `bio`를 빈 문자열 또는 null로 전송하면 소개가 삭제된다.  
-> 닉네임 30일 쿨다운은 #106 이슈에서 구현 예정 (`NICKNAME_CHANGE_TOO_SOON` 409).
+> 닉네임 변경 후 30일 이내 재변경 시 `NICKNAME_CHANGE_COOLDOWN_ACTIVE` (409) 응답.  
+> 쿨다운 기간은 `NICKNAME_COOLDOWN_DAYS` 환경변수로 조정 가능 (기본: 30일).
 
 **Response** `200`
 ```json
@@ -240,8 +241,18 @@ public class ApiResponse<T> {
     "nickname": "새닉네임",
     "bio": "매일 조금씩 성장하는 중",
     "profileImageUrl": null,
-    "createdAt": "2024-03-15T10:00:00Z"
+    "createdAt": "2024-03-15T10:00:00Z",
+    "nicknameChangeableAt": "2024-04-14T10:00:00Z"
   }
+}
+```
+
+**Response** `409` — 쿨다운 미경과
+```json
+{
+  "success": false,
+  "message": "닉네임은 변경 후 30일이 지나야 다시 변경할 수 있습니다. (남은 기간: 15일)",
+  "data": null
 }
 ```
 
@@ -1271,7 +1282,7 @@ data: {"notificationId":2,"type":"CHALLENGE_EVENT","title":"새 멤버가 참여
 | `NOTIFICATION_NOT_FOUND` | 404 | 알림 없음 |
 | `EMAIL_ALREADY_EXISTS` | 409 | 이메일 중복 |
 | `NICKNAME_ALREADY_EXISTS` | 409 | 닉네임 중복 |
-| `NICKNAME_CHANGE_TOO_SOON` | 409 | 닉네임 변경 30일 쿨다운 미경과 |
+| `NICKNAME_CHANGE_COOLDOWN_ACTIVE` | 409 | 닉네임 변경 30일 쿨다운 미경과 |
 | `CHALLENGE_ALREADY_JOINED` | 409 | 이미 참여한 챌린지 |
 | `CHALLENGE_FULL` | 409 | 챌린지 인원 초과 |
 | `CHALLENGE_ALREADY_ENDED` | 409 | 이미 종료된 챌린지 |
