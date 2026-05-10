@@ -16,6 +16,10 @@ jwt:
   refresh-expiration-ms: 604800000
   refresh-cookie-secure: false
 
+user:
+  profile:
+    nickname-cooldown-days: ${NICKNAME_COOLDOWN_DAYS:30}
+
 eureka:
   client:
     enabled: false

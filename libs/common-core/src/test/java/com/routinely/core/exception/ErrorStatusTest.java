@@ -17,6 +17,8 @@ class ErrorStatusTest {
             "FORBIDDEN, 403",
             "NOT_FOUND, 404",
             "CONFLICT, 409",
+            "TOO_MANY_REQUESTS, 429",
+            "SERVICE_UNAVAILABLE, 503",
             "INTERNAL_SERVER_ERROR, 500"
     })
     @DisplayName("getCode_각상수_HTTP상태코드반환")
@@ -25,8 +27,8 @@ class ErrorStatusTest {
     }
 
     @Test
-    @DisplayName("values_정의된상수는6개")
-    void values_hasSixConstants() {
-        assertThat(ErrorStatus.values()).hasSize(6);
+    @DisplayName("values_정의된상수는8개")
+    void values_hasEightConstants() {
+        assertThat(ErrorStatus.values()).hasSize(8);
     }
 }

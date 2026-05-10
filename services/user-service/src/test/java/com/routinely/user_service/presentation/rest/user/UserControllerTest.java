@@ -28,13 +28,15 @@ class UserControllerTest {
         UserService userService = mock(UserService.class);
         UserController controller = new UserController(userService);
         LocalDateTime createdAt = LocalDateTime.of(2024, 3, 15, 10, 0);
+        LocalDateTime nicknameChangeableAt = LocalDateTime.of(2024, 4, 14, 10, 0);
         ProfileResult profileResult = new ProfileResult(
                 1L,
                 "user@routinely.com",
                 "루틴러",
                 "매일 조금씩 성장하는 중",
                 "https://cdn.routinely.com/profile.jpg",
-                createdAt
+                createdAt,
+                nicknameChangeableAt
         );
         when(userService.getMyProfile(1L)).thenReturn(profileResult);
 
@@ -47,6 +49,7 @@ class UserControllerTest {
         assertThat(response.getBody().getData().bio()).isEqualTo("매일 조금씩 성장하는 중");
         assertThat(response.getBody().getData().profileImageUrl()).isEqualTo("https://cdn.routinely.com/profile.jpg");
         assertThat(response.getBody().getData().createdAt()).isEqualTo(createdAt);
+        assertThat(response.getBody().getData().nicknameChangeableAt()).isEqualTo(nicknameChangeableAt);
     }
 
     @Test
@@ -55,13 +58,15 @@ class UserControllerTest {
         UserService userService = mock(UserService.class);
         UserController controller = new UserController(userService);
         LocalDateTime createdAt = LocalDateTime.of(2024, 3, 15, 10, 0);
+        LocalDateTime nicknameChangeableAt = LocalDateTime.of(2024, 4, 14, 10, 0);
         ProfileResult profileResult = new ProfileResult(
                 1L,
                 "user@routinely.com",
                 "새닉네임",
                 "매일 조금씩 성장하는 중",
                 null,
-                createdAt
+                createdAt,
+                nicknameChangeableAt
         );
         when(userService.updateProfile(any())).thenReturn(profileResult);
 
@@ -79,6 +84,7 @@ class UserControllerTest {
         assertThat(response.getBody().getData().nickname()).isEqualTo("새닉네임");
         assertThat(response.getBody().getData().bio()).isEqualTo("매일 조금씩 성장하는 중");
         assertThat(response.getBody().getData().createdAt()).isEqualTo(createdAt);
+        assertThat(response.getBody().getData().nicknameChangeableAt()).isEqualTo(nicknameChangeableAt);
     }
 
     @Test
