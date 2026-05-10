@@ -17,6 +17,7 @@ public enum ErrorCode {
     USER_NOT_FOUND("USER_NOT_FOUND", "사용자를 찾을 수 없습니다.", ErrorStatus.NOT_FOUND),
     EMAIL_ALREADY_EXISTS("EMAIL_ALREADY_EXISTS", "이미 사용 중인 이메일입니다.", ErrorStatus.CONFLICT),
     NICKNAME_ALREADY_EXISTS("NICKNAME_ALREADY_EXISTS", "이미 사용 중인 닉네임입니다.", ErrorStatus.CONFLICT),
+    NICKNAME_CHANGE_COOLDOWN_ACTIVE("NICKNAME_CHANGE_COOLDOWN_ACTIVE", "닉네임 변경 쿨다운이 아직 끝나지 않았습니다.", ErrorStatus.CONFLICT),
     INVALID_CREDENTIALS("INVALID_CREDENTIALS", "이메일 또는 비밀번호가 올바르지 않습니다.", ErrorStatus.UNAUTHORIZED),
 
     // Challenge

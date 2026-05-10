@@ -17,6 +17,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
+
 @Entity
 @Table(name = "users")
 @Getter
@@ -48,6 +50,9 @@ public class User extends BaseEntity {
     @Column(length = 100)
     private String bio;
 
+    @Column(name = "nickname_updated_at")
+    private LocalDateTime nicknameUpdatedAt;
+
     @Column(name = "is_active", nullable = false)
     @Builder.Default
     private boolean isActive = true;
@@ -66,9 +71,10 @@ public class User extends BaseEntity {
         this.isActive = false;
     }
 
-    public void updateNickname(String nickname) {
+    public void updateNickname(String nickname, LocalDateTime nicknameUpdatedAt) {
         validateNickname(nickname);
         this.nickname = nickname;
+        this.nicknameUpdatedAt = nicknameUpdatedAt;
     }
 
     public void updateBio(String bio) {
