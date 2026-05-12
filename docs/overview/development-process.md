@@ -146,6 +146,9 @@ RATE_LIMIT_CAPACITY=              # 윈도우 내 최대 허용 요청 수 (기�
 RATE_LIMIT_REFILL_PERIOD_SECONDS= # 윈도우 크기 초 단위 (기본: 60)
 RATE_LIMIT_TRUSTED_PROXIES=       # 신뢰할 프록시 IP (prod 필수, 미설정 시 기동 실패)
 RATE_LIMIT_FAIL_OPEN_ON_REDIS_ERROR= # Redis 장애 시 요청 통과 여부 (기본: false)
+
+# user-service
+NICKNAME_COOLDOWN_DAYS=             # 닉네임 재변경 허용 대기 일수 (기본: 30)
 ```
 
 ---

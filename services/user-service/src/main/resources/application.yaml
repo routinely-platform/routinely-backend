@@ -33,6 +33,10 @@ jwt:
 gateway:
   secret: ${GATEWAY_SECRET}
 
+user:
+  profile:
+    nickname-cooldown-days: ${NICKNAME_COOLDOWN_DAYS:30}
+
 eureka:
   client:
     register-with-eureka: true

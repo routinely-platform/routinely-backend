@@ -15,6 +15,10 @@ import com.routinely.user_service.application.user.dto.UpdateProfileCommand;
 import com.routinely.user_service.domain.User;
 import com.routinely.user_service.domain.UserRepository;
 import com.routinely.user_service.domain.UserRole;
+import com.routinely.user_service.infrastructure.config.UserProfileProperties;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,13 +30,16 @@ import org.springframework.test.util.ReflectionTestUtils;
 @DisplayName("UserService")
 class UserServiceTest {
 
+    private static final Clock FIXED_CLOCK =
+            Clock.fixed(Instant.parse("2026-05-09T00:00:00Z"), ZoneId.of("Asia/Seoul"));
+
     private UserRepository userRepository;
     private UserService userService;
 
     @BeforeEach
     void setUp() {
         userRepository = mock(UserRepository.class);
-        userService = new UserService(userRepository);
+        userService = new UserService(userRepository, new UserProfileProperties(30), FIXED_CLOCK);
     }
 
     @Test
@@ -50,6 +57,7 @@ class UserServiceTest {
         assertThat(result.bio()).isEqualTo("매일 조금씩 성장하는 중");
         assertThat(result.profileImageUrl()).isEqualTo("https://cdn.routinely.com/profile.jpg");
         assertThat(result.createdAt()).isEqualTo(createdAt);
+        assertThat(result.nicknameChangeableAt()).isNull();
     }
 
     @Test
@@ -79,7 +87,22 @@ class UserServiceTest {
         assertThat(result.bio()).isEqualTo("매일 조금씩 성장하는 중");
         assertThat(result.profileImageUrl()).isEqualTo("https://cdn.routinely.com/profile.jpg");
         assertThat(result.createdAt()).isEqualTo(createdAt);
+        assertThat(user.getNicknameUpdatedAt()).isEqualTo(LocalDateTime.now(FIXED_CLOCK));
+        assertThat(result.nicknameChangeableAt()).isEqualTo(LocalDateTime.now(FIXED_CLOCK).plusDays(30));
         verify(userRepository).flush();
+    }
+
+    @Test
+    @DisplayName("내프로필조회_닉네임변경이력이있으면_닉네임재변경가능시각을반환한다")
+    void getMyProfile_whenNicknameUpdatedAtExists_returnsNicknameChangeableAt() {
+        LocalDateTime nicknameUpdatedAt = LocalDateTime.now(FIXED_CLOCK).minusDays(10);
+        User user = createUser(1L, "루틴러", "소개", null, null);
+        ReflectionTestUtils.setField(user, "nicknameUpdatedAt", nicknameUpdatedAt);
+        when(userRepository.findByIdAndIsActiveTrue(1L)).thenReturn(Optional.of(user));
+
+        ProfileResult result = userService.getMyProfile(1L);
+
+        assertThat(result.nicknameChangeableAt()).isEqualTo(nicknameUpdatedAt.plusDays(30));
     }
 
     @Test
@@ -92,6 +115,7 @@ class UserServiceTest {
 
         assertThat(result.nickname()).isEqualTo("루틴러");
         assertThat(result.bio()).isEqualTo("새 소개");
+        assertThat(result.nicknameChangeableAt()).isNull();
         verify(userRepository, never()).existsByNickname(anyString());
         verify(userRepository, never()).flush();
     }
@@ -127,6 +151,43 @@ class UserServiceTest {
     }
 
     @Test
+    @DisplayName("프로필수정_닉네임쿨다운중이면_남은일수와함께예외를던진다")
+    void updateProfile_whenNicknameCooldownActive_throwsExceptionWithRemainingDays() {
+        LocalDateTime nicknameUpdatedAt = LocalDateTime.now(FIXED_CLOCK).minusDays(10);
+        User user = createUser(1L, "기존닉네임", "기존 소개", null, null);
+        ReflectionTestUtils.setField(user, "nicknameUpdatedAt", nicknameUpdatedAt);
+        when(userRepository.findByIdAndIsActiveTrue(1L)).thenReturn(Optional.of(user));
+        when(userRepository.existsByNickname("새닉네임")).thenReturn(false);
+
+        assertThatThrownBy(() -> userService.updateProfile(new UpdateProfileCommand(1L, "새닉네임", "새 소개")))
+                .isInstanceOfSatisfying(NicknameCooldownException.class, exception -> {
+                    assertThat(exception.getErrorCode().getCode()).isEqualTo("NICKNAME_CHANGE_COOLDOWN_ACTIVE");
+                    assertThat(exception.getMessage()).isEqualTo("닉네임은 아직 변경할 수 없습니다. 20일 후 다시 시도해주세요.");
+                    assertThat(exception.getRemainingDays()).isEqualTo(20);
+                    assertThat(exception.getNicknameChangeableAt()).isEqualTo(nicknameUpdatedAt.plusDays(30));
+                });
+
+        assertThat(user.getNickname()).isEqualTo("기존닉네임");
+        verify(userRepository, never()).flush();
+    }
+
+    @Test
+    @DisplayName("프로필수정_닉네임쿨다운이끝났으면_변경할수있다")
+    void updateProfile_whenNicknameCooldownExpired_updatesNickname() {
+        LocalDateTime nicknameUpdatedAt = LocalDateTime.now(FIXED_CLOCK).minusDays(30);
+        User user = createUser(1L, "기존닉네임", null, null, null);
+        ReflectionTestUtils.setField(user, "nicknameUpdatedAt", nicknameUpdatedAt);
+        when(userRepository.findByIdAndIsActiveTrue(1L)).thenReturn(Optional.of(user));
+        when(userRepository.existsByNickname("새닉네임")).thenReturn(false);
+
+        ProfileResult result = userService.updateProfile(new UpdateProfileCommand(1L, "새닉네임", "소개"));
+
+        assertThat(result.nickname()).isEqualTo("새닉네임");
+        assertThat(result.nicknameChangeableAt()).isEqualTo(LocalDateTime.now(FIXED_CLOCK).plusDays(30));
+        verify(userRepository).flush();
+    }
+
+    @Test
     @DisplayName("프로필수정_bio가빈문자열이면_null로변환한다")
     void updateProfile_whenBioBlank_setsNull() {
         User user = createUser(1L, "루틴러", "기존 소개", null, null);
@@ -136,6 +197,7 @@ class UserServiceTest {
 
         assertThat(user.getBio()).isNull();
         assertThat(result.bio()).isNull();
+        assertThat(result.nicknameChangeableAt()).isNull();
         verify(userRepository, never()).existsByNickname(anyString());
         verify(userRepository, never()).flush();
     }

@@ -22,6 +22,10 @@ jwt:
 gateway:
   secret: ${GATEWAY_SECRET:local-secret}
 
+user:
+  profile:
+    nickname-cooldown-days: ${NICKNAME_COOLDOWN_DAYS:30}
+
 eureka:
   client:
     service-url:
