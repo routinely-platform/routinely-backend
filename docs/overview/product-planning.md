@@ -305,6 +305,30 @@ Routinely는 사용자들이 소규모 그룹 챌린지를 통해 루틴을 인�
 
 ---
 
+**9.3.2 챌린지 목록 화면 구성 및 참여 가능 기간 정책**
+
+챌린지 목록 화면은 두 개의 탭으로 구성한다.
+
+| 탭 | API | 설명 |
+|---|---|---|
+| 내 챌린지 | `GET /api/v1/challenges/me` | 내가 참여 중인 챌린지 목록 (status 필터 가능) |
+| 공개 챌린지 | `GET /api/v1/challenges` | 탐색·참여 가능한 공개 챌린지 목록 |
+
+**MVP 정책: 공개 챌린지 목록은 `status = WAITING` 인 챌린지만 조회된다.**
+
+- 근거: 진행 중(ACTIVE) 챌린지에 중간 참여하면 달성률 공정성 문제가 발생하며, 중간 참여 허용 정책이 미확정 상태이다.
+- 구현: `getPublicChallenges` 쿼리 조건에 `status = WAITING` 고정 필터 적용.
+- 참여(`joinChallenge`) 시에도 WAITING 상태인 챌린지만 가능하도록 서비스 레이어에서 검증한다.
+
+**v2 확장 계획: 챌린지 리더가 공개 참여 허용 기간을 설정할 수 있다.**
+
+- 챌린지 생성 시 또는 진행 중 설정 화면에서 "기간의 N%까지 공개 참여 허용(`joinableUntilPercent`)" 설정 가능.
+- 예: `joinableUntilPercent = 30` → startedAt 기준 전체 기간의 30%가 경과하기 전까지는 ACTIVE 상태에서도 공개 목록에 노출되고 참여 가능.
+- `joinableUntilPercent = null`(기본값) → WAITING 상태에서만 참여 가능 (MVP 동작과 동일).
+- 경과율 계산: `(today - startedAt) / (endedAt - startedAt) * 100`
+
+---
+
 ### **9-4. 핵심 사용자 흐름**
 
 1. 회원가입 / 로그인

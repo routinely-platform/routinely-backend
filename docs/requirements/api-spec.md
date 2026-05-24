@@ -338,6 +338,7 @@ public class ApiResponse<T> {
 {
   "title": "30일 아침 운동 챌린지",
   "description": "매일 아침 30분 운동하기",
+  "categoryCode": "EXERCISE",
   "isPublic": true,
   "maxMembers": 10,
   "startedAt": "2025-02-01",
@@ -354,6 +355,7 @@ public class ApiResponse<T> {
     "challengeId": 1,
     "title": "30일 아침 운동 챌린지",
     "description": "매일 아침 운동하기",
+    "categoryCode": "EXERCISE",
     "isPublic": true,
     "inviteCode": null,
     "maxMembers": 10,
@@ -369,7 +371,11 @@ public class ApiResponse<T> {
 
 #### `GET /api/v1/challenges` — 공개 챌린지 목록 조회
 - Auth: ✅
-- Query: `page`, `size`, `status` (WAITING/ACTIVE/ENDED), `keyword`
+- Query: `page`, `size`
+
+> MVP: `status`는 `WAITING`으로 고정되며 쿼리 파라미터로 변경할 수 없다. 진행 중인 챌린지(ACTIVE)는 목록에 노출되지 않는다.
+> `keyword`, `categoryCode`, 정렬 옵션은 #120에서 Querydsl 동적 쿼리와 함께 구현한다.
+> v2에서 리더가 `joinableUntilPercent`를 설정하면 ACTIVE 상태 챌린지도 조건부 노출된다 (`product-planning.md` 9.3.2 참고).
 
 **Response** `200`
 ```json
@@ -381,7 +387,9 @@ public class ApiResponse<T> {
       {
         "challengeId": 1,
         "title": "30일 아침 운동 챌린지",
-        "status": "ACTIVE",
+        "description": "매일 아침 운동하기",
+        "categoryCode": "EXERCISE",
+        "status": "WAITING",
         "currentMembers": 5,
         "maxMembers": 10,
         "startedAt": "2025-02-01",
@@ -391,7 +399,7 @@ public class ApiResponse<T> {
     "page": 0,
     "size": 20,
     "totalElements": 50,
-    "hasNext": true
+    "totalPages": 3
   }
 }
 ```
@@ -400,9 +408,10 @@ public class ApiResponse<T> {
 
 #### `GET /api/v1/challenges/me` — 내 챌린지 목록
 - Auth: ✅
-- Query: `status` (WAITING/ACTIVE/ENDED)
+- Query: `page`, `size`
 
 **Response** `200` — 위와 동일한 페이징 구조
+<!-- TODO: 후속 이슈 - status 필터, myStatus(ACTIVE/LEFT) 필드 추가 필요 -->
 
 ---
 
@@ -418,6 +427,7 @@ public class ApiResponse<T> {
     "challengeId": 1,
     "title": "30일 아침 운동 챌린지",
     "description": "매일 아침 운동하기",
+    "categoryCode": "EXERCISE",
     "isPublic": true,
     "inviteCode": null,
     "maxMembers": 10,
@@ -435,6 +445,11 @@ public class ApiResponse<T> {
 
 #### `PATCH /api/v1/challenges/{challengeId}` — 챌린지 수정
 - Auth: ✅ (LEADER만)
+- `WAITING` 상태인 챌린지만 수정 가능하다.
+- 수정 가능한 날짜 정책:
+  - `startedAt`: 오늘 이후로만 변경 가능하며, 반드시 `endedAt`보다 빨라야 한다.
+  - `endedAt`: `startedAt` 이후로만 변경 가능하다. 기존 종료일보다 앞당기거나 늦추는 것 모두 허용된다.
+- 공개 챌린지(`isPublic=true`)는 비공개로 변경할 수 없다.
 
 **Request**
 ```json
@@ -461,8 +476,12 @@ public class ApiResponse<T> {
 
 ---
 
-#### `POST /api/v1/challenges/{challengeId}/end` — 챌린지 종료
+<!-- POST-MVP: DELETE /api/v1/challenges/{challengeId} — 챌린지 삭제 기능은 MVP 범위에서 제외. 추후 구현 시 LEADER만 가능, 활성 멤버 존재 시 제한 여부 정책 결정 필요 -->
+
+#### `POST /api/v1/challenges/{challengeId}/end` — 챌린지 종료 (V2 예정)
 - Auth: ✅ (LEADER만)
+
+> MVP 범위에서는 구현하지 않는다. V2에서 상태 전이 정책과 함께 구현한다.
 
 **Response** `200`
 ```json
@@ -530,6 +549,8 @@ public class ApiResponse<T> {
 ```
 
 ---
+
+<!-- TODO: #45 - DELETE /api/v1/challenges/{challengeId}/members/{userId} — 멤버 강제 퇴장(kick) 엔드포인트 누락 (LEADER만) -->
 
 #### `GET /api/v1/challenges/{challengeId}/members` — 멤버 목록 조회
 - Auth: ✅
@@ -1286,6 +1307,7 @@ data: {"notificationId":2,"type":"CHALLENGE_EVENT","title":"새 멤버가 참여
 | `CHALLENGE_ALREADY_JOINED` | 409 | 이미 참여한 챌린지 |
 | `CHALLENGE_FULL` | 409 | 챌린지 인원 초과 |
 | `CHALLENGE_ALREADY_ENDED` | 409 | 이미 종료된 챌린지 |
+| `CHALLENGE_ALREADY_ACTIVE` | 409 | 이미 시작된 챌린지 — MVP에서 WAITING 상태가 아닌 챌린지 참여 시도 시 |
 | `CHALLENGE_NOT_STARTED` | 409 | 아직 시작되지 않은 챌린지 |
 | `EXECUTION_ALREADY_COMPLETED` | 409 | 이미 완료된 수행 기록 |
 | `TOO_MANY_REQUESTS` | 429 | Rate Limit 초과 |
