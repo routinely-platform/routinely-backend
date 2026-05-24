@@ -144,12 +144,13 @@ public class ApiResponse<T> {
   "success": true,
   "message": "로그인에 성공했습니다.",
   "data": {
-    "accessToken": "eyJhbGci...",
-    "refreshToken": "eyJhbGci...",
-    "expiresIn": 3600
+    "accessToken": "eyJhbGci..."
   }
 }
 ```
+> Refresh Token은 응답 바디에 포함되지 않는다.  
+> `Set-Cookie: refresh_token=<UUID>; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth` 헤더로 전달된다.  
+> Refresh Token은 opaque token(UUID)으로 Redis에 저장된다.
 
 ---
 
@@ -157,11 +158,7 @@ public class ApiResponse<T> {
 - Auth: ❌
 
 **Request**
-```json
-{
-  "refreshToken": "eyJhbGci..."
-}
-```
+> 요청 바디 없음. Refresh Token은 HttpOnly 쿠키(`refresh_token`)로 자동 전송된다.
 
 **Response** `200`
 ```json
@@ -169,8 +166,7 @@ public class ApiResponse<T> {
   "success": true,
   "message": "토큰이 갱신되었습니다.",
   "data": {
-    "accessToken": "eyJhbGci...",
-    "expiresIn": 3600
+    "accessToken": "eyJhbGci..."
   }
 }
 ```
@@ -204,24 +200,35 @@ public class ApiResponse<T> {
     "userId": 1,
     "email": "user@example.com",
     "nickname": "김루틴",
+    "bio": null,
     "profileImageUrl": null,
-    "createdAt": "2025-01-01T00:00:00Z"
+    "createdAt": "2024-03-15T10:00:00Z",
+    "nicknameChangeableAt": null
   }
 }
 ```
 
+> `bio`가 null이면 클라이언트에서 한 줄 소개 영역을 미표시한다.  
+> `createdAt` 기반 "함께한 지 N일째" 계산은 클라이언트에서 수행한다.  
+> `nicknameChangeableAt`이 null이면 즉시 변경 가능, non-null이면 해당 시각 이후 변경 가능 (`nicknameUpdatedAt + 30일` 계산값).
+
 ---
 
-#### `PATCH /api/v1/users/me` — 프로필 수정
+#### `PATCH /api/v1/users/me` — 프로필 수정 (닉네임 + 한 줄 소개)
 - Auth: ✅
+- Content-Type: `application/json`
 
 **Request**
 ```json
 {
   "nickname": "새닉네임",
-  "profileImageUrl": "https://s3.../profile.jpg"
+  "bio": "매일 조금씩 성장하는 중"
 }
 ```
+
+> `bio`를 빈 문자열 또는 null로 전송하면 소개가 삭제된다.  
+> 닉네임 변경 후 30일 이내 재변경 시 `NICKNAME_CHANGE_COOLDOWN_ACTIVE` (409) 응답.  
+> 쿨다운 기간은 `NICKNAME_COOLDOWN_DAYS` 환경변수로 조정 가능 (기본: 30일).
 
 **Response** `200`
 ```json
@@ -229,16 +236,85 @@ public class ApiResponse<T> {
   "success": true,
   "message": "사용자 정보 변경이 완료되었습니다.",
   "data": {
+    "userId": 1,
+    "email": "user@example.com",
     "nickname": "새닉네임",
-    "profileImageUrl": "https://s3.../profile.jpg"
+    "bio": "매일 조금씩 성장하는 중",
+    "profileImageUrl": null,
+    "createdAt": "2024-03-15T10:00:00Z",
+    "nicknameChangeableAt": "2024-04-14T10:00:00Z"
+  }
+}
+```
+
+**Response** `409` — 쿨다운 미경과
+```json
+{
+  "success": false,
+  "message": "닉네임은 변경 후 30일이 지나야 다시 변경할 수 있습니다. (남은 기간: 15일)",
+  "data": null
+}
+```
+
+---
+
+#### `PUT /api/v1/users/me/profile-image` — 프로필 이미지 생성/교체
+- Auth: ✅
+- Content-Type: `multipart/form-data`
+- 구현 시점: 추후 별도 이슈
+
+**구현 메모**
+- 이미지 저장소의 객체 삭제/교체를 위해 `users.profile_image_object_key VARCHAR(500) NULL` 컬럼을 추가한다.
+- `profileImageUrl`은 클라이언트 표시용 URL이며, `profileImageObjectKey`는 S3/R2/MinIO 등 object storage 내부 객체 식별자로 사용한다.
+- 권장 저장 key 예시: `users/{userId}/profile/{uuid}.webp`
+
+**Request**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `image` | file | ✅ | `image/jpeg`, `image/png`, `image/webp` |
+
+**Response** `200`
+```json
+{
+  "success": true,
+  "message": "프로필 이미지가 변경되었습니다.",
+  "data": {
+    "userId": 1,
+    "email": "user@example.com",
+    "nickname": "새닉네임",
+    "profileImageUrl": "https://cdn.example.com/users/1/profile/uuid.webp"
   }
 }
 ```
 
 ---
 
-#### `DELETE /api/v1/users/me` — 회원 탈퇴
+#### `DELETE /api/v1/users/me/profile-image` — 프로필 이미지 삭제
 - Auth: ✅
+- 구현 시점: 추후 별도 이슈
+
+삭제 시 DB의 `profile_image_url`, `profile_image_object_key`를 함께 `NULL`로 변경하고, 트랜잭션 커밋 이후 기존 storage 객체를 삭제한다.
+
+**Response** `200`
+```json
+{
+  "success": true,
+  "message": "프로필 이미지가 삭제되었습니다.",
+  "data": {
+    "userId": 1,
+    "email": "user@example.com",
+    "nickname": "새닉네임",
+    "profileImageUrl": null
+  }
+}
+```
+
+---
+
+#### `DELETE /api/v1/users/me` — 회원 탈퇴 [v2]
+- Auth: ✅
+- `is_active = false` 소프트 딜리트, 이메일/닉네임 재사용 불가
 
 **Response** `200`
 ```json
@@ -264,6 +340,7 @@ public class ApiResponse<T> {
   "description": "매일 아침 30분 운동하기",
   "isPublic": true,
   "maxMembers": 10,
+  "categoryCode": "EXERCISE",
   "startedAt": "2025-02-01",
   "endedAt": "2025-03-02"
 }
@@ -490,7 +567,7 @@ public class ApiResponse<T> {
       "rank": 1,
       "userId": 3,
       "nickname": "박열심",
-      "completedCount": 28,
+      "acceptedCount": 28,
       "totalScheduled": 30,
       "achievementRate": 93.33,
       "lastCompletedAt": "2025-02-28T07:30:00Z"
@@ -499,7 +576,7 @@ public class ApiResponse<T> {
       "rank": 2,
       "userId": 1,
       "nickname": "김루틴",
-      "completedCount": 25,
+      "acceptedCount": 25,
       "totalScheduled": 30,
       "achievementRate": 83.33,
       "lastCompletedAt": "2025-02-27T08:00:00Z"
@@ -1187,20 +1264,31 @@ data: {"notificationId":2,"type":"CHALLENGE_EVENT","title":"새 멤버가 참여
 
 ## 부록 — errorCode 목록
 
+> `common-core/.../exception/ErrorCode.java` 기준 (코드와 동기화 유지)
+
 | errorCode | HTTP | 설명 |
 |---|---|---|
-| `INVALID_INPUT` | 400 | 유효성 검사 실패 |
+| `VALIDATION_FAILED` | 400 | 유효성 검사 실패 |
 | `UNAUTHORIZED` | 401 | 토큰 없음 / 만료 |
+| `INVALID_CREDENTIALS` | 401 | 이메일 또는 비밀번호 불일치 |
 | `FORBIDDEN` | 403 | 권한 없음 |
+| `NOT_CHALLENGE_MEMBER` | 403 | 챌린지 멤버가 아님 |
+| `CHAT_NOT_MEMBER` | 403 | 채팅방 멤버가 아님 |
 | `USER_NOT_FOUND` | 404 | 사용자 없음 |
 | `CHALLENGE_NOT_FOUND` | 404 | 챌린지 없음 |
+| `ROUTINE_TEMPLATE_NOT_FOUND` | 404 | 루틴 템플릿 없음 |
 | `ROUTINE_NOT_FOUND` | 404 | 루틴 없음 |
 | `EXECUTION_NOT_FOUND` | 404 | 루틴 실행 기록 없음 |
-| `FEED_CARD_NOT_FOUND` | 404 | 피드 카드 없음 |
 | `CHAT_ROOM_NOT_FOUND` | 404 | 채팅방 없음 |
+| `NOTIFICATION_NOT_FOUND` | 404 | 알림 없음 |
 | `EMAIL_ALREADY_EXISTS` | 409 | 이메일 중복 |
 | `NICKNAME_ALREADY_EXISTS` | 409 | 닉네임 중복 |
-| `ALREADY_JOINED` | 409 | 이미 참여 중인 챌린지 |
+| `NICKNAME_CHANGE_COOLDOWN_ACTIVE` | 409 | 닉네임 변경 30일 쿨다운 미경과 |
+| `CHALLENGE_ALREADY_JOINED` | 409 | 이미 참여한 챌린지 |
 | `CHALLENGE_FULL` | 409 | 챌린지 인원 초과 |
-| `ALREADY_COMPLETED` | 409 | 이미 완료 처리된 루틴 |
-| `ALREADY_REACTED` | 409 | 이미 동일 이모지 리액션 존재 |
+| `CHALLENGE_ALREADY_ENDED` | 409 | 이미 종료된 챌린지 |
+| `CHALLENGE_NOT_STARTED` | 409 | 아직 시작되지 않은 챌린지 |
+| `EXECUTION_ALREADY_COMPLETED` | 409 | 이미 완료된 수행 기록 |
+| `TOO_MANY_REQUESTS` | 429 | Rate Limit 초과 |
+| `INTERNAL_SERVER_ERROR` | 500 | 서버 내부 오류 |
+| `SERVICE_UNAVAILABLE` | 503 | 일시적 서버 문제 (Circuit Breaker 등) |

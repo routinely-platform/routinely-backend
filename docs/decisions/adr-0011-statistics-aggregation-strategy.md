@@ -2,10 +2,12 @@
 
 ## Status
 
-Accepted
+Superseded by ADR-0028
 
 > 초기 결정(Event-Driven Pre-Aggregation + ReportService)을 번복하고,
-> MVP 단계에서는 RoutineService 내 On-Demand 집계 쿼리로 확정.
+> MVP 단계에서는 RoutineService 내 On-Demand 집계 쿼리로 확정했으나,
+> ADR-0027(달성률 캡 계산) 도입으로 집계 쿼리 복잡도가 증가하고
+> Redis ZSET 동기화 트리거 문제가 발생하여 ADR-0028에서 이벤트 기반 CQRS로 재번복.
 
 ---
 
