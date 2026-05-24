@@ -13,6 +13,7 @@ CREATE TABLE challenges (
     invite_code     VARCHAR(20)                            NULL,
     max_members     INT                                    NOT NULL,
     status          VARCHAR(20)                            NOT NULL,
+    category_code   VARCHAR(30)                            NOT NULL,
     started_at      DATE                                   NOT NULL,
     ended_at        DATE                                   NOT NULL,
     created_at      TIMESTAMPTZ   DEFAULT now()            NOT NULL,
@@ -35,13 +36,15 @@ COMMENT ON COLUMN challenges.is_public        IS '공개 여부 — true: 공개
 COMMENT ON COLUMN challenges.invite_code      IS '비공개 챌린지 초대 코드 (UNIQUE) — is_public=false이면 반드시 NOT NULL';
 COMMENT ON COLUMN challenges.max_members      IS '최대 참여 인원 수 (최소 2명)';
 COMMENT ON COLUMN challenges.status           IS '챌린지 상태 — WAITING: 대기 / ACTIVE: 진행중 / ENDED: 종료';
+COMMENT ON COLUMN challenges.category_code    IS '카테고리 코드 — routine-service categories.code 비정규화 사본 (생성 시점 1회 복사, 이후 불변)';
 COMMENT ON COLUMN challenges.started_at       IS '챌린지 시작일';
 COMMENT ON COLUMN challenges.ended_at         IS '챌린지 종료일';
 COMMENT ON COLUMN challenges.created_at       IS '챌린지 생성일시';
 COMMENT ON COLUMN challenges.updated_at       IS '챌린지 최종 수정일시 — 애플리케이션 레벨에서 갱신';
 
-CREATE INDEX idx_challenges_status      ON challenges (status);
-CREATE INDEX idx_challenges_invite_code ON challenges (invite_code) WHERE invite_code IS NOT NULL;
+CREATE INDEX idx_challenges_status        ON challenges (status);
+CREATE INDEX idx_challenges_category_code ON challenges (category_code);
+CREATE INDEX idx_challenges_invite_code   ON challenges (invite_code) WHERE invite_code IS NOT NULL;
 
 
 -- 2. challenge_members
@@ -109,6 +112,8 @@ COMMENT ON COLUMN challenge_member_summary.updated_at        IS '레코드 최�
 
 CREATE INDEX idx_cms_challenge_rate ON challenge_member_summary (challenge_id, achievement_rate DESC);
 
+-- TODO: #48 - MemberJoinedEvent(Inbox) 수신 시 INSERT INTO challenge_member_summary (total_scheduled 계산 포함)
+-- TODO: #50 - achievement_rate 갱신 시 Redis ZSET(key: ranking:{challengeId}, score: achievement_rate, member: userId) 동기화
 
 -- 4. challenge_outbox
 CREATE TABLE challenge_outbox (
