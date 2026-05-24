@@ -28,6 +28,7 @@ public record ChallengeListResponse(
     public record ChallengeSummaryResponse(
             Long challengeId,
             String title,
+            String description,
             String categoryCode,
             ChallengeLifecycleStatus status,
             int currentMembers,
@@ -41,6 +42,7 @@ public record ChallengeListResponse(
             return new ChallengeSummaryResponse(
                     result.challengeId(),
                     result.title(),
+                    result.description(),
                     result.categoryCode(),
                     result.status(),
                     result.currentMembers(),
