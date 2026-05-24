@@ -340,6 +340,7 @@ public class ApiResponse<T> {
   "description": "매일 아침 30분 운동하기",
   "isPublic": true,
   "maxMembers": 10,
+  "categoryCode": "EXERCISE",
   "startedAt": "2025-02-01",
   "endedAt": "2025-03-02"
 }
@@ -566,7 +567,7 @@ public class ApiResponse<T> {
       "rank": 1,
       "userId": 3,
       "nickname": "박열심",
-      "completedCount": 28,
+      "acceptedCount": 28,
       "totalScheduled": 30,
       "achievementRate": 93.33,
       "lastCompletedAt": "2025-02-28T07:30:00Z"
@@ -575,7 +576,7 @@ public class ApiResponse<T> {
       "rank": 2,
       "userId": 1,
       "nickname": "김루틴",
-      "completedCount": 25,
+      "acceptedCount": 25,
       "totalScheduled": 30,
       "achievementRate": 83.33,
       "lastCompletedAt": "2025-02-27T08:00:00Z"

@@ -29,7 +29,7 @@ CREATE TABLE routine_templates (
 COMMENT ON TABLE  routine_templates                IS '루틴 설정 정보 템플릿 — 루틴의 틀을 정의';
 COMMENT ON COLUMN routine_templates.id             IS '루틴 템플릿 고유 식별자 (PK)';
 COMMENT ON COLUMN routine_templates.owner_id       IS '템플릿 소유자 ID — owner_type에 따라 user_id 또는 challenge_id';
-COMMENT ON COLUMN routine_templates.owner_type     IS '소유자 유형 — PERSONAL: 개인 루틴 / CHALLENGE: 챌린지 루틴';
+COMMENT ON COLUMN routine_templates.owner_type     IS '소유자 유형 — PERSONAL: 개인 루틴 / CHALLENGE: 챌린지 루틴 (참여자 전원 공유, 개인화 불가 — ADR-0026)';
 COMMENT ON COLUMN routine_templates.title          IS '루틴명 (예: 아침 러닝 30분)';
 COMMENT ON COLUMN routine_templates.category       IS '루틴 카테고리 — 서버 Enum으로 검증';
 COMMENT ON COLUMN routine_templates.repeat_type    IS '반복 유형 — DAILY/WEEKLY/WEEKLY_N/MONTHLY_N, 서버 Enum으로 검증';
@@ -101,7 +101,7 @@ COMMENT ON TABLE  routine_executions                IS '루틴 일별 실행 기
 COMMENT ON COLUMN routine_executions.id             IS '실행 기록 고유 식별자 (PK)';
 COMMENT ON COLUMN routine_executions.routine_id     IS '실행 대상 루틴 ID';
 COMMENT ON COLUMN routine_executions.user_id        IS '실행한 사용자 ID (user-service 참조 — FK 불가)';
-COMMENT ON COLUMN routine_executions.scheduled_date IS '수행 예정일 — routine_id와 복합 UNIQUE';
+COMMENT ON COLUMN routine_executions.scheduled_date IS '수행 예정일 — routine_id와 복합 UNIQUE. DAILY: 참여 시점에 전 기간 PENDING 사전 생성. WEEKLY_N/MONTHLY_N: 완료 처리 시 해당 날짜로 COMPLETED INSERT (사후 기록)';
 COMMENT ON COLUMN routine_executions.status         IS '실행 상태 — PENDING: 예정 / COMPLETED: 완료 / MISSED: 미완료';
 COMMENT ON COLUMN routine_executions.completed_at   IS '완료 처리 시각 — status=COMPLETED일 때 반드시 NOT NULL';
 COMMENT ON COLUMN routine_executions.photo_url      IS '루틴 완료 인증 사진 URL (선택)';
@@ -132,7 +132,7 @@ CREATE TABLE routine_daily_summary (
                                        CONSTRAINT ck_rds_streak              CHECK (streak >= 0)
 );
 
-COMMENT ON TABLE  routine_daily_summary                 IS '루틴 일별 집계 테이블 — 홈/통계 화면 read 최적화용';
+COMMENT ON TABLE  routine_daily_summary                 IS '루틴 일별 집계 테이블 — 홈/통계 화면 read 최적화용. routine.execution.completed 이벤트 수신 시 이벤트 기반으로 갱신 (ADR-0028)';
 COMMENT ON COLUMN routine_daily_summary.id              IS '집계 레코드 고유 식별자 (PK)';
 COMMENT ON COLUMN routine_daily_summary.user_id         IS '집계 대상 사용자 ID (user-service 참조 — FK 불가)';
 COMMENT ON COLUMN routine_daily_summary.challenge_id    IS '챌린지 집계면 챌린지 ID (challenge-service 참조 — FK 불가) — 개인 전체 집계면 NULL';

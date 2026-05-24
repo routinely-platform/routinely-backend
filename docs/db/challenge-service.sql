@@ -96,13 +96,13 @@ CREATE TABLE challenge_member_summary (
                                           CONSTRAINT fk_cms_challenge            FOREIGN KEY (challenge_id) REFERENCES challenges (id)
 );
 
-COMMENT ON TABLE  challenge_member_summary                   IS '챌린지 멤버별 달성 집계 — 랭킹 조회 read 최적화용';
+COMMENT ON TABLE  challenge_member_summary                   IS '챌린지 멤버별 달성 집계 — 랭킹 조회 read 최적화용. routine.execution.completed 이벤트 수신 시 이벤트 기반으로 갱신 (ADR-0028)';
 COMMENT ON COLUMN challenge_member_summary.id                IS '집계 레코드 고유 식별자 (PK)';
 COMMENT ON COLUMN challenge_member_summary.challenge_id      IS '챌린지 ID — user_id와 복합 UNIQUE';
 COMMENT ON COLUMN challenge_member_summary.user_id           IS '집계 대상 사용자 ID (user-service 참조 — FK 불가)';
-COMMENT ON COLUMN challenge_member_summary.total_scheduled   IS '챌린지 기간 내 전체 예정 루틴 수';
-COMMENT ON COLUMN challenge_member_summary.completed_count   IS '완료한 루틴 수';
-COMMENT ON COLUMN challenge_member_summary.achievement_rate  IS '달성률 (%) — completed_count / total_scheduled * 100';
+COMMENT ON COLUMN challenge_member_summary.total_scheduled   IS '챌린지 기간 내 전체 예정 루틴 수 (분모)';
+COMMENT ON COLUMN challenge_member_summary.completed_count   IS '주별/월별 캡 적용 후 인정된 루틴 수 (분자) — API 응답에서는 acceptedCount로 노출 (ADR-0027)';
+COMMENT ON COLUMN challenge_member_summary.achievement_rate  IS '달성률 (%) — completed_count(캡 적용) / total_scheduled * 100. Redis ZSET ranking:{challengeId} score와 동기화';
 COMMENT ON COLUMN challenge_member_summary.last_completed_at IS '가장 최근 루틴 완료 시각';
 COMMENT ON COLUMN challenge_member_summary.created_at        IS '레코드 생성일시';
 COMMENT ON COLUMN challenge_member_summary.updated_at        IS '레코드 최종 수정일시 — 애플리케이션 레벨에서 갱신';
