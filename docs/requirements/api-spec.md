@@ -445,11 +445,27 @@ public class ApiResponse<T> {
 
 #### `PATCH /api/v1/challenges/{challengeId}` — 챌린지 수정
 - Auth: ✅ (LEADER만)
+- 수정 정책은 필드 유형과 활성 멤버 수에 따라 달라진다.
+- 상세 정책: `docs/requirements/challenge-update-policy.md`
+
+**isPublic 수정 정책**
+| 상태 | 멤버 수 | 비공개→공개 | 공개→비공개 |
+|---|---|:---:|:---:|
+| WAITING / ACTIVE | 1명 (방장만) | ✅ | ✅ 초대코드 자동생성 |
+| WAITING / ACTIVE | 2명 이상 | ✅ | ❌ |
+| ENDED | 무관 | ❌ | ❌ |
+
+- 비공개→공개 전환 시 기존 `inviteCode` 유지 (다시 비공개 전환 시 재사용).
+- 공개→비공개 전환 시 `inviteCode`가 없으면 자동 생성.
+
+**그 외 필드 수정 정책** (`title`, `description`, `maxMembers`, `startedAt`, `endedAt`)
 - `WAITING` 상태인 챌린지만 수정 가능하다.
-- 수정 가능한 날짜 정책:
-  - `startedAt`: 오늘 이후로만 변경 가능하며, 반드시 `endedAt`보다 빨라야 한다.
-  - `endedAt`: `startedAt` 이후로만 변경 가능하다. 기존 종료일보다 앞당기거나 늦추는 것 모두 허용된다.
-- 공개 챌린지(`isPublic=true`)는 비공개로 변경할 수 없다.
+  - **방장 혼자 (1명)**: 위 필드 모두 수정 가능.
+  - **멤버 2명 이상**: `description`과 `maxMembers` 증가만 허용. 나머지 변경 시 `400` 반환.
+  - **항상 변경 불가**: `categoryCode`, `repeatType`, `repeatValue`, `creatorUserId`.
+- 날짜 제약:
+  - `startedAt`은 오늘 이후로만 변경 가능하며, 반드시 `endedAt`보다 빨라야 한다.
+  - `endedAt`은 `startedAt` 이후로만 변경 가능하다.
 
 **Request**
 ```json
