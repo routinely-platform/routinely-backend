@@ -30,6 +30,7 @@ import java.util.stream.Collectors;
 
 import static com.routinely.core.exception.ErrorCode.CHALLENGE_NOT_FOUND;
 import static com.routinely.core.exception.ErrorCode.FORBIDDEN;
+import static com.routinely.core.exception.ErrorCode.INTERNAL_SERVER_ERROR;
 import static com.routinely.core.exception.ErrorCode.NOT_CHALLENGE_MEMBER;
 import static com.routinely.core.exception.ErrorCode.VALIDATION_FAILED;
 
@@ -75,52 +76,36 @@ public class ChallengeService {
     public ChallengeResult updateChallenge(Long challengeId, Long requestUserId, UpdateChallengeCommand command) {
         Challenge challenge = findChallengeByIdOrThrow(challengeId);
         validateLeader(challengeId, requestUserId);
-        validateChallengeIsWaiting(challenge);
         validateRoutineUpdateNotSupported(command);
+
+        boolean hasNonVisibilityChange = hasNonVisibilityFields(command);
+        if (hasNonVisibilityChange) {
+            validateChallengeIsWaiting(challenge);
+        }
 
         int currentMemberCount = challengeMemberRepository
                 .countByChallengeIdAndStatus(challengeId, MembershipStatus.ACTIVE);
-
-        if (command.title() != null) {
-            challenge.updateTitle(command.title());
-        }
-
-        if (command.description() != null) {
-            challenge.updateDescription(command.description());
-        }
+        validateActiveMemberCount(currentMemberCount);
 
         if (command.isPublic() != null) {
-            boolean requestedIsPublic = command.isPublic();
-            validatePublicTransition(challenge, requestedIsPublic);
+            validateVisibilityUpdate(challenge, command.isPublic(), currentMemberCount);
+        }
 
-            if (!challenge.isPublic() && requestedIsPublic) {
-                challenge.makePublic();
+        if (hasNonVisibilityChange) {
+            if (currentMemberCount == 1) {
+                validateFreeNonVisibilityUpdate(challenge, command);
+            } else {
+                validateRestrictedNonVisibilityUpdate(challenge, command);
             }
         }
 
-        if (command.maxMembers() != null) {
-            validateMaxMembers(command.maxMembers(), currentMemberCount);
-            challenge.updateMaxMembers(command.maxMembers());
+        if (command.isPublic() != null) {
+            applyVisibilityUpdate(challenge, command.isPublic());
         }
 
-        if (command.startedAt() != null && command.startedAt().isBefore(LocalDate.now(clock))) {
-            throw new BusinessException(VALIDATION_FAILED, "시작일은 오늘 이후여야 합니다.");
+        if (hasNonVisibilityChange) {
+            applyNonVisibilityUpdate(challenge, command);
         }
-
-        LocalDate targetStartedAt = command.startedAt() != null ? command.startedAt() : challenge.getStartedAt();
-        LocalDate targetEndedAt = command.endedAt() != null ? command.endedAt() : challenge.getEndedAt();
-
-        validateScheduleChange(targetStartedAt, targetEndedAt);
-
-        if (command.startedAt() != null) {
-            challenge.updateStartedAt(command.startedAt());
-        }
-
-        if (command.endedAt() != null) {
-            challenge.updateEndedAt(command.endedAt());
-        }
-
-        // TODO: routineTitle, routinePreferredTime 수정은 routine-service grpc 통신을 통한 수정
 
         return ChallengeResult.from(
                 challenge,
@@ -128,6 +113,48 @@ public class ChallengeService {
                 challenge.isPublic() ? null : challenge.getInviteCode(),
                 ChallengeMemberRole.LEADER
         );
+    }
+
+    private void validateFreeNonVisibilityUpdate(Challenge challenge, UpdateChallengeCommand command) {
+        if (command.startedAt() != null && command.startedAt().isBefore(LocalDate.now(clock))) {
+            throw new BusinessException(VALIDATION_FAILED, "시작일은 오늘 이후여야 합니다.");
+        }
+        LocalDate targetStartedAt = command.startedAt() != null ? command.startedAt() : challenge.getStartedAt();
+        LocalDate targetEndedAt = command.endedAt() != null ? command.endedAt() : challenge.getEndedAt();
+        validateScheduleChange(targetStartedAt, targetEndedAt);
+    }
+
+    private void validateRestrictedNonVisibilityUpdate(Challenge challenge, UpdateChallengeCommand command) {
+        if (command.title() != null) {
+            throw new BusinessException(VALIDATION_FAILED, "다른 멤버가 있어 제목을 변경할 수 없습니다.");
+        }
+        if (command.startedAt() != null) {
+            throw new BusinessException(VALIDATION_FAILED, "다른 멤버가 있어 시작일을 변경할 수 없습니다.");
+        }
+        if (command.endedAt() != null) {
+            throw new BusinessException(VALIDATION_FAILED, "다른 멤버가 있어 종료일을 변경할 수 없습니다.");
+        }
+        if (command.maxMembers() != null && command.maxMembers() < challenge.getMaxMembers()) {
+            throw new BusinessException(VALIDATION_FAILED, "다른 멤버가 있어 최대 인원을 줄일 수 없습니다.");
+        }
+    }
+
+    private void applyNonVisibilityUpdate(Challenge challenge, UpdateChallengeCommand command) {
+        if (command.title() != null) {
+            challenge.updateTitle(command.title());
+        }
+        if (command.description() != null) {
+            challenge.updateDescription(command.description());
+        }
+        if (command.maxMembers() != null) {
+            challenge.updateMaxMembers(command.maxMembers());
+        }
+        if (command.startedAt() != null) {
+            challenge.updateStartedAt(command.startedAt());
+        }
+        if (command.endedAt() != null) {
+            challenge.updateEndedAt(command.endedAt());
+        }
     }
 
     public ChallengeListResult getMyJoinedChallenges(Long userId, Pageable pageable) {
@@ -247,18 +274,44 @@ public class ChallengeService {
         }
     }
 
-    private void validatePublicTransition(Challenge challenge, boolean requestedIsPublic) {
-        if (challenge.isPublic() && !requestedIsPublic) {
-            throw new BusinessException(VALIDATION_FAILED, "공개 챌린지는 비공개로 변경할 수 없습니다.");
+    private boolean hasNonVisibilityFields(UpdateChallengeCommand command) {
+        return command.title() != null
+                || command.description() != null
+                || command.maxMembers() != null
+                || command.startedAt() != null
+                || command.endedAt() != null;
+    }
+
+    private void validateActiveMemberCount(int memberCount) {
+        if (memberCount < 1) {
+            throw new BusinessException(INTERNAL_SERVER_ERROR, "챌린지 멤버 상태가 올바르지 않습니다.");
         }
     }
 
-    private void validateMaxMembers(int requestedMaxMembers, int currentMemberCount) {
-        if (requestedMaxMembers < currentMemberCount) {
-            throw new BusinessException(
-                    VALIDATION_FAILED,
-                    "최대 참여 인원은 현재 참여 중인 멤버 수보다 작을 수 없습니다."
-            );
+    private void validateVisibilityUpdate(Challenge challenge, boolean requestedIsPublic, int memberCount) {
+        if (challenge.getStatus() == ChallengeLifecycleStatus.ENDED) {
+            throw new BusinessException(VALIDATION_FAILED, "종료된 챌린지는 공개 여부를 수정할 수 없습니다.");
+        }
+
+        if (challenge.isPublic() == requestedIsPublic) {
+            return;
+        }
+
+        if (challenge.isPublic() && !requestedIsPublic && memberCount > 1) {
+            throw new BusinessException(VALIDATION_FAILED, "멤버가 존재하는 챌린지는 공개 → 비공개 변경이 불가능합니다.");
+        }
+    }
+
+    private void applyVisibilityUpdate(Challenge challenge, boolean requestedIsPublic) {
+        if (challenge.isPublic() == requestedIsPublic) {
+            return;
+        }
+
+        if (requestedIsPublic) {
+            challenge.makePublic();
+        } else {
+            String inviteCode = challenge.getInviteCode() != null ? challenge.getInviteCode() : generateInviteCode();
+            challenge.makePrivate(inviteCode);
         }
     }
 

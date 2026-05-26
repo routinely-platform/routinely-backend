@@ -87,7 +87,13 @@ public class Challenge extends BaseEntity {
 
     public void makePublic() {
         this.isPublic = true;
-        this.inviteCode = null;
+    }
+
+    public void makePrivate(String inviteCode) {
+        this.isPublic = false;
+        if (this.inviteCode == null) {
+            this.inviteCode = inviteCode;
+        }
     }
 
     public void updateMaxMembers(int maxMembers) {
