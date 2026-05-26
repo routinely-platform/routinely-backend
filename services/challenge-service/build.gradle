@@ -18,6 +18,7 @@ dependencies {
 	implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
 	implementation 'org.springframework.boot:spring-boot-starter-flyway'
 	runtimeOnly 'org.postgresql:postgresql'
+	testRuntimeOnly 'com.h2database:h2'
 	testImplementation 'org.springframework.boot:spring-boot-starter-kafka-test'
 	testImplementation 'org.springframework.grpc:spring-grpc-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
