@@ -32,8 +32,8 @@ COMMENT ON COLUMN challenges.id               IS '챌린지 고유 식별자 (PK
 COMMENT ON COLUMN challenges.creator_user_id  IS '챌린지 생성자 사용자 ID (user-service 참조 — FK 불가)';
 COMMENT ON COLUMN challenges.title            IS '챌린지명';
 COMMENT ON COLUMN challenges.description      IS '챌린지 설명 (선택)';
-COMMENT ON COLUMN challenges.is_public        IS '공개 여부 — true: 공개 / false: 비공개 (초대코드 필요)';
-COMMENT ON COLUMN challenges.invite_code      IS '비공개 챌린지 초대 코드 (UNIQUE) — is_public=false이면 반드시 NOT NULL';
+COMMENT ON COLUMN challenges.is_public        IS '공개 여부 — true: 공개 / false: 비공개. v2에서 비공개 챌린지 링크 공유 초대 경로로 활용 예정 (ADR-0031)';
+COMMENT ON COLUMN challenges.invite_code      IS '비공개 챌린지 초대 코드 (UNIQUE) — is_public=false이면 반드시 NOT NULL. MVP에서는 미사용(참여 경로 없음), v2에서 링크 공유 기반 초대에 활용 예정 (ADR-0031)';
 COMMENT ON COLUMN challenges.max_members      IS '최대 참여 인원 수 (최소 2명)';
 COMMENT ON COLUMN challenges.status           IS '챌린지 상태 — WAITING: 대기 / ACTIVE: 진행중 / ENDED: 종료';
 COMMENT ON COLUMN challenges.category_code    IS '카테고리 코드 — routine-service categories.code 비정규화 사본 (생성 시점 1회 복사, 이후 불변)';

@@ -539,9 +539,10 @@ public class ApiResponse<T> {
 
 ---
 
-#### `POST /api/v1/challenges/join` — 초대 코드로 참여 (재참여 포함)
+#### `POST /api/v1/challenges/join` — 초대 코드로 참여 (V2 예정)
 - Auth: ✅
-- 이전에 탈퇴한 챌린지도 재참여 가능 (정원·종료 여부만 검증)
+
+> MVP 범위에서는 구현하지 않는다. `invite_code`는 비공개 챌린지 생성 시 자동 발급되나 MVP에서 참여 경로가 없다. V2에서 링크 공유 기반 초대(`https://routinely.app/challenges/join/{invite_code}`)로 활용한다 (ADR-0031).
 
 **Request**
 ```json
