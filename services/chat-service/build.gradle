@@ -18,7 +18,6 @@ dependencies {
 	implementation 'org.springframework.grpc:spring-grpc-client-spring-boot-starter'
 	implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
 	implementation 'org.springframework.cloud:spring-cloud-starter-circuitbreaker-resilience4j'
-	implementation 'org.springframework.boot:spring-boot-starter-flyway'
 	runtimeOnly 'org.postgresql:postgresql'
 	testImplementation 'org.springframework.boot:spring-boot-starter-kafka-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-websocket-test'
