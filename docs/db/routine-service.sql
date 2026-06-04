@@ -72,6 +72,8 @@ COMMENT ON COLUMN routines.updated_at          IS '루틴 최종 수정일시 �
 
 CREATE INDEX idx_routines_user_id       ON routines (user_id);
 CREATE INDEX idx_routines_challenge_id  ON routines (challenge_id) WHERE challenge_id IS NOT NULL;
+-- challenge.started 이벤트 수신 시 Inbox Processor가 INSERT — (challenge_id, user_id) UNIQUE로 중복 방지 (ADR-0032)
+CREATE UNIQUE INDEX uq_routines_challenge_user ON routines (challenge_id, user_id) WHERE challenge_id IS NOT NULL;
 
 
 -- 3. routine_executions
@@ -240,7 +242,7 @@ COMMENT ON COLUMN routine_outbox.published_at    IS 'Kafka 발행 완료 시각'
 COMMENT ON COLUMN routine_outbox.retry_count     IS '발행 재시도 횟수';
 COMMENT ON COLUMN routine_outbox.idempotency_key IS '중복 이벤트 방지 키 (UNIQUE) — aggregate_type:aggregate_id:event_type:version';
 
-CREATE INDEX idx_ro_status ON routine_outbox (status) WHERE status = 'PENDING';
+CREATE INDEX idx_routine_outbox_pending ON routine_outbox (created_at) WHERE status = 'PENDING'; -- Outbox Poller 미발행 건 폴링용
 
 
 -- 8. routine_inbox
@@ -249,7 +251,9 @@ CREATE TABLE routine_inbox (
                                message_id     VARCHAR(100)                          NOT NULL,
                                event_type     VARCHAR(100)                          NOT NULL,
                                payload        JSONB                                 NOT NULL,
-                               status         VARCHAR(20)   DEFAULT 'RECEIVED'      NOT NULL,
+                               status         VARCHAR(20)   DEFAULT 'PENDING'       NOT NULL,
+                               retry_count    INT           DEFAULT 0               NOT NULL,
+                               last_error     TEXT                                  NULL,
                                received_at    TIMESTAMPTZ   DEFAULT now()           NOT NULL,
                                processed_at   TIMESTAMPTZ                           NULL,
                                aggregate_type VARCHAR(50)                           NULL,
@@ -257,18 +261,21 @@ CREATE TABLE routine_inbox (
 
                                CONSTRAINT pk_routine_inbox  PRIMARY KEY (id),
                                CONSTRAINT uq_ri_message_id  UNIQUE (message_id),
-                               CONSTRAINT ck_ri_status      CHECK (status IN ('RECEIVED', 'PROCESSED', 'FAILED'))
+                               CONSTRAINT ck_ri_status      CHECK (status IN ('PENDING', 'PROCESSING', 'PROCESSED', 'FAILED')),
+                               CONSTRAINT ck_ri_retry_count CHECK (retry_count >= 0)
 );
 
-COMMENT ON TABLE  routine_inbox                IS 'Inbox 패턴 — Kafka 수신 이벤트 중복 처리 방지 및 이력 관리';
+COMMENT ON TABLE  routine_inbox                IS 'Inbox 패턴 — Kafka 수신 이벤트 중복 처리 방지 및 이력 관리. Consumer가 빠르게 PENDING 적재, Processor가 자기 속도로 처리 (ADR-0032)';
 COMMENT ON COLUMN routine_inbox.id             IS '레코드 고유 식별자 (PK)';
-COMMENT ON COLUMN routine_inbox.message_id     IS 'Kafka 메시지 고유 ID (UNIQUE) — 중복 수신 방지';
-COMMENT ON COLUMN routine_inbox.event_type     IS '수신된 이벤트 유형';
+COMMENT ON COLUMN routine_inbox.message_id     IS 'Kafka 메시지 고유 ID (UNIQUE) — 중복 수신 방지. eventId(UUID) 사용 (ADR-0013)';
+COMMENT ON COLUMN routine_inbox.event_type     IS '수신된 이벤트 유형 (예: challenge.started)';
 COMMENT ON COLUMN routine_inbox.payload        IS '수신된 이벤트 JSON 데이터';
-COMMENT ON COLUMN routine_inbox.status         IS '처리 상태 — RECEIVED: 수신 / PROCESSED: 처리 완료 / FAILED: 처리 실패';
-COMMENT ON COLUMN routine_inbox.received_at    IS 'Kafka 메시지 수신일시';
-COMMENT ON COLUMN routine_inbox.processed_at   IS '이벤트 처리 완료 시각';
-COMMENT ON COLUMN routine_inbox.aggregate_type IS '이벤트 대상 엔티티 유형 (예: CHALLENGE, CHALLENGE_MEMBER)';
-COMMENT ON COLUMN routine_inbox.aggregate_id   IS '이벤트 대상 엔티티의 PK';
+COMMENT ON COLUMN routine_inbox.status         IS '처리 상태 — PENDING: 수신 대기 / PROCESSING: 처리 중 / PROCESSED: 처리 완료 / FAILED: 영구 실패';
+COMMENT ON COLUMN routine_inbox.retry_count    IS '처리 재시도 횟수 — N회 초과 시 FAILED로 격리';
+COMMENT ON COLUMN routine_inbox.last_error     IS '마지막 처리 실패 원인 메시지 — 운영 디버깅용';
+COMMENT ON COLUMN routine_inbox.received_at    IS 'Kafka 메시지 수신일시 (Consumer 적재 시각)';
+COMMENT ON COLUMN routine_inbox.processed_at   IS 'Inbox Processor 처리 완료 시각';
+COMMENT ON COLUMN routine_inbox.aggregate_type IS '이벤트 대상 엔티티 유형 (예: CHALLENGE)';
+COMMENT ON COLUMN routine_inbox.aggregate_id   IS '이벤트 대상 엔티티의 PK (예: challenge_id)';
 
-CREATE INDEX idx_ri_status ON routine_inbox (status) WHERE status = 'RECEIVED';
+CREATE INDEX idx_routine_inbox_pending ON routine_inbox (received_at) WHERE status = 'PENDING'; -- Inbox Processor 미처리 건 폴링용 (수신·처리 분리 패턴)

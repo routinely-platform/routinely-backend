@@ -138,7 +138,7 @@ COMMENT ON COLUMN chat_outbox.published_at    IS 'Kafka 발행 완료 시각';
 COMMENT ON COLUMN chat_outbox.retry_count     IS '발행 재시도 횟수';
 COMMENT ON COLUMN chat_outbox.idempotency_key IS '중복 이벤트 방지 키 (UNIQUE) — aggregate_type:aggregate_id:event_type:version';
 
-CREATE INDEX idx_cho_status ON chat_outbox (status) WHERE status = 'PENDING';
+CREATE INDEX idx_chat_outbox_pending ON chat_outbox (created_at) WHERE status = 'PENDING'; -- Outbox Poller 미발행 건 폴링용
 
 
 -- 5. chat_inbox
@@ -147,7 +147,7 @@ CREATE TABLE chat_inbox (
                             message_id     VARCHAR(100)                          NOT NULL,
                             event_type     VARCHAR(100)                          NOT NULL,
                             payload        JSONB                                 NOT NULL,
-                            status         VARCHAR(20)   DEFAULT 'RECEIVED'      NOT NULL,
+                            status         VARCHAR(20)   DEFAULT 'PENDING'       NOT NULL,
                             received_at    TIMESTAMPTZ   DEFAULT now()           NOT NULL,
                             processed_at   TIMESTAMPTZ                           NULL,
                             aggregate_type VARCHAR(50)                           NULL,
@@ -155,18 +155,17 @@ CREATE TABLE chat_inbox (
 
                             CONSTRAINT pk_chat_inbox     PRIMARY KEY (id),
                             CONSTRAINT uq_chi_message_id UNIQUE (message_id),
-                            CONSTRAINT ck_chi_status     CHECK (status IN ('RECEIVED', 'PROCESSED', 'FAILED'))
+                            CONSTRAINT ck_chi_status     CHECK (status IN ('PENDING', 'PROCESSED', 'FAILED'))
 );
 
-COMMENT ON TABLE  chat_inbox                IS 'Inbox 패턴 — Kafka 수신 이벤트 중복 처리 방지 및 이력 관리';
+COMMENT ON TABLE  chat_inbox                IS 'Inbox 패턴 — Kafka 수신 이벤트 중복 처리 방지 및 이력 관리. Consumer에서 직접(인라인) 처리하므로 별도 Inbox Processor 없음';
 COMMENT ON COLUMN chat_inbox.id             IS '레코드 고유 식별자 (PK)';
-COMMENT ON COLUMN chat_inbox.message_id     IS 'Kafka 메시지 고유 ID (UNIQUE) — 중복 수신 방지';
-COMMENT ON COLUMN chat_inbox.event_type     IS '수신된 이벤트 유형';
+COMMENT ON COLUMN chat_inbox.message_id     IS 'Kafka 메시지 고유 ID (UNIQUE) — 중복 수신 방지 (Kafka at-least-once 멱등성) (ADR-0013)';
+COMMENT ON COLUMN chat_inbox.event_type     IS '수신된 이벤트 유형 (예: challenge.member.joined, challenge.member.left)';
 COMMENT ON COLUMN chat_inbox.payload        IS '수신된 이벤트 JSON 데이터';
-COMMENT ON COLUMN chat_inbox.status         IS '처리 상태 — RECEIVED: 수신 / PROCESSED: 처리 완료 / FAILED: 처리 실패';
+COMMENT ON COLUMN chat_inbox.status         IS '처리 상태 — PENDING: 처리 중(Consumer 트랜잭션 내) / PROCESSED: 처리 완료 / FAILED: 처리 실패';
 COMMENT ON COLUMN chat_inbox.received_at    IS 'Kafka 메시지 수신일시';
 COMMENT ON COLUMN chat_inbox.processed_at   IS '이벤트 처리 완료 시각';
 COMMENT ON COLUMN chat_inbox.aggregate_type IS '이벤트 대상 엔티티 유형';
 COMMENT ON COLUMN chat_inbox.aggregate_id   IS '이벤트 대상 엔티티의 PK';
-
-CREATE INDEX idx_chi_status ON chat_inbox (status) WHERE status = 'RECEIVED';
+-- PENDING Partial Index 없음 — Consumer 인라인 처리 방식이므로 Processor 폴링이 발생하지 않음
