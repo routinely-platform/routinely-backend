@@ -41,6 +41,7 @@
 |------|-----------|---------------|---------------|
 | `routine.execution.completed` | RoutineService | NotificationService | `userId` |
 | `routine.notification.scheduled` | RoutineService | NotificationService | `userId` |
+| `challenge.started` | ChallengeService | RoutineService, NotificationService | `challengeId` |
 | `challenge.member.joined` | ChallengeService | ChatService, NotificationService | `challengeId` |
 | `challenge.member.left` | ChallengeService | ChatService | `challengeId` |
 | `chat.message.created` | ChatService | ChatService (전 인스턴스) | `roomId` |
@@ -128,7 +129,54 @@
 
 ---
 
-### 3. `challenge.member.joined`
+### 3. `challenge.started`
+
+챌린지가 `WAITING → ACTIVE` 상태로 전이되었을 때 발행한다.
+RoutineService가 이 이벤트를 수신하여 참여자 전원의 routines 및 routine_executions를 일괄 생성한다. (ADR-0032)
+
+| 항목 | 내용 |
+|------|------|
+| Publisher | ChallengeService (상태 전이 스케줄러) |
+| Partition Key | `challengeId` |
+| Consumer Group | `routine-service.challenge.started` / `notification-service.challenge.started` |
+
+**Payload**
+
+```json
+{
+  "eventId": "550e8400-e29b-41d4-a716-446655440005",
+  "occurredAt": "2026-03-01T00:00:00Z",
+  "challengeId": 10,
+  "startedAt": "2026-03-01",
+  "endedAt": "2026-03-31",
+  "routineTemplateId": 5,
+  "members": [
+    { "userId": 1, "joinedAt": "2026-02-25" },
+    { "userId": 2, "joinedAt": "2026-02-26" }
+  ]
+}
+```
+
+> `eventType` 필드는 포함하지 않는다. Kafka 토픽 이름(`challenge.started`)이 이벤트 타입을 식별하므로 페이로드 중복 불필요.
+
+| 필드 | 타입 | 필수 | 설명 |
+|------|------|:----:|------|
+| `challengeId` | long | ✅ | 시작된 챌린지 ID |
+| `startedAt` | string (yyyy-MM-dd) | ✅ | 챌린지 시작일 — routines.started_at 기준 |
+| `endedAt` | string (yyyy-MM-dd) | ✅ | 챌린지 종료일 — routines.ended_at 기준 |
+| `routineTemplateId` | long | ✅ | 챌린지 루틴 템플릿 ID — 멤버 전원 공유 (ADR-0026) |
+| `members` | array | ✅ | 시작 시점 ACTIVE 멤버 목록 |
+| `members[].userId` | long | ✅ | 멤버 사용자 ID |
+| `members[].joinedAt` | string (yyyy-MM-dd) | ✅ | 멤버 참여일 |
+
+**소비자 처리**
+
+- **RoutineService**: Inbox Consumer가 `routine_inbox`에 PENDING 적재 → Inbox Processor가 멤버별 `routines` INSERT + `DAILY` 타입인 경우 `routine_executions` 전 기간 PENDING 사전 생성 (ADR-0032)
+- **NotificationService**: 챌린지 멤버 전원에게 "챌린지가 시작되었습니다" 알림 발송
+
+---
+
+### 4. `challenge.member.joined`
 
 사용자가 챌린지에 참여했을 때 발행한다.
 
@@ -167,7 +215,7 @@
 
 ---
 
-### 4. `challenge.member.left`
+### 5. `challenge.member.left`
 
 사용자가 챌린지를 탈퇴하거나 추방되었을 때 발행한다.
 
@@ -201,7 +249,7 @@
 
 ---
 
-### 5. `chat.message.created`
+### 6. `chat.message.created`
 
 채팅 메시지가 PostgreSQL에 저장되었을 때 발행한다.
 ChatService 멀티 인스턴스 간 WebSocket 브로드캐스트 용도. (ADR-0016)
