@@ -1,7 +1,7 @@
 package com.routinely.challenge_service.application.dto;
 
-import com.routinely.challenge_service.domain.Challenge;
-import com.routinely.challenge_service.domain.ChallengeMember;
+import com.routinely.challenge_service.domain.challenge.Challenge;
+import com.routinely.challenge_service.domain.member.ChallengeMember;
 import org.springframework.data.domain.Page;
 
 import java.util.List;

@@ -1,8 +1,8 @@
 package com.routinely.challenge_service.application.dto;
 
-import com.routinely.challenge_service.domain.Challenge;
-import com.routinely.challenge_service.domain.ChallengeLifecycleStatus;
-import com.routinely.challenge_service.domain.ChallengeMemberRole;
+import com.routinely.challenge_service.domain.challenge.Challenge;
+import com.routinely.challenge_service.domain.challenge.ChallengeLifecycleStatus;
+import com.routinely.challenge_service.domain.member.ChallengeMemberRole;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
