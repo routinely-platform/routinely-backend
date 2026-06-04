@@ -1,4 +1,4 @@
-package com.routinely.challenge_service.domain;
+package com.routinely.challenge_service.domain.member;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;

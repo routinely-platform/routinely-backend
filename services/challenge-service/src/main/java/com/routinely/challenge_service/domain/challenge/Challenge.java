@@ -1,4 +1,4 @@
-package com.routinely.challenge_service.domain;
+package com.routinely.challenge_service.domain.challenge;
 
 import com.routinely.challenge_service.application.dto.CreateChallengeCommand;
 import com.routinely.jpa.entity.BaseEntity;

@@ -1,5 +1,6 @@
-package com.routinely.challenge_service.domain;
+package com.routinely.challenge_service.domain.challenge;
 
+import com.routinely.challenge_service.domain.member.MembershipStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

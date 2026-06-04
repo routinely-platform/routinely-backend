@@ -1,5 +1,6 @@
-package com.routinely.challenge_service.domain;
+package com.routinely.challenge_service.domain.member;
 
+import com.routinely.challenge_service.domain.challenge.Challenge;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
