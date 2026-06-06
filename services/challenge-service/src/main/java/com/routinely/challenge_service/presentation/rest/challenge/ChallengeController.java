@@ -2,11 +2,13 @@ package com.routinely.challenge_service.presentation.rest.challenge;
 
 import com.routinely.challenge_service.application.ChallengeService;
 import com.routinely.challenge_service.application.dto.ChallengeListResult;
+import com.routinely.challenge_service.application.dto.ChallengeMemberResult;
 import com.routinely.challenge_service.application.dto.ChallengeResult;
 import com.routinely.challenge_service.presentation.rest.challenge.dto.request.CreateChallengeRequest;
 import com.routinely.challenge_service.presentation.rest.challenge.dto.request.UpdateChallengeRequest;
 import com.routinely.challenge_service.presentation.rest.challenge.dto.response.ChallengeDetailResponse;
 import com.routinely.challenge_service.presentation.rest.challenge.dto.response.ChallengeListResponse;
+import com.routinely.challenge_service.presentation.rest.challenge.dto.response.ChallengeMemberResponse;
 import com.routinely.challenge_service.presentation.rest.challenge.dto.response.ChallengeResponse;
 import com.routinely.core.constant.HeaderConstants;
 import com.routinely.core.response.ApiResponse;
@@ -51,8 +53,8 @@ public class ChallengeController {
     public ResponseEntity<ApiResponse<ChallengeResponse>> updateChallenge(
             @RequestHeader(HeaderConstants.USER_ID) Long userId,
             @RequestBody @Valid UpdateChallengeRequest request,
-            @PathVariable("id") Long challengeId
-    ) {
+            @PathVariable("id") Long challengeId) {
+
         ChallengeResult result = challengeService.updateChallenge(challengeId, userId, request.toCommand());
         return ResponseEntity.ok(ApiResponse.ok("챌린지가 수정되었습니다.", ChallengeResponse.from(result)));
     }
@@ -86,5 +88,24 @@ public class ChallengeController {
 
         ChallengeResult result = challengeService.getChallengeDetail(id, userId);
         return ResponseEntity.ok(ApiResponse.ok("챌린지가 조회되었습니다.", ChallengeDetailResponse.from(result)));
+    }
+
+    @PostMapping("/{challengeId}/members")
+    public ResponseEntity<ApiResponse<ChallengeMemberResponse>> joinChallenge(
+            @RequestHeader(HeaderConstants.USER_ID) Long userId,
+            @PathVariable Long challengeId) {
+
+        ChallengeMemberResult result = challengeService.joinChallenge(challengeId, userId);
+        return ResponseEntity.status(CREATED)
+                .body(ApiResponse.ok("챌린지에 참여되었습니다.", ChallengeMemberResponse.from(result)));
+    }
+
+    @PostMapping("/{challengeId}/members/me/leave")
+    public ResponseEntity<ApiResponse<Void>> leaveChallenge(
+            @RequestHeader(HeaderConstants.USER_ID) Long userId,
+            @PathVariable Long challengeId) {
+
+        challengeService.leaveChallenge(challengeId, userId);
+        return ResponseEntity.ok(ApiResponse.ok("챌린지에서 탈퇴되었습니다.", null));
     }
 }

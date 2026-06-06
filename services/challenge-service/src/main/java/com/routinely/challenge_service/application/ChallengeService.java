@@ -1,9 +1,14 @@
 package com.routinely.challenge_service.application;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.routinely.challenge_service.application.dto.ChallengeListResult;
+import com.routinely.challenge_service.application.dto.ChallengeMemberResult;
 import com.routinely.challenge_service.application.dto.ChallengeResult;
 import com.routinely.challenge_service.application.dto.CreateChallengeCommand;
 import com.routinely.challenge_service.application.dto.UpdateChallengeCommand;
+import com.routinely.challenge_service.application.event.ChallengeMemberJoinedEvent;
+import com.routinely.challenge_service.application.event.ChallengeMemberLeftEvent;
 import com.routinely.challenge_service.domain.challenge.Challenge;
 import com.routinely.challenge_service.domain.challenge.ChallengeLifecycleStatus;
 import com.routinely.challenge_service.domain.challenge.ChallengeRepository;
@@ -12,6 +17,9 @@ import com.routinely.challenge_service.domain.member.ChallengeMemberRepository;
 import com.routinely.challenge_service.domain.member.ChallengeMemberRole;
 import com.routinely.challenge_service.domain.member.MemberCountProjection;
 import com.routinely.challenge_service.domain.member.MembershipStatus;
+import com.routinely.challenge_service.domain.outbox.ChallengeOutbox;
+import com.routinely.challenge_service.domain.outbox.ChallengeOutboxRepository;
+import com.routinely.challenge_service.infrastructure.kafka.KafkaTopic;
 import com.routinely.core.exception.BusinessException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -28,6 +36,10 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.routinely.core.exception.ErrorCode.CHALLENGE_ALREADY_ACTIVE;
+import static com.routinely.core.exception.ErrorCode.CHALLENGE_ALREADY_JOINED;
+import static com.routinely.core.exception.ErrorCode.CHALLENGE_FULL;
+import static com.routinely.core.exception.ErrorCode.CHALLENGE_MEMBER_EXPELLED;
 import static com.routinely.core.exception.ErrorCode.CHALLENGE_NOT_FOUND;
 import static com.routinely.core.exception.ErrorCode.FORBIDDEN;
 import static com.routinely.core.exception.ErrorCode.INTERNAL_SERVER_ERROR;
@@ -40,13 +52,19 @@ public class ChallengeService {
 
     private final ChallengeRepository challengeRepository;
     private final ChallengeMemberRepository challengeMemberRepository;
+    private final ChallengeOutboxRepository challengeOutboxRepository;
+    private final ObjectMapper objectMapper;
     private final Clock clock;
 
     public ChallengeService(ChallengeRepository challengeRepository,
                             ChallengeMemberRepository challengeMemberRepository,
+                            ChallengeOutboxRepository challengeOutboxRepository,
+                            ObjectMapper objectMapper,
                             Clock clock) {
         this.challengeRepository = challengeRepository;
         this.challengeMemberRepository = challengeMemberRepository;
+        this.challengeOutboxRepository = challengeOutboxRepository;
+        this.objectMapper = objectMapper;
         this.clock = clock;
     }
 
@@ -115,48 +133,6 @@ public class ChallengeService {
         );
     }
 
-    private void validateFreeNonVisibilityUpdate(Challenge challenge, UpdateChallengeCommand command) {
-        if (command.startedAt() != null && command.startedAt().isBefore(LocalDate.now(clock))) {
-            throw new BusinessException(VALIDATION_FAILED, "시작일은 오늘 이후여야 합니다.");
-        }
-        LocalDate targetStartedAt = command.startedAt() != null ? command.startedAt() : challenge.getStartedAt();
-        LocalDate targetEndedAt = command.endedAt() != null ? command.endedAt() : challenge.getEndedAt();
-        validateScheduleChange(targetStartedAt, targetEndedAt);
-    }
-
-    private void validateRestrictedNonVisibilityUpdate(Challenge challenge, UpdateChallengeCommand command) {
-        if (command.title() != null) {
-            throw new BusinessException(VALIDATION_FAILED, "다른 멤버가 있어 제목을 변경할 수 없습니다.");
-        }
-        if (command.startedAt() != null) {
-            throw new BusinessException(VALIDATION_FAILED, "다른 멤버가 있어 시작일을 변경할 수 없습니다.");
-        }
-        if (command.endedAt() != null) {
-            throw new BusinessException(VALIDATION_FAILED, "다른 멤버가 있어 종료일을 변경할 수 없습니다.");
-        }
-        if (command.maxMembers() != null && command.maxMembers() < challenge.getMaxMembers()) {
-            throw new BusinessException(VALIDATION_FAILED, "다른 멤버가 있어 최대 인원을 줄일 수 없습니다.");
-        }
-    }
-
-    private void applyNonVisibilityUpdate(Challenge challenge, UpdateChallengeCommand command) {
-        if (command.title() != null) {
-            challenge.updateTitle(command.title());
-        }
-        if (command.description() != null) {
-            challenge.updateDescription(command.description());
-        }
-        if (command.maxMembers() != null) {
-            challenge.updateMaxMembers(command.maxMembers());
-        }
-        if (command.startedAt() != null) {
-            challenge.updateStartedAt(command.startedAt());
-        }
-        if (command.endedAt() != null) {
-            challenge.updateEndedAt(command.endedAt());
-        }
-    }
-
     public ChallengeListResult getMyJoinedChallenges(Long userId, Pageable pageable) {
         Page<ChallengeMember> page = challengeMemberRepository.findByUserIdAndStatus(
                 userId,
@@ -175,39 +151,6 @@ public class ChallengeService {
                 pageable
         );
         return buildChallengeListResult(page);
-    }
-
-    private ChallengeListResult buildChallengeListResult(Page<Challenge> page) {
-        Map<Long, Integer> memberCounts = countActiveMembersByChallengeIds(
-                page.getContent().stream()
-                        .map(Challenge::getId)
-                        .toList()
-        );
-
-        return ChallengeListResult.from(page, memberCounts);
-    }
-
-    private ChallengeListResult buildJoinedChallengeListResult(Page<ChallengeMember> page) {
-        Map<Long, Integer> memberCounts = countActiveMembersByChallengeIds(
-                page.getContent().stream()
-                        .map(member -> member.getChallenge().getId())
-                        .toList()
-        );
-
-        return ChallengeListResult.fromMemberships(page, memberCounts);
-    }
-
-    private Map<Long, Integer> countActiveMembersByChallengeIds(List<Long> challengeIds) {
-        if (challengeIds.isEmpty()) {
-            return Map.of();
-        }
-
-        return challengeMemberRepository
-                .countMembersByChallengeIdsAndStatus(challengeIds, MembershipStatus.ACTIVE)
-                .stream()
-                .collect(Collectors.toMap(
-                        MemberCountProjection::getChallengeId,
-                        p -> p.getCount().intValue()));
     }
 
     public ChallengeResult getChallengeDetail(Long challengeId, Long requestUserId) {
@@ -230,10 +173,117 @@ public class ChallengeService {
         );
     }
 
-    // TODO: #45 - joinChallenge(Long challengeId, Long userId): 공개 챌린지 참여
-    // TODO: #45 - joinByInviteCode(String inviteCode, Long userId): 초대 코드로 비공개 챌린지 참여
-    // TODO: #45 - leaveChallenge(Long challengeId, Long userId): 탈퇴 (LEADER 탈퇴 시 위임 or 챌린지 종료 정책 결정 필요)
-    // TODO: #45 - kickMember(Long challengeId, Long requestUserId, Long targetUserId): LEADER가 멤버 강제 퇴장
+    @Transactional
+    public ChallengeMemberResult joinChallenge(Long challengeId, Long userId) {
+        Challenge challenge = findChallengeByIdForUpdateOrThrow(challengeId);
+
+        if (!challenge.isPublic()) {
+            throw new BusinessException(FORBIDDEN, "공개 챌린지에만 참여할 수 있습니다.");
+        }
+        if (challenge.getStatus() != ChallengeLifecycleStatus.WAITING) {
+            throw new BusinessException(CHALLENGE_ALREADY_ACTIVE);
+        }
+
+        Optional<ChallengeMember> existingMember =
+                challengeMemberRepository.findByChallengeIdAndUserId(challengeId, userId);
+
+        if (existingMember.isPresent()) {
+            ChallengeMember member = existingMember.get();
+            if (member.isActive()) {
+                throw new BusinessException(CHALLENGE_ALREADY_JOINED);
+            }
+            if (member.isExpelled()) {
+                throw new BusinessException(CHALLENGE_MEMBER_EXPELLED);
+            }
+
+            validateCapacity(challengeId, challenge.getMaxMembers());
+            LocalDateTime joinedAt = now();
+            member.rejoin(joinedAt);
+            saveJoinedOutbox(challenge, userId, member.getRole(), toEventOccurredAt(joinedAt));
+            return ChallengeMemberResult.from(member);
+        }
+
+        validateCapacity(challengeId, challenge.getMaxMembers());
+        LocalDateTime joinedAt = now();
+        ChallengeMember member = ChallengeMember.createMember(challenge, userId, joinedAt);
+        ChallengeMember savedMember = challengeMemberRepository.save(member);
+        saveJoinedOutbox(challenge, userId, savedMember.getRole(), toEventOccurredAt(joinedAt));
+        return ChallengeMemberResult.from(savedMember);
+    }
+
+    @Transactional
+    public void leaveChallenge(Long challengeId, Long userId) {
+        Challenge challenge = findChallengeByIdOrThrow(challengeId);
+
+        ChallengeMember member = challengeMemberRepository
+                .findByChallengeIdAndUserIdAndStatus(challengeId, userId, MembershipStatus.ACTIVE)
+                .orElseThrow(() -> new BusinessException(NOT_CHALLENGE_MEMBER));
+
+        if (member.getRole() == ChallengeMemberRole.LEADER) {
+            Optional<ChallengeMember> nextLeader = challengeMemberRepository
+                    .findFirstByChallengeIdAndStatusAndRoleNotOrderByJoinedAtAsc(
+                            challengeId, MembershipStatus.ACTIVE, ChallengeMemberRole.LEADER);
+
+            if (nextLeader.isPresent()) {
+                nextLeader.get().promoteToLeader();
+                member.demoteToMember();
+            } else {
+                challenge.end();
+            }
+        }
+
+        LocalDateTime leftAt = now();
+        member.leave(leftAt);
+        saveLeftOutbox(challengeId, userId, "LEFT", toEventOccurredAt(leftAt));
+    }
+
+    // TODO: v2 - joinByInviteCode(String inviteCode, Long userId): 초대 코드로 비공개 챌린지 참여
+
+    private void validateCapacity(Long challengeId, int maxMembers) {
+        int activeCount = challengeMemberRepository.countByChallengeIdAndStatus(challengeId, MembershipStatus.ACTIVE);
+        if (activeCount >= maxMembers) {
+            throw new BusinessException(CHALLENGE_FULL);
+        }
+    }
+
+    private void saveJoinedOutbox(Challenge challenge, Long userId, ChallengeMemberRole role, String occurredAt) {
+        ChallengeMemberJoinedEvent event = new ChallengeMemberJoinedEvent(
+                UUID.randomUUID().toString(),
+                occurredAt,
+                challenge.getId(),
+                challenge.getTitle(),
+                userId,
+                role.name()
+        );
+        String payload = serializeEvent(event);
+        String idempotencyKey = KafkaTopic.CHALLENGE_MEMBER_JOINED + ":" + challenge.getId() + ":" + userId + ":" + occurredAt;
+        challengeOutboxRepository.save(
+                ChallengeOutbox.create("challenge", challenge.getId(), KafkaTopic.CHALLENGE_MEMBER_JOINED, payload, idempotencyKey)
+        );
+    }
+
+    private void saveLeftOutbox(Long challengeId, Long userId, String reason, String occurredAt) {
+        ChallengeMemberLeftEvent event = new ChallengeMemberLeftEvent(
+                UUID.randomUUID().toString(),
+                occurredAt,
+                challengeId,
+                userId,
+                reason
+        );
+        String payload = serializeEvent(event);
+        String idempotencyKey = KafkaTopic.CHALLENGE_MEMBER_LEFT + ":" + challengeId + ":" + userId + ":" + occurredAt;
+        challengeOutboxRepository.save(
+                ChallengeOutbox.create("challenge", challengeId, KafkaTopic.CHALLENGE_MEMBER_LEFT, payload, idempotencyKey)
+        );
+    }
+
+    private String serializeEvent(Object event) {
+        try {
+            return objectMapper.writeValueAsString(event);
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(INTERNAL_SERVER_ERROR, "이벤트 직렬화에 실패했습니다.");
+        }
+    }
 
     private String generateInviteCode() {
         return UUID.randomUUID().toString().replace("-", "").substring(0, 20);
@@ -241,6 +291,11 @@ public class ChallengeService {
 
     private Challenge findChallengeByIdOrThrow(Long challengeId) {
         return challengeRepository.findById(challengeId)
+                .orElseThrow(() -> new BusinessException(CHALLENGE_NOT_FOUND));
+    }
+
+    private Challenge findChallengeByIdForUpdateOrThrow(Long challengeId) {
+        return challengeRepository.findByIdForUpdate(challengeId)
                 .orElseThrow(() -> new BusinessException(CHALLENGE_NOT_FOUND));
     }
 
@@ -315,10 +370,85 @@ public class ChallengeService {
         }
     }
 
+    private void validateFreeNonVisibilityUpdate(Challenge challenge, UpdateChallengeCommand command) {
+        if (command.startedAt() != null && command.startedAt().isBefore(LocalDate.now(clock))) {
+            throw new BusinessException(VALIDATION_FAILED, "시작일은 오늘 이후여야 합니다.");
+        }
+        LocalDate targetStartedAt = command.startedAt() != null ? command.startedAt() : challenge.getStartedAt();
+        LocalDate targetEndedAt = command.endedAt() != null ? command.endedAt() : challenge.getEndedAt();
+        validateScheduleChange(targetStartedAt, targetEndedAt);
+    }
+
+    private void validateRestrictedNonVisibilityUpdate(Challenge challenge, UpdateChallengeCommand command) {
+        if (command.title() != null) {
+            throw new BusinessException(VALIDATION_FAILED, "다른 멤버가 있어 제목을 변경할 수 없습니다.");
+        }
+        if (command.startedAt() != null) {
+            throw new BusinessException(VALIDATION_FAILED, "다른 멤버가 있어 시작일을 변경할 수 없습니다.");
+        }
+        if (command.endedAt() != null) {
+            throw new BusinessException(VALIDATION_FAILED, "다른 멤버가 있어 종료일을 변경할 수 없습니다.");
+        }
+        if (command.maxMembers() != null && command.maxMembers() < challenge.getMaxMembers()) {
+            throw new BusinessException(VALIDATION_FAILED, "다른 멤버가 있어 최대 인원을 줄일 수 없습니다.");
+        }
+    }
+
+    private void applyNonVisibilityUpdate(Challenge challenge, UpdateChallengeCommand command) {
+        if (command.title() != null) {
+            challenge.updateTitle(command.title());
+        }
+        if (command.description() != null) {
+            challenge.updateDescription(command.description());
+        }
+        if (command.maxMembers() != null) {
+            challenge.updateMaxMembers(command.maxMembers());
+        }
+        if (command.startedAt() != null) {
+            challenge.updateStartedAt(command.startedAt());
+        }
+        if (command.endedAt() != null) {
+            challenge.updateEndedAt(command.endedAt());
+        }
+    }
+
     private void validateScheduleChange(LocalDate targetStartedAt, LocalDate targetEndedAt) {
         if (targetEndedAt.isBefore(targetStartedAt)) {
             throw new BusinessException(VALIDATION_FAILED, "종료일은 시작일보다 빠를 수 없습니다.");
         }
+    }
+
+    private ChallengeListResult buildChallengeListResult(Page<Challenge> page) {
+        Map<Long, Integer> memberCounts = countActiveMembersByChallengeIds(
+                page.getContent().stream()
+                        .map(Challenge::getId)
+                        .toList()
+        );
+
+        return ChallengeListResult.from(page, memberCounts);
+    }
+
+    private ChallengeListResult buildJoinedChallengeListResult(Page<ChallengeMember> page) {
+        Map<Long, Integer> memberCounts = countActiveMembersByChallengeIds(
+                page.getContent().stream()
+                        .map(member -> member.getChallenge().getId())
+                        .toList()
+        );
+
+        return ChallengeListResult.fromMemberships(page, memberCounts);
+    }
+
+    private Map<Long, Integer> countActiveMembersByChallengeIds(List<Long> challengeIds) {
+        if (challengeIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return challengeMemberRepository
+                .countMembersByChallengeIdsAndStatus(challengeIds, MembershipStatus.ACTIVE)
+                .stream()
+                .collect(Collectors.toMap(
+                        MemberCountProjection::getChallengeId,
+                        p -> p.getCount().intValue()));
     }
 
     private String resolveVisibleInviteCode(Challenge challenge, ChallengeMember activeMember) {
@@ -331,5 +461,9 @@ public class ChallengeService {
 
     private LocalDateTime now() {
         return LocalDateTime.now(clock);
+    }
+
+    private String toEventOccurredAt(LocalDateTime dateTime) {
+        return dateTime.atZone(clock.getZone()).toInstant().toString();
     }
 }

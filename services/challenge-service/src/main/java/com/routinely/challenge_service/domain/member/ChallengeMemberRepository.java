@@ -23,6 +23,14 @@ public interface ChallengeMemberRepository extends JpaRepository<ChallengeMember
             MembershipStatus status
     );
 
+    Optional<ChallengeMember> findByChallengeIdAndUserId(Long challengeId, Long userId);
+
+    Optional<ChallengeMember> findFirstByChallengeIdAndStatusAndRoleNotOrderByJoinedAtAsc(
+            Long challengeId,
+            MembershipStatus status,
+            ChallengeMemberRole role
+    );
+
     @Query("SELECT m.challenge.id AS challengeId, COUNT(m) AS count " +
             "FROM ChallengeMember m " +
             "WHERE m.challenge.id IN :challengeIds AND m.status = :status " +

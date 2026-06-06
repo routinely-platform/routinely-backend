@@ -1,5 +1,6 @@
 package com.routinely.challenge_service.application;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.routinely.challenge_service.application.dto.ChallengeListResult;
 import com.routinely.challenge_service.application.dto.ChallengeResult;
 import com.routinely.challenge_service.application.dto.CreateChallengeCommand;
@@ -12,6 +13,8 @@ import com.routinely.challenge_service.domain.member.ChallengeMemberRepository;
 import com.routinely.challenge_service.domain.member.ChallengeMemberRole;
 import com.routinely.challenge_service.domain.member.MemberCountProjection;
 import com.routinely.challenge_service.domain.member.MembershipStatus;
+import com.routinely.challenge_service.domain.outbox.ChallengeOutbox;
+import com.routinely.challenge_service.domain.outbox.ChallengeOutboxRepository;
 import com.routinely.core.exception.BusinessException;
 import com.routinely.core.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,13 +52,17 @@ class ChallengeServiceTest {
 
     private ChallengeRepository challengeRepository;
     private ChallengeMemberRepository challengeMemberRepository;
+    private ChallengeOutboxRepository challengeOutboxRepository;
+    private ObjectMapper objectMapper;
     private ChallengeService challengeService;
 
     @BeforeEach
     void setUp() {
         challengeRepository = mock(ChallengeRepository.class);
         challengeMemberRepository = mock(ChallengeMemberRepository.class);
-        challengeService = new ChallengeService(challengeRepository, challengeMemberRepository, FIXED_CLOCK);
+        challengeOutboxRepository = mock(ChallengeOutboxRepository.class);
+        objectMapper = new ObjectMapper();
+        challengeService = new ChallengeService(challengeRepository, challengeMemberRepository, challengeOutboxRepository, objectMapper, FIXED_CLOCK);
     }
 
     @Test
@@ -938,6 +945,213 @@ class ChallengeServiceTest {
         assertThat(challenge.getEndedAt()).isEqualTo(LocalDate.of(2026, 6, 24));
     }
 
+    @Test
+    @DisplayName("챌린지참여_공개대기챌린지이면_신규멤버를저장하고_아웃박스를저장한다")
+    void joinChallenge_whenPublicWaitingChallenge_savesMemberAndOutbox() {
+        Challenge challenge = createChallenge(1L, "테스트 챌린지", true, null, ChallengeLifecycleStatus.WAITING);
+        when(challengeRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(challenge));
+        when(challengeMemberRepository.findByChallengeIdAndUserId(1L, 200L)).thenReturn(Optional.empty());
+        when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE)).thenReturn(1);
+        when(challengeMemberRepository.save(any(ChallengeMember.class))).thenAnswer(invocation -> {
+            ChallengeMember member = invocation.getArgument(0);
+            ReflectionTestUtils.setField(member, "id", 20L);
+            return member;
+        });
+
+        var result = challengeService.joinChallenge(1L, 200L);
+
+        assertThat(result.challengeMemberId()).isEqualTo(20L);
+        assertThat(result.challengeId()).isEqualTo(1L);
+        assertThat(result.userId()).isEqualTo(200L);
+        assertThat(result.role()).isEqualTo(ChallengeMemberRole.MEMBER);
+        assertThat(result.status()).isEqualTo(MembershipStatus.ACTIVE);
+        assertThat(result.joinedAt()).isEqualTo(LocalDateTime.now(FIXED_CLOCK));
+
+        ArgumentCaptor<ChallengeOutbox> outboxCaptor = ArgumentCaptor.forClass(ChallengeOutbox.class);
+        verify(challengeOutboxRepository).save(outboxCaptor.capture());
+        ChallengeOutbox outbox = outboxCaptor.getValue();
+        assertThat(outbox.getEventType()).isEqualTo("challenge.member.joined");
+        assertThat(outbox.getIdempotencyKey()).isEqualTo("challenge.member.joined:1:200:2026-05-24T00:00:00Z");
+        assertThat(outbox.getPayload())
+                .contains("\"occurredAt\":\"2026-05-24T00:00:00Z\"")
+                .contains("\"challengeId\":1")
+                .contains("\"challengeName\":\"테스트 챌린지\"")
+                .contains("\"userId\":200")
+                .contains("\"role\":\"MEMBER\"");
+    }
+
+    @Test
+    @DisplayName("챌린지참여_LEFT멤버이면_기존멤버십으로재참여한다")
+    void joinChallenge_whenLeftMember_rejoinsExistingMembership() {
+        Challenge challenge = createChallenge(1L, "테스트 챌린지", true, null, ChallengeLifecycleStatus.WAITING);
+        ChallengeMember member = createMember(challenge, 200L, ChallengeMemberRole.MEMBER);
+        member.leave(LocalDateTime.of(2026, 5, 23, 12, 0));
+        when(challengeRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(challenge));
+        when(challengeMemberRepository.findByChallengeIdAndUserId(1L, 200L)).thenReturn(Optional.of(member));
+        when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE)).thenReturn(1);
+
+        var result = challengeService.joinChallenge(1L, 200L);
+
+        assertThat(result.challengeMemberId()).isEqualTo(200L);
+        assertThat(member.getStatus()).isEqualTo(MembershipStatus.ACTIVE);
+        assertThat(member.getJoinedAt()).isEqualTo(LocalDateTime.now(FIXED_CLOCK));
+        assertThat(member.getLeftAt()).isNull();
+        verify(challengeMemberRepository, never()).save(any(ChallengeMember.class));
+        verify(challengeOutboxRepository).save(any(ChallengeOutbox.class));
+    }
+
+    @Test
+    @DisplayName("챌린지참여_비공개챌린지이면_예외를던진다")
+    void joinChallenge_whenPrivateChallenge_throwsException() {
+        Challenge challenge = createChallenge(1L, "테스트 챌린지", false, "invite-code", ChallengeLifecycleStatus.WAITING);
+        when(challengeRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(challenge));
+
+        assertThatThrownBy(() -> challengeService.joinChallenge(1L, 200L))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
+                });
+    }
+
+    @Test
+    @DisplayName("챌린지참여_WAITING상태가아니면_예외를던진다")
+    void joinChallenge_whenChallengeIsNotWaiting_throwsException() {
+        Challenge challenge = createChallenge(1L, "테스트 챌린지", true, null, ChallengeLifecycleStatus.ACTIVE);
+        when(challengeRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(challenge));
+
+        assertThatThrownBy(() -> challengeService.joinChallenge(1L, 200L))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CHALLENGE_ALREADY_ACTIVE);
+                });
+    }
+
+    @Test
+    @DisplayName("챌린지참여_ACTIVE멤버이면_예외를던진다")
+    void joinChallenge_whenAlreadyActiveMember_throwsException() {
+        Challenge challenge = createChallenge(1L, "테스트 챌린지", true, null, ChallengeLifecycleStatus.WAITING);
+        ChallengeMember member = createMember(challenge, 200L, ChallengeMemberRole.MEMBER);
+        when(challengeRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(challenge));
+        when(challengeMemberRepository.findByChallengeIdAndUserId(1L, 200L)).thenReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> challengeService.joinChallenge(1L, 200L))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CHALLENGE_ALREADY_JOINED);
+                });
+    }
+
+    @Test
+    @DisplayName("챌린지참여_EXPELLED멤버이면_예외를던진다")
+    void joinChallenge_whenExpelledMember_throwsException() {
+        Challenge challenge = createChallenge(1L, "테스트 챌린지", true, null, ChallengeLifecycleStatus.WAITING);
+        ChallengeMember member = createMember(challenge, 200L, ChallengeMemberRole.MEMBER);
+        ReflectionTestUtils.setField(member, "status", MembershipStatus.EXPELLED);
+        ReflectionTestUtils.setField(member, "leftAt", LocalDateTime.of(2026, 5, 23, 12, 0));
+        when(challengeRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(challenge));
+        when(challengeMemberRepository.findByChallengeIdAndUserId(1L, 200L)).thenReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> challengeService.joinChallenge(1L, 200L))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CHALLENGE_MEMBER_EXPELLED);
+                });
+    }
+
+    @Test
+    @DisplayName("챌린지참여_정원이가득차면_예외를던진다")
+    void joinChallenge_whenChallengeIsFull_throwsException() {
+        Challenge challenge = createChallenge(1L, "테스트 챌린지", true, null, ChallengeLifecycleStatus.WAITING);
+        when(challengeRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(challenge));
+        when(challengeMemberRepository.findByChallengeIdAndUserId(1L, 200L)).thenReturn(Optional.empty());
+        when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE)).thenReturn(10);
+
+        assertThatThrownBy(() -> challengeService.joinChallenge(1L, 200L))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CHALLENGE_FULL);
+                });
+        verify(challengeMemberRepository, never()).save(any(ChallengeMember.class));
+        verify(challengeOutboxRepository, never()).save(any(ChallengeOutbox.class));
+    }
+
+    @Test
+    @DisplayName("챌린지탈퇴_챌린지가존재하지않으면_예외를던진다")
+    void leaveChallenge_whenChallengeNotFound_throwsException() {
+        when(challengeRepository.findById(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> challengeService.leaveChallenge(1L, 100L))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CHALLENGE_NOT_FOUND);
+                });
+    }
+
+    @Test
+    @DisplayName("챌린지탈퇴_활성멤버가아니면_예외를던진다")
+    void leaveChallenge_whenNotActiveMember_throwsException() {
+        Challenge challenge = createChallenge(1L, "테스트 챌린지", true, null, ChallengeLifecycleStatus.WAITING);
+        when(challengeRepository.findById(1L)).thenReturn(Optional.of(challenge));
+        when(challengeMemberRepository.findByChallengeIdAndUserIdAndStatus(1L, 100L, MembershipStatus.ACTIVE))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> challengeService.leaveChallenge(1L, 100L))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.NOT_CHALLENGE_MEMBER);
+                });
+    }
+
+    @Test
+    @DisplayName("챌린지탈퇴_일반멤버는_탈퇴처리되고_아웃박스가저장된다")
+    void leaveChallenge_regularMember_leavesAndSavesOutbox() {
+        Challenge challenge = createChallenge(1L, "테스트 챌린지", true, null, ChallengeLifecycleStatus.WAITING);
+        ChallengeMember member = createMember(challenge, 100L, ChallengeMemberRole.MEMBER);
+        when(challengeRepository.findById(1L)).thenReturn(Optional.of(challenge));
+        when(challengeMemberRepository.findByChallengeIdAndUserIdAndStatus(1L, 100L, MembershipStatus.ACTIVE))
+                .thenReturn(Optional.of(member));
+
+        challengeService.leaveChallenge(1L, 100L);
+
+        assertThat(member.getStatus()).isEqualTo(MembershipStatus.LEFT);
+        assertThat(challenge.getStatus()).isEqualTo(ChallengeLifecycleStatus.WAITING);
+        verify(challengeOutboxRepository).save(any(ChallengeOutbox.class));
+    }
+
+    @Test
+    @DisplayName("챌린지탈퇴_방장탈퇴시_다른멤버가있으면_가장먼저합류한멤버에게위임하고탈퇴한다")
+    void leaveChallenge_whenLeaderLeaves_delegatesToEarliestMember() {
+        Challenge challenge = createChallenge(1L, "테스트 챌린지", true, null, ChallengeLifecycleStatus.WAITING);
+        ChallengeMember leader = createMember(challenge, 100L, ChallengeMemberRole.LEADER);
+        ChallengeMember successor = createMember(challenge, 200L, ChallengeMemberRole.MEMBER);
+        when(challengeRepository.findById(1L)).thenReturn(Optional.of(challenge));
+        when(challengeMemberRepository.findByChallengeIdAndUserIdAndStatus(1L, 100L, MembershipStatus.ACTIVE))
+                .thenReturn(Optional.of(leader));
+        when(challengeMemberRepository.findFirstByChallengeIdAndStatusAndRoleNotOrderByJoinedAtAsc(
+                1L, MembershipStatus.ACTIVE, ChallengeMemberRole.LEADER))
+                .thenReturn(Optional.of(successor));
+
+        challengeService.leaveChallenge(1L, 100L);
+
+        assertThat(successor.getRole()).isEqualTo(ChallengeMemberRole.LEADER);
+        assertThat(leader.getRole()).isEqualTo(ChallengeMemberRole.MEMBER);
+        assertThat(leader.getStatus()).isEqualTo(MembershipStatus.LEFT);
+        assertThat(challenge.getStatus()).isEqualTo(ChallengeLifecycleStatus.WAITING);
+        verify(challengeOutboxRepository).save(any(ChallengeOutbox.class));
+    }
+
+    @Test
+    @DisplayName("챌린지탈퇴_방장이마지막멤버이면_챌린지가종료된다")
+    void leaveChallenge_whenLeaderIsLastMember_endsChallenge() {
+        Challenge challenge = createChallenge(1L, "테스트 챌린지", true, null, ChallengeLifecycleStatus.WAITING);
+        ChallengeMember leader = createMember(challenge, 100L, ChallengeMemberRole.LEADER);
+        when(challengeRepository.findById(1L)).thenReturn(Optional.of(challenge));
+        when(challengeMemberRepository.findByChallengeIdAndUserIdAndStatus(1L, 100L, MembershipStatus.ACTIVE))
+                .thenReturn(Optional.of(leader));
+        when(challengeMemberRepository.findFirstByChallengeIdAndStatusAndRoleNotOrderByJoinedAtAsc(
+                1L, MembershipStatus.ACTIVE, ChallengeMemberRole.LEADER))
+                .thenReturn(Optional.empty());
+
+        challengeService.leaveChallenge(1L, 100L);
+
+        assertThat(challenge.getStatus()).isEqualTo(ChallengeLifecycleStatus.ENDED);
+        assertThat(leader.getStatus()).isEqualTo(MembershipStatus.LEFT);
+        verify(challengeOutboxRepository).save(any(ChallengeOutbox.class));
+    }
+
     private Challenge createChallenge(Long id,
                                       String title,
                                       boolean isPublic,
@@ -961,13 +1175,15 @@ class ChallengeServiceTest {
     }
 
     private ChallengeMember createMember(Challenge challenge, Long userId, ChallengeMemberRole role) {
-        return ChallengeMember.builder()
+        ChallengeMember member = ChallengeMember.builder()
                 .challenge(challenge)
                 .userId(userId)
                 .role(role)
                 .status(MembershipStatus.ACTIVE)
                 .joinedAt(LocalDateTime.now(FIXED_CLOCK))
                 .build();
+        ReflectionTestUtils.setField(member, "id", userId);
+        return member;
     }
 
     private MemberCountProjection memberCount(Long challengeId, Long count) {
