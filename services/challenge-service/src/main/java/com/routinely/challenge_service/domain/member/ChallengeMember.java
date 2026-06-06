@@ -62,4 +62,41 @@ public class ChallengeMember {
                 .joinedAt(now)
                 .build();
     }
+
+    public static ChallengeMember createMember(Challenge challenge, Long userId, LocalDateTime now) {
+        return ChallengeMember.builder()
+                .challenge(challenge)
+                .userId(userId)
+                .role(ChallengeMemberRole.MEMBER)
+                .status(MembershipStatus.ACTIVE)
+                .joinedAt(now)
+                .build();
+    }
+
+    public void rejoin(LocalDateTime now) {
+        this.status = MembershipStatus.ACTIVE;
+        this.joinedAt = now;
+        this.leftAt = null;
+    }
+
+    public void leave(LocalDateTime now) {
+        this.status = MembershipStatus.LEFT;
+        this.leftAt = now;
+    }
+
+    public void promoteToLeader() {
+        this.role = ChallengeMemberRole.LEADER;
+    }
+
+    public void demoteToMember() {
+        this.role = ChallengeMemberRole.MEMBER;
+    }
+
+    public boolean isActive() {
+        return this.status == MembershipStatus.ACTIVE;
+    }
+
+    public boolean isExpelled() {
+        return this.status == MembershipStatus.EXPELLED;
+    }
 }

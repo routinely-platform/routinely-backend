@@ -107,4 +107,8 @@ public class Challenge extends BaseEntity {
     public void updateEndedAt(LocalDate endedAt) {
         this.endedAt = endedAt;
     }
+
+    public void end() {
+        this.status = ChallengeLifecycleStatus.ENDED;
+    }
 }
