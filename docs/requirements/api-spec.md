@@ -518,8 +518,8 @@ public class ApiResponse<T> {
 
 #### `POST /api/v1/challenges/{challengeId}/members` — 공개 챌린지 참여 (재참여 포함)
 - Auth: ✅
-- 이전에 탈퇴한 챌린지도 재참여 가능 (정원·종료 여부만 검증)
-- 재참여 시 이전 수행 기록은 유지되며 새 멤버십으로 등록
+- 이전에 탈퇴한 공개 대기 챌린지도 재참여 가능 (정원·상태·강퇴 여부 검증)
+- 재참여 시 이전 수행 기록은 유지되며 기존 멤버십 행의 상태와 참여 시각을 갱신
 
 **Response** `201`
 ```json
@@ -555,7 +555,7 @@ public class ApiResponse<T> {
 
 ---
 
-#### `DELETE /api/v1/challenges/{challengeId}/members/me` — 챌린지 탈퇴
+#### `POST /api/v1/challenges/{challengeId}/members/me/leave` — 챌린지 탈퇴
 - Auth: ✅
 
 **Response** `200`
@@ -568,7 +568,7 @@ public class ApiResponse<T> {
 
 ---
 
-<!-- TODO: #45 - DELETE /api/v1/challenges/{challengeId}/members/{userId} — 멤버 강제 퇴장(kick) 엔드포인트 누락 (LEADER만) -->
+<!-- V2: DELETE /api/v1/challenges/{challengeId}/members/{userId} — 멤버 강제 퇴장(kick)은 ADR-0031 기준 후속 범위에서 구현 -->
 
 #### `GET /api/v1/challenges/{challengeId}/members` — 멤버 목록 조회
 - Auth: ✅
@@ -1311,6 +1311,7 @@ data: {"notificationId":2,"type":"CHALLENGE_EVENT","title":"새 멤버가 참여
 | `INVALID_CREDENTIALS` | 401 | 이메일 또는 비밀번호 불일치 |
 | `FORBIDDEN` | 403 | 권한 없음 |
 | `NOT_CHALLENGE_MEMBER` | 403 | 챌린지 멤버가 아님 |
+| `CHALLENGE_MEMBER_EXPELLED` | 403 | 강퇴된 사용자의 재참여 시도 |
 | `CHAT_NOT_MEMBER` | 403 | 채팅방 멤버가 아님 |
 | `USER_NOT_FOUND` | 404 | 사용자 없음 |
 | `CHALLENGE_NOT_FOUND` | 404 | 챌린지 없음 |

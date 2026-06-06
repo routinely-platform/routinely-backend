@@ -184,7 +184,7 @@ RoutineService가 이 이벤트를 수신하여 참여자 전원의 routines 및
 |------|------|
 | Publisher | ChallengeService |
 | Partition Key | `challengeId` |
-| Consumer Group | `chat-service.challenge.member.joined` / `notification-service.challenge.member.joined` |
+| Consumer Group | `routine-service.challenge.member.joined` / `chat-service.challenge.member.joined` / `notification-service.challenge.member.joined` |
 
 **Payload**
 
@@ -195,7 +195,6 @@ RoutineService가 이 이벤트를 수신하여 참여자 전원의 routines 및
   "challengeId": 5,
   "challengeName": "30일 러닝 챌린지",
   "userId": 1,
-  "userNickname": "김루틴",
   "role": "MEMBER"
 }
 ```
@@ -205,11 +204,12 @@ RoutineService가 이 이벤트를 수신하여 참여자 전원의 routines 및
 | `challengeId` | long | ✅ | 챌린지 ID |
 | `challengeName` | string | ✅ | 챌린지 이름 (알림 메시지 활용) |
 | `userId` | long | ✅ | 참여한 사용자 ID |
-| `userNickname` | string | ✅ | 참여한 사용자 닉네임 |
+| `userNickname` | string | ❌ | 참여한 사용자 닉네임. MVP ChallengeService에는 UserService 조회 클라이언트가 없어 미포함 |
 | `role` | string | ✅ | `LEADER` \| `MEMBER` |
 
 **소비자 처리**
 
+- **RoutineService**: `DAILY` 루틴인 경우 챌린지 기간 전체 `routine_executions` PENDING 레코드 일괄 생성
 - **ChatService**: 챌린지 채팅방 멤버 캐시 갱신
 - **NotificationService**: 기존 챌린지 멤버 전원에게 CHALLENGE_EVENT 알림 발송
 
@@ -223,7 +223,7 @@ RoutineService가 이 이벤트를 수신하여 참여자 전원의 routines 및
 |------|------|
 | Publisher | ChallengeService |
 | Partition Key | `challengeId` |
-| Consumer Group | `chat-service.challenge.member.left` |
+| Consumer Group | `routine-service.challenge.member.left` / `chat-service.challenge.member.left` |
 
 **Payload**
 
@@ -245,6 +245,7 @@ RoutineService가 이 이벤트를 수신하여 참여자 전원의 routines 및
 
 **소비자 처리**
 
+- **RoutineService**: 해당 userId의 미완료 PENDING `routine_executions` 처리 (삭제 또는 CANCELLED)
 - **ChatService**: 채팅방 멤버 캐시 무효화
 
 ---
