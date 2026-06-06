@@ -25,8 +25,10 @@ public enum ErrorCode {
     CHALLENGE_ALREADY_JOINED("CHALLENGE_ALREADY_JOINED", "이미 참여한 챌린지입니다.", ErrorStatus.CONFLICT),
     CHALLENGE_FULL("CHALLENGE_FULL", "챌린지 인원이 가득 찼습니다.", ErrorStatus.CONFLICT),
     NOT_CHALLENGE_MEMBER("NOT_CHALLENGE_MEMBER", "챌린지 멤버가 아닙니다.", ErrorStatus.FORBIDDEN),
+    CHALLENGE_ALREADY_ACTIVE("CHALLENGE_ALREADY_ACTIVE", "이미 시작된 챌린지에는 참여할 수 없습니다.", ErrorStatus.CONFLICT),
     CHALLENGE_ALREADY_ENDED("CHALLENGE_ALREADY_ENDED", "이미 종료된 챌린지입니다.", ErrorStatus.CONFLICT),
     CHALLENGE_NOT_STARTED("CHALLENGE_NOT_STARTED", "아직 시작되지 않은 챌린지입니다.", ErrorStatus.CONFLICT),
+    CHALLENGE_MEMBER_EXPELLED("CHALLENGE_MEMBER_EXPELLED", "강퇴한 사용자는 재참여 할 수 없습니다.", ErrorStatus.FORBIDDEN),
 
     // Routine
     ROUTINE_TEMPLATE_NOT_FOUND("ROUTINE_TEMPLATE_NOT_FOUND", "루틴 템플릿을 찾을 수 없습니다.", ErrorStatus.NOT_FOUND),
