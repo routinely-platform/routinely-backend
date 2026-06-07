@@ -108,6 +108,10 @@ public class Challenge extends BaseEntity {
         this.endedAt = endedAt;
     }
 
+    public void activate() {
+        this.status = ChallengeLifecycleStatus.ACTIVE;
+    }
+
     public void end() {
         this.status = ChallengeLifecycleStatus.ENDED;
     }
