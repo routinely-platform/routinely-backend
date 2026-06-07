@@ -44,6 +44,7 @@
 - `QueryDSL` (조회 최적화 / 복잡한 조건 검색)
 - `Swagger (OpenAPI)` (REST API 문서화)
 - `Resilience4j` (timeout / retry / circuit breaker)
+- `ShedLock` (분산 스케줄러 중복 실행 방지 — ADR-0033)
 - OpenTelemetry(선택) + Prometheus / Grafana 연동 기반 마련
 
 **MSA 서비스 구성**
@@ -89,6 +90,7 @@
     - 키: `ranking:group:{groupId}`, 값: memberId, score: 완료 수
     - `ZINCRBY`로 루틴 완료 시 업데이트, `ZREVRANGE`로 Top N 조회
   - 그룹 대시보드 캐시 (TTL 30s~2m)
+  - 분산 락 (ShedLock) — 챌린지 상태 전이 스케줄러 단일 실행 보장 (ADR-0033)
   - 채팅 presence / 온라인 상태 (확장)
   - JWT 블랙리스트 — **MVP 이후** (`bl:token:{jti}` TTL=토큰 만료시간)
 
@@ -96,9 +98,10 @@
 
 1. Rate Limiting (Gateway 레벨)
 2. 랭킹 (ZSET) 또는 랭킹 캐시
-3. 그룹 대시보드 캐시
-4. 채팅 presence (확장)
-5. JWT 블랙리스트 (MVP 이후)
+3. 분산 락 (ShedLock)
+4. 그룹 대시보드 캐시
+5. 채팅 presence (확장)
+6. JWT 블랙리스트 (MVP 이후)
 
 > MVP에서는 DB로 직접 랭킹 조회도 가능하다.
 > Redis 랭킹은 성능 개선 및 포트폴리오 포인트로 활용한다.
@@ -140,9 +143,10 @@
 - **PGMQ**: 정합성 이벤트
   - 알림 예약 등록, 내부 후처리 작업
 - **Kafka**: 스트림 이벤트
-  - 루틴 완료 이벤트 (`routine.execution.done`) → Notification / Feed
+  - 루틴 완료 이벤트 (`routine.execution.completed`) → RoutineService / ChallengeService / NotificationService
   - 채팅 메시지 멀티 인스턴스 브로드캐스트 (`chat.message.created`)
   - 챌린지 멤버 참여 이벤트 (`challenge.member.joined`) → Chat 캐시 무효화
+  - 챌린지 상태 전이 이벤트 (`challenge.started` / `challenge.ended`) → RoutineService / NotificationService / ChatService (ADR-0033)
 
 ---
 
