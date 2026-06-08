@@ -13,6 +13,9 @@ dependencies {
 	implementation project(':libs:common-observability')
 	implementation project(':libs:proto')
 	implementation 'org.springframework.boot:spring-boot-starter-kafka'
+	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	implementation 'net.javacrumbs.shedlock:shedlock-spring:6.9.1'
+	implementation 'net.javacrumbs.shedlock:shedlock-provider-redis-spring:6.9.1'
 	implementation 'io.grpc:grpc-services'
 	implementation 'org.springframework.grpc:spring-grpc-server-spring-boot-starter'
 	implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
