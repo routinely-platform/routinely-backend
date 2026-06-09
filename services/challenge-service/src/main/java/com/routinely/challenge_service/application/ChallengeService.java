@@ -11,7 +11,10 @@ import com.routinely.challenge_service.application.event.ChallengeMemberJoinedEv
 import com.routinely.challenge_service.application.event.ChallengeMemberLeftEvent;
 import com.routinely.challenge_service.domain.challenge.Challenge;
 import com.routinely.challenge_service.domain.challenge.ChallengeLifecycleStatus;
+import com.routinely.challenge_service.domain.challenge.ChallengeQueryRepository;
 import com.routinely.challenge_service.domain.challenge.ChallengeRepository;
+import com.routinely.challenge_service.domain.challenge.ChallengeSearchCondition;
+import com.routinely.challenge_service.domain.challenge.MyChallengeSearchCondition;
 import com.routinely.challenge_service.domain.member.ChallengeMember;
 import com.routinely.challenge_service.domain.member.ChallengeMemberRepository;
 import com.routinely.challenge_service.domain.member.ChallengeMemberRole;
@@ -29,7 +32,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -51,17 +53,20 @@ import static com.routinely.core.exception.ErrorCode.VALIDATION_FAILED;
 public class ChallengeService {
 
     private final ChallengeRepository challengeRepository;
+    private final ChallengeQueryRepository challengeQueryRepository;
     private final ChallengeMemberRepository challengeMemberRepository;
     private final ChallengeOutboxRepository challengeOutboxRepository;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
     public ChallengeService(ChallengeRepository challengeRepository,
+                            ChallengeQueryRepository challengeQueryRepository,
                             ChallengeMemberRepository challengeMemberRepository,
                             ChallengeOutboxRepository challengeOutboxRepository,
                             ObjectMapper objectMapper,
                             Clock clock) {
         this.challengeRepository = challengeRepository;
+        this.challengeQueryRepository = challengeQueryRepository;
         this.challengeMemberRepository = challengeMemberRepository;
         this.challengeOutboxRepository = challengeOutboxRepository;
         this.objectMapper = objectMapper;
@@ -133,23 +138,14 @@ public class ChallengeService {
         );
     }
 
-    public ChallengeListResult getMyJoinedChallenges(Long userId, Pageable pageable) {
-        Page<ChallengeMember> page = challengeMemberRepository.findByUserIdAndStatus(
-                userId,
-                MembershipStatus.ACTIVE,
-                pageable
-        );
+    public ChallengeListResult getMyJoinedChallenges(Long userId, MyChallengeSearchCondition cond, Pageable pageable) {
+        validateMyChallengeSearchCondition(cond);
+        Page<ChallengeMember> page = challengeQueryRepository.findMyJoinedChallenges(userId, cond, pageable);
         return buildJoinedChallengeListResult(page);
     }
 
-    // TODO: #120 - keyword 검색, categoryCode 필터, 정렬 옵션 (Querydsl 동적 쿼리로 구현)
-    public ChallengeListResult getPublicChallenges(Long userId, Pageable pageable) {
-        Page<Challenge> page = challengeRepository.findJoinablePublicChallenges(
-                userId,
-                ChallengeLifecycleStatus.WAITING,
-                EnumSet.of(MembershipStatus.ACTIVE, MembershipStatus.EXPELLED),
-                pageable
-        );
+    public ChallengeListResult getPublicChallenges(Long userId, ChallengeSearchCondition cond, Pageable pageable) {
+        Page<Challenge> page = challengeQueryRepository.findPublicChallenges(userId, cond, pageable);
         return buildChallengeListResult(page);
     }
 
@@ -243,6 +239,12 @@ public class ChallengeService {
         int activeCount = challengeMemberRepository.countByChallengeIdAndStatus(challengeId, MembershipStatus.ACTIVE);
         if (activeCount >= maxMembers) {
             throw new BusinessException(CHALLENGE_FULL);
+        }
+    }
+
+    private void validateMyChallengeSearchCondition(MyChallengeSearchCondition cond) {
+        if (cond.hasEndedStatusWithEndImminentSort()) {
+            throw new BusinessException(VALIDATION_FAILED, "종료 임박순은 종료된 챌린지와 함께 조회할 수 없습니다.");
         }
     }
 

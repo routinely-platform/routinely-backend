@@ -7,7 +7,11 @@ import com.routinely.challenge_service.application.dto.CreateChallengeCommand;
 import com.routinely.challenge_service.application.dto.UpdateChallengeCommand;
 import com.routinely.challenge_service.domain.challenge.Challenge;
 import com.routinely.challenge_service.domain.challenge.ChallengeLifecycleStatus;
+import com.routinely.challenge_service.domain.challenge.ChallengeQueryRepository;
 import com.routinely.challenge_service.domain.challenge.ChallengeRepository;
+import com.routinely.challenge_service.domain.challenge.ChallengeSearchCondition;
+import com.routinely.challenge_service.domain.challenge.MyChallengeSearchCondition;
+import com.routinely.challenge_service.domain.challenge.MyChallengeSort;
 import com.routinely.challenge_service.domain.member.ChallengeMember;
 import com.routinely.challenge_service.domain.member.ChallengeMemberRepository;
 import com.routinely.challenge_service.domain.member.ChallengeMemberRole;
@@ -31,7 +35,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -51,6 +54,7 @@ class ChallengeServiceTest {
             Clock.fixed(Instant.parse("2026-05-24T00:00:00Z"), ZoneId.of("Asia/Seoul"));
 
     private ChallengeRepository challengeRepository;
+    private ChallengeQueryRepository challengeQueryRepository;
     private ChallengeMemberRepository challengeMemberRepository;
     private ChallengeOutboxRepository challengeOutboxRepository;
     private ObjectMapper objectMapper;
@@ -59,10 +63,11 @@ class ChallengeServiceTest {
     @BeforeEach
     void setUp() {
         challengeRepository = mock(ChallengeRepository.class);
+        challengeQueryRepository = mock(ChallengeQueryRepository.class);
         challengeMemberRepository = mock(ChallengeMemberRepository.class);
         challengeOutboxRepository = mock(ChallengeOutboxRepository.class);
         objectMapper = new ObjectMapper();
-        challengeService = new ChallengeService(challengeRepository, challengeMemberRepository, challengeOutboxRepository, objectMapper, FIXED_CLOCK);
+        challengeService = new ChallengeService(challengeRepository, challengeQueryRepository, challengeMemberRepository, challengeOutboxRepository, objectMapper, FIXED_CLOCK);
     }
 
     @Test
@@ -148,18 +153,15 @@ class ChallengeServiceTest {
         Pageable pageable = PageRequest.of(1, 2);
         Challenge first = createChallenge(1L, "아침 운동", true, null, ChallengeLifecycleStatus.WAITING);
         Challenge second = createChallenge(2L, "저녁 독서", true, null, ChallengeLifecycleStatus.WAITING);
-        when(challengeRepository.findJoinablePublicChallenges(
-                eq(100L),
-                eq(ChallengeLifecycleStatus.WAITING),
-                any(),
-                eq(pageable)
-        )).thenReturn(new PageImpl<>(List.of(first, second), pageable, 5));
+        ChallengeSearchCondition cond = new ChallengeSearchCondition(null, null, null);
+        when(challengeQueryRepository.findPublicChallenges(eq(100L), any(ChallengeSearchCondition.class), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(first, second), pageable, 5));
         when(challengeMemberRepository.countMembersByChallengeIdsAndStatus(
                 List.of(1L, 2L),
                 MembershipStatus.ACTIVE
         )).thenReturn(List.of(memberCount(1L, 3L), memberCount(2L, 1L)));
 
-        ChallengeListResult result = challengeService.getPublicChallenges(100L, pageable);
+        ChallengeListResult result = challengeService.getPublicChallenges(100L, cond, pageable);
 
         assertThat(result.page()).isEqualTo(1);
         assertThat(result.size()).isEqualTo(2);
@@ -169,17 +171,6 @@ class ChallengeServiceTest {
         assertThat(result.content()).extracting(ChallengeResult::currentMembers).containsExactly(3, 1);
         assertThat(result.content()).extracting(ChallengeResult::inviteCode).containsOnlyNulls();
         assertThat(result.content()).extracting(ChallengeResult::myRole).containsOnlyNulls();
-
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<Collection<MembershipStatus>> excludedStatusesCaptor = ArgumentCaptor.forClass(Collection.class);
-        verify(challengeRepository).findJoinablePublicChallenges(
-                eq(100L),
-                eq(ChallengeLifecycleStatus.WAITING),
-                excludedStatusesCaptor.capture(),
-                eq(pageable)
-        );
-        assertThat(excludedStatusesCaptor.getValue())
-                .containsExactlyInAnyOrder(MembershipStatus.ACTIVE, MembershipStatus.EXPELLED);
     }
 
     @Test
@@ -190,14 +181,15 @@ class ChallengeServiceTest {
         Challenge second = createChallenge(2L, "저녁 독서", false, "invite-code", ChallengeLifecycleStatus.WAITING);
         ChallengeMember leader = createMember(first, 100L, ChallengeMemberRole.LEADER);
         ChallengeMember member = createMember(second, 100L, ChallengeMemberRole.MEMBER);
-        when(challengeMemberRepository.findByUserIdAndStatus(100L, MembershipStatus.ACTIVE, pageable))
+        MyChallengeSearchCondition cond = new MyChallengeSearchCondition(null, null, null, null);
+        when(challengeQueryRepository.findMyJoinedChallenges(eq(100L), any(MyChallengeSearchCondition.class), eq(pageable)))
                 .thenReturn(new PageImpl<>(List.of(leader, member), pageable, 2));
         when(challengeMemberRepository.countMembersByChallengeIdsAndStatus(
                 List.of(1L, 2L),
                 MembershipStatus.ACTIVE
         )).thenReturn(List.of(memberCount(1L, 3L), memberCount(2L, 2L)));
 
-        ChallengeListResult result = challengeService.getMyJoinedChallenges(100L, pageable);
+        ChallengeListResult result = challengeService.getMyJoinedChallenges(100L, cond, pageable);
 
         assertThat(result.page()).isZero();
         assertThat(result.size()).isEqualTo(2);
@@ -207,6 +199,25 @@ class ChallengeServiceTest {
         assertThat(result.content()).extracting(ChallengeResult::currentMembers).containsExactly(3, 2);
         assertThat(result.content()).extracting(ChallengeResult::myRole)
                 .containsExactly(ChallengeMemberRole.LEADER, ChallengeMemberRole.MEMBER);
+    }
+
+    @Test
+    @DisplayName("내참여챌린지목록조회_ENDED와_종료임박순을_함께요청하면_예외를던진다")
+    void getMyJoinedChallenges_whenEndedStatusWithEndImminentSort_throwsException() {
+        MyChallengeSearchCondition cond = new MyChallengeSearchCondition(
+                null,
+                null,
+                ChallengeLifecycleStatus.ENDED,
+                MyChallengeSort.END_IMMINENT
+        );
+
+        assertThatThrownBy(() -> challengeService.getMyJoinedChallenges(100L, cond, PageRequest.of(0, 20)))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
+                    assertThat(exception.getMessage()).isEqualTo("종료 임박순은 종료된 챌린지와 함께 조회할 수 없습니다.");
+                });
+
+        verify(challengeQueryRepository, never()).findMyJoinedChallenges(any(), any(), any());
     }
 
     @Test
