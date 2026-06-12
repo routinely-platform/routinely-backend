@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package routinely.challenge.v1;
+
+option java_multiple_files = true;
+option java_package = "com.routinely.proto.challenge";
+option java_outer_classname = "ChallengeServiceProto";
+
+enum ChallengeLifecycleStatus {
+  CHALLENGE_LIFECYCLE_STATUS_UNSPECIFIED = 0;
+  WAITING = 1;
+  ACTIVE  = 2;
+  ENDED   = 3;
+}
+
+service ChallengeGrpcService {
+  // ChatService → ChallengeService
+  // 채팅방 입장 또는 메시지 발송 전 챌린지 멤버 여부 확인
+  rpc CheckMembership(CheckMembershipRequest) returns (CheckMembershipResponse);
+
+  // RoutineService → ChallengeService
+  // 챌린지 루틴 실행 완료 처리 전 챌린지 유효성 및 멤버 상태 확인
+  // RoutineService가 routine_templates.challenge_id로 challengeId를 직접 전달한다.
+  rpc GetChallengeContext(GetChallengeContextRequest) returns (GetChallengeContextResponse);
+}
+
+// ── CheckMembership ────────────────────────────────────────────────
+message CheckMembershipRequest {
+  int64 challenge_id = 1;
+  int64 user_id      = 2;
+}
+
+message CheckMembershipResponse {
+  bool   is_active_member = 1; // ACTIVE 상태 멤버 여부
+  string member_role      = 2; // "LEADER" | "MEMBER" — is_active_member=false 이면 빈 문자열
+}
+
+// ── GetChallengeContext ────────────────────────────────────────────
+message GetChallengeContextRequest {
+  int64 challenge_id = 1; // routine_templates.challenge_id (RoutineService가 직접 전달)
+  int64 user_id      = 2;
+}
+
+message GetChallengeContextResponse {
+  ChallengeLifecycleStatus challenge_status = 1;
+  bool                     is_member_active = 2; // 해당 사용자가 ACTIVE 멤버인지
+}
