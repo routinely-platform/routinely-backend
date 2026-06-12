@@ -45,6 +45,13 @@ option java_multiple_files = true;
 option java_package = "com.routinely.proto.challenge";
 option java_outer_classname = "ChallengeServiceProto";
 
+enum ChallengeLifecycleStatus {
+  CHALLENGE_LIFECYCLE_STATUS_UNSPECIFIED = 0;
+  WAITING = 1;
+  ACTIVE  = 2;
+  ENDED   = 3;
+}
+
 service ChallengeGrpcService {
   // ChatService → ChallengeService
   // 채팅방 입장 또는 메시지 발송 전 챌린지 멤버 여부 확인
@@ -70,15 +77,13 @@ message CheckMembershipResponse {
 // ── GetChallengeContext ────────────────────────────────────────────
 
 message GetChallengeContextRequest {
-  int64 routine_template_id = 1; // 실행하려는 루틴 템플릿 ID
-  int64 user_id             = 2;
+  int64 challenge_id = 1; // routine_templates.challenge_id (RoutineService가 직접 전달)
+  int64 user_id      = 2;
 }
 
 message GetChallengeContextResponse {
-  bool   is_challenge_routine = 1; // 해당 루틴이 챌린지 소속 루틴인지
-  int64  challenge_id         = 2; // is_challenge_routine=false 이면 0
-  string challenge_status     = 3; // "WAITING" | "ACTIVE" | "ENDED"
-  bool   is_member_active     = 4; // 해당 사용자가 ACTIVE 멤버인지
+  ChallengeLifecycleStatus challenge_status = 1;
+  bool                     is_member_active = 2; // 해당 사용자가 ACTIVE 멤버인지
 }
 ```
 
@@ -122,13 +127,17 @@ ChatService (HTTP 요청 수신)
 **호출 시점**:
 - 사용자가 챌린지 루틴 실행을 COMPLETED로 처리하려 할 때
 
+> 챌린지 소속 여부는 RoutineService가 `routine_templates.challenge_id` 보유 여부로 직접 판단한다.
+> `challenge_id`가 있는 루틴에 대해서만 본 RPC를 호출하며, `challenge_id`를 그대로 전달한다.
+> (routine_templates는 routine-service 소유이므로 ChallengeService는 routineTemplateId를 해석할 수 없다.)
+
 **처리 흐름**:
 
 ```
 RoutineService (루틴 실행 완료 요청 수신)
-    └── ChallengeGrpcService.GetChallengeContext(routineTemplateId, userId)
-        ├── is_challenge_routine == false → 개인 루틴으로 처리 (gRPC 불필요하나 확인 용도)
-        └── is_challenge_routine == true
+    ├── routine_templates.challenge_id == null → 개인 루틴으로 처리 (gRPC 호출 안 함)
+    └── routine_templates.challenge_id != null
+        └── ChallengeGrpcService.GetChallengeContext(challengeId, userId)
             ├── challenge_status != "ACTIVE" → FORBIDDEN (CHALLENGE_ALREADY_ENDED 등)
             ├── is_member_active == false    → FORBIDDEN (NOT_CHALLENGE_MEMBER)
             └── 모두 통과 → 실행 완료 처리
@@ -136,12 +145,13 @@ RoutineService (루틴 실행 완료 요청 수신)
 
 **응답 케이스**:
 
-| 상황 | `is_challenge_routine` | `challenge_status` | `is_member_active` |
-|------|------------------------|--------------------|--------------------|
-| 개인 루틴 | false | `""` | false |
-| 챌린지 루틴 / ACTIVE 챌린지 / ACTIVE 멤버 | true | `ACTIVE` | true |
-| 챌린지 루틴 / 종료된 챌린지 | true | `ENDED` | - |
-| 챌린지 루틴 / 탈퇴한 멤버 | true | `ACTIVE` | false |
+| 상황 | `challenge_status` | `is_member_active` |
+|------|--------------------|--------------------|
+| ACTIVE 챌린지 / ACTIVE 멤버 | `ACTIVE` | true |
+| 종료된 챌린지 | `ENDED` | - |
+| 시작 전 챌린지 | `WAITING` | - |
+| ACTIVE 챌린지 / 탈퇴한 멤버 | `ACTIVE` | false |
+| 챌린지 없음 | gRPC Status `NOT_FOUND` | - |
 
 ---
 
