@@ -97,6 +97,13 @@ option java_multiple_files = true;
 option java_package = "com.routinely.proto.challenge";
 option java_outer_classname = "ChallengeServiceProto";
 
+enum ChallengeLifecycleStatus {
+  CHALLENGE_LIFECYCLE_STATUS_UNSPECIFIED = 0;  // proto3 enum의 0번은 "미설정" 신호로 예약
+  WAITING = 1;
+  ACTIVE  = 2;
+  ENDED   = 3;
+}
+
 service ChallengeGrpcService {
   rpc CheckMembership (CheckMembershipRequest) returns (CheckMembershipResponse);
   rpc GetChallengeContext (GetChallengeContextRequest) returns (GetChallengeContextResponse);
@@ -117,15 +124,13 @@ message CheckMembershipResponse {
 // ── GetChallengeContext ──────────────────────────────────────────────
 
 message GetChallengeContextRequest {
-  int64 routine_template_id = 1;  // 실행하려는 루틴 템플릿 ID
-  int64 user_id             = 2;
+  int64 challenge_id = 1;  // routine_templates.challenge_id (RoutineService가 직접 전달)
+  int64 user_id      = 2;
 }
 
 message GetChallengeContextResponse {
-  bool   is_challenge_routine = 1;  // 해당 루틴이 챌린지 소속 루틴인지
-  int64  challenge_id         = 2;  // is_challenge_routine=false 이면 0
-  string challenge_status     = 3;  // "WAITING" | "ACTIVE" | "ENDED"
-  bool   is_member_active     = 4;  // 해당 사용자가 ACTIVE 멤버인지
+  ChallengeLifecycleStatus challenge_status = 1;
+  bool                     is_member_active = 2;  // 해당 사용자가 ACTIVE 멤버인지
 }
 ```
 
@@ -191,7 +196,7 @@ public class ChallengeGrpcServiceImpl extends ChallengeGrpcServiceGrpc.Challenge
             responseObserver.onCompleted();
 
         } catch (BusinessException e) {
-            Status status = e.getErrorCode().getHttpStatus() == HttpStatus.NOT_FOUND
+            Status status = e.getErrorCode().getStatus() == ErrorStatus.NOT_FOUND
                     ? Status.NOT_FOUND : Status.INTERNAL;
             responseObserver.onError(status.withDescription(e.getMessage()).asRuntimeException());
         } catch (Exception e) {
@@ -206,26 +211,25 @@ public class ChallengeGrpcServiceImpl extends ChallengeGrpcServiceGrpc.Challenge
                                     StreamObserver<GetChallengeContextResponse> responseObserver) {
         try {
             ChallengeContextResult result = challengeQueryService.getChallengeContext(
-                request.getRoutineTemplateId(), request.getUserId()
+                request.getChallengeId(), request.getUserId()
             );
 
             GetChallengeContextResponse response = GetChallengeContextResponse.newBuilder()
-                    .setIsChallengeRoutine(result.isChallengeRoutine())
-                    .setChallengeId(result.isChallengeRoutine() ? result.getChallengeId() : 0L)
-                    .setChallengeStatus(result.isChallengeRoutine() ? result.getStatus().name() : "")
-                    .setIsMemberActive(result.isMemberActive())
+                    // 도메인 enum과 proto enum의 상수 이름을 일치시켜 valueOf로 매핑한다
+                    .setChallengeStatus(ChallengeLifecycleStatus.valueOf(result.challengeStatus().name()))
+                    .setIsMemberActive(result.memberActive())
                     .build();
 
             responseObserver.onNext(response);
             responseObserver.onCompleted();
 
         } catch (BusinessException e) {
-            Status status = e.getErrorCode().getHttpStatus() == HttpStatus.NOT_FOUND
+            Status status = e.getErrorCode().getStatus() == ErrorStatus.NOT_FOUND
                     ? Status.NOT_FOUND : Status.INTERNAL;
             responseObserver.onError(status.withDescription(e.getMessage()).asRuntimeException());
         } catch (Exception e) {
-            log.error("getChallengeContext gRPC error - templateId: {}, userId: {}",
-                request.getRoutineTemplateId(), request.getUserId(), e);
+            log.error("getChallengeContext gRPC error - challengeId: {}, userId: {}",
+                request.getChallengeId(), request.getUserId(), e);
             responseObserver.onError(Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
         }
     }
@@ -267,10 +271,10 @@ Spring gRPC는 `GrpcChannelFactory`를 통해 채널을 생성하고, 생성된 
 @Slf4j
 public class ChallengeGrpcClient {
 
-    private final ChallengeServiceGrpc.ChallengeServiceBlockingStub stub;
+    private final ChallengeGrpcServiceGrpc.ChallengeGrpcServiceBlockingStub stub;
 
     public ChallengeGrpcClient(GrpcChannelFactory channelFactory) {
-        this.stub = ChallengeServiceGrpc.newBlockingStub(
+        this.stub = ChallengeGrpcServiceGrpc.newBlockingStub(
             channelFactory.createChannel("challenge-service")
         );
     }
@@ -290,18 +294,18 @@ public class ChallengeGrpcClient {
         }
     }
 
-    public ChallengeContext getChallengeContext(Long routineTemplateId, Long userId) {
+    public ChallengeContext getChallengeContext(Long challengeId, Long userId) {
         try {
             GetChallengeContextRequest request = GetChallengeContextRequest.newBuilder()
-                    .setRoutineTemplateId(routineTemplateId)
+                    .setChallengeId(challengeId)
                     .setUserId(userId)
                     .build();
             GetChallengeContextResponse response = stub.getChallengeContext(request);
-            return ChallengeContext.fromProto(response);
+            return ChallengeContext.fromProto(challengeId, response);
 
         } catch (StatusRuntimeException e) {
-            log.error("getChallengeContext gRPC failed - templateId: {}, userId: {}",
-                routineTemplateId, userId, e);
+            log.error("getChallengeContext gRPC failed - challengeId: {}, userId: {}",
+                challengeId, userId, e);
             if (e.getStatus().getCode() == Status.Code.NOT_FOUND) {
                 throw new BusinessException(ErrorCode.CHALLENGE_NOT_FOUND);
             }
@@ -333,25 +337,25 @@ spring:
 gRPC 응답을 도메인에서 받아쓰는 쪽(클라이언트 서비스)에 변환 객체를 둔다.
 
 ```java
-// chat-service: infrastructure/grpc/dto/ChallengeContext.java
+// routine-service: infrastructure/grpc/dto/ChallengeContext.java
 @Getter
 @AllArgsConstructor
 public class ChallengeContext {
 
-    private final Long   challengeId;
-    private final String status;
+    private final Long challengeId;                       // 호출자가 이미 보유한 값 (routine_templates.challenge_id)
+    private final ChallengeLifecycleStatus status;        // proto enum — 응답에 challenge_id는 없으므로 echo하지 않는다
     private final boolean memberActive;
 
-    public static ChallengeContext fromProto(GetChallengeContextResponse proto) {
+    public static ChallengeContext fromProto(Long challengeId, GetChallengeContextResponse proto) {
         return new ChallengeContext(
-            proto.getChallengeId(),
+            challengeId,
             proto.getChallengeStatus(),
             proto.getIsMemberActive()
         );
     }
 
     public boolean isActive() {
-        return "ACTIVE".equals(this.status);
+        return this.status == ChallengeLifecycleStatus.ACTIVE;
     }
 }
 ```
@@ -365,7 +369,7 @@ public class ChallengeContext {
 ```java
 // 비즈니스 예외 → gRPC Status 코드로 변환해서 전달
 } catch (BusinessException e) {
-    Status status = switch (e.getErrorCode().getHttpStatus()) {
+    Status status = switch (e.getErrorCode().getStatus()) {
         case NOT_FOUND -> Status.NOT_FOUND;
         case FORBIDDEN -> Status.PERMISSION_DENIED;
         default        -> Status.INTERNAL;
@@ -401,12 +405,12 @@ gRPC 클라이언트 호출에 Resilience4j Circuit Breaker + Timeout 적용.
 @RequiredArgsConstructor
 public class ChallengeGrpcClient {
 
-    private final ChallengeServiceGrpc.ChallengeServiceBlockingStub stub;
+    private final ChallengeGrpcServiceGrpc.ChallengeGrpcServiceBlockingStub stub;
     private final CircuitBreakerRegistry circuitBreakerRegistry;
 
     public ChallengeGrpcClient(GrpcChannelFactory channelFactory,
                                 CircuitBreakerRegistry circuitBreakerRegistry) {
-        this.stub = ChallengeServiceGrpc.newBlockingStub(
+        this.stub = ChallengeGrpcServiceGrpc.newBlockingStub(
             channelFactory.createChannel("challenge-service")
         );
         this.circuitBreakerRegistry = circuitBreakerRegistry;
