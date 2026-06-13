@@ -21,16 +21,55 @@ ChatService ──────────────→ ChallengeService
 
 RoutineService ────────────→ ChallengeService
                             (GetChallengeContext)
+
+ChallengeService ──────────→ RoutineService
+                            (ListCategories — Redis 캐싱)
 ```
 
 | Caller | Server | RPC | 호출 시점 |
 |--------|--------|-----|-----------|
 | ChatService | ChallengeService | `CheckMembership` | 채팅방 입장 또는 메시지 발송 전 멤버 검증 |
 | RoutineService | ChallengeService | `GetChallengeContext` | 챌린지 루틴 실행 완료 처리 전 유효성 검증 |
+| ChallengeService | RoutineService | `ListCategories` | 챌린지 생성 시 categoryCode 유효성 검증 (Redis TTL 24h 캐싱) |
 
 ---
 
 ## Proto 정의
+
+### `routine_service.proto`
+
+RoutineService가 gRPC 서버로 동작한다.
+
+```protobuf
+syntax = "proto3";
+
+package routinely.routine.v1;
+
+option java_multiple_files = true;
+option java_package = "com.routinely.proto.routine";
+option java_outer_classname = "RoutineServiceProto";
+
+service RoutineGrpcService {
+  // ChallengeService → RoutineService
+  // 카테고리 목록 조회 (challenge-service Redis 캐싱 — TTL 24h)
+  rpc ListCategories(ListCategoriesRequest) returns (ListCategoriesResponse);
+}
+
+message ListCategoriesRequest {}
+
+message CategoryItem {
+  string code          = 1;
+  string name          = 2;
+  string icon          = 3;
+  int32  display_order = 4;
+}
+
+message ListCategoriesResponse {
+  repeated CategoryItem categories = 1;
+}
+```
+
+---
 
 ### `challenge_service.proto`
 
@@ -91,6 +130,27 @@ message GetChallengeContextResponse {
 
 ## RPC 상세
 
+### `ListCategories`
+
+**호출자**: ChallengeService
+
+**호출 시점**:
+- 챌린지 생성 시 요청된 `categoryCode` 유효성 검증
+
+**처리 흐름**:
+
+```
+ChallengeService (챌린지 생성 요청 수신)
+    └── Redis 캐시 확인
+        ├── HIT  → 캐시된 카테고리 목록으로 검증
+        └── MISS → RoutineGrpcService.ListCategories({})
+                   └── Redis SET (TTL 24h) → 검증 수행
+```
+
+> Redis 키: `categories:active` — 카테고리는 정적 데이터이므로 TTL을 길게 설정한다.
+
+---
+
 ### `CheckMembership`
 
 **호출자**: ChatService
@@ -135,15 +195,18 @@ ChatService (HTTP 요청 수신)
 
 ```
 RoutineService (루틴 실행 완료 요청 수신)
-    ├── routine_templates.challenge_id == null → 개인 루틴으로 처리 (gRPC 호출 안 함)
-    └── routine_templates.challenge_id != null
-        └── ChallengeGrpcService.GetChallengeContext(challengeId, userId)
-            ├── challenge_status != "ACTIVE" → FORBIDDEN (CHALLENGE_ALREADY_ENDED 등)
-            ├── is_member_active == false    → FORBIDDEN (NOT_CHALLENGE_MEMBER)
-            └── 모두 통과 → 실행 완료 처리
+    ├── routine_templates 조회 → challenge_id 확인
+    │   ├── challenge_id IS NULL → 개인 루틴으로 처리 (gRPC 호출 불필요)
+    │   └── challenge_id IS NOT NULL → 챌린지 루틴
+    │       └── ChallengeGrpcService.GetChallengeContext(challengeId, userId)
+    │           ├── challenge_status != "ACTIVE" → FORBIDDEN (CHALLENGE_ALREADY_ENDED 등)
+    │           ├── is_member_active == false    → FORBIDDEN (NOT_CHALLENGE_MEMBER)
+    │           └── 모두 통과 → 실행 완료 처리
 ```
 
 **응답 케이스**:
+
+> RoutineService는 `routine_templates.challenge_id IS NOT NULL`인 경우에만 이 RPC를 호출한다.
 
 | 상황 | `challenge_status` | `is_member_active` |
 |------|--------------------|--------------------|
