@@ -92,9 +92,11 @@ Challenge는 그룹 역할을 겸한다 (MVP 단순화).
 - 통계 조회 (달성률, 스트릭, 그룹 평균, 그룹 내 랭킹)
 
 **소유 데이터**
-- ROUTINE_TEMPLATES
+- CATEGORIES (시스템 카테고리 — gRPC로 타 서비스에 제공)
+- ROUTINE_TEMPLATES (user_id + challenge_id 명시적 FK)
+- ROUTINES
 - ROUTINE_EXECUTIONS
-- FEED_ITEMS
+- FEED_CARDS
 - FEED_REACTIONS
 
 Routine은 Challenge를 참조할 수 있으나,
