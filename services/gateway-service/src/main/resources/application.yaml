@@ -33,7 +33,7 @@ spring:
             - id: routine-service
               uri: lb://routine-service
               predicates:
-                - Path=/api/v1/routine-templates/**,/api/v1/routine-executions/**,/api/v1/routines/**,/api/v1/feed/**,/api/v1/statistics/**
+                - Path=/api/v1/categories/**,/api/v1/routine-templates/**,/api/v1/routine-executions/**,/api/v1/routines/**,/api/v1/feed/**,/api/v1/statistics/**
               filters:
                 - name: CircuitBreaker
                   args:

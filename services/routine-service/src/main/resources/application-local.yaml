@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/routine_db
+    password: ${DB_PASSWORD:localpassword}
+  jpa:
+    properties:
+      hibernate:
+        format_sql: true
+    show-sql: true
+
+gateway:
+  secret: ${GATEWAY_SECRET:local-secret}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/

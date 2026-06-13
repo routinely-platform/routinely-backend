@@ -85,6 +85,7 @@ public class ApiResponse<T> {
 | `/api/v1/auth/**` | user-service |
 | `/api/v1/users/**` | user-service |
 | `/api/v1/challenges/**` | challenge-service |
+| `/api/v1/categories/**` | routine-service |
 | `/api/v1/routine-templates/**` | routine-service |
 | `/api/v1/routines/**` | routine-service |
 | `/api/v1/routine-executions/**` | routine-service |
@@ -627,6 +628,36 @@ public class ApiResponse<T> {
 
 ## 3. 루틴 (Routine Service)
 
+### 3-0. 카테고리
+
+#### `GET /api/v1/categories` — 카테고리 목록 조회
+- Auth: ✅
+- 챌린지/루틴 생성 화면 카테고리 드롭다운에서 사용한다.
+
+**Response** `200`
+```json
+{
+  "success": true,
+  "message": "카테고리 목록이 조회되었습니다.",
+  "data": [
+    { "code": "EXERCISE",     "name": "운동",        "icon": "🏃", "displayOrder": 1 },
+    { "code": "READING",      "name": "독서",        "icon": "📚", "displayOrder": 2 },
+    { "code": "STUDY",        "name": "공부/학습",   "icon": "📖", "displayOrder": 3 },
+    { "code": "LANGUAGE",     "name": "어학",        "icon": "🗣️", "displayOrder": 4 },
+    { "code": "HEALTH",       "name": "건강",        "icon": "💊", "displayOrder": 5 },
+    { "code": "SLEEP",        "name": "수면",        "icon": "😴", "displayOrder": 6 },
+    { "code": "DIET",         "name": "식습관",      "icon": "🥗", "displayOrder": 7 },
+    { "code": "MEDITATION",   "name": "명상/마음챙김","icon": "🧘", "displayOrder": 8 },
+    { "code": "SELF_IMPROVE", "name": "자기계발",    "icon": "🌱", "displayOrder": 9 },
+    { "code": "PRODUCTIVITY", "name": "생산성",      "icon": "⚡", "displayOrder": 10 },
+    { "code": "HOBBY",        "name": "취미",        "icon": "🎨", "displayOrder": 11 },
+    { "code": "QUIT_HABIT",   "name": "금연/금주",   "icon": "🚭", "displayOrder": 12 }
+  ]
+}
+```
+
+---
+
 ### 3-1. 루틴 템플릿
 
 #### `POST /api/v1/routine-templates` — 루틴 템플릿 생성
@@ -636,13 +667,15 @@ public class ApiResponse<T> {
 ```json
 {
   "title": "아침 달리기",
-  "category": "EXERCISE",
+  "categoryCode": "EXERCISE",
   "repeatType": "DAILY",
   "repeatValue": null,
-  "preferredTime": "07:00:00",
-  "ownerType": "PERSONAL"
+  "preferredTime": "07:00:00"
 }
 ```
+
+> 개인 루틴 생성 시 `challengeId` 없이 요청한다.  
+> 챌린지 루틴은 `challenge.created` 이벤트를 받은 routine-service가 내부적으로 생성한다 (클라이언트 직접 호출 아님).
 
 **Response** `201`
 ```json
@@ -652,12 +685,11 @@ public class ApiResponse<T> {
   "data": {
     "templateId": 1,
     "title": "아침 달리기",
-    "category": "EXERCISE",
+    "categoryCode": "EXERCISE",
     "repeatType": "DAILY",
     "repeatValue": null,
     "preferredTime": "07:00:00",
-    "ownerType": "PERSONAL",
-    "ownerId": 1
+    "challengeId": null
   }
 }
 ```
@@ -666,7 +698,7 @@ public class ApiResponse<T> {
 
 #### `GET /api/v1/routine-templates` — 내 루틴 템플릿 목록
 - Auth: ✅
-- Query: `ownerType` (PERSONAL/CHALLENGE), `challengeId`
+- Query: `type` (PERSONAL/CHALLENGE), `challengeId`, `categoryCode`
 
 **Response** `200`
 ```json
@@ -1286,9 +1318,8 @@ data: {"notificationId":2,"type":"CHALLENGE_EVENT","title":"새 멤버가 참여
 | `challenges.status` | `WAITING`, `ACTIVE`, `ENDED` |
 | `challenge_members.role` | `LEADER`, `MEMBER` |
 | `challenge_members.status` | `ACTIVE`, `LEFT`, `EXPELLED` |
-| `routine_templates.owner_type` | `PERSONAL`, `CHALLENGE` |
 | `routine_templates.repeat_type` | `DAILY`, `WEEKLY`, `WEEKLY_N`, `MONTHLY_N` |
-| `routine_templates.category` | `EXERCISE`, `STUDY`, `READING`, `LIFESTYLE` |
+| `categories.code` / `routine_templates.category_code` / `challenges.category_code` | `EXERCISE`, `READING`, `STUDY`, `LANGUAGE`, `HEALTH`, `SLEEP`, `DIET`, `MEDITATION`, `SELF_IMPROVE`, `PRODUCTIVITY`, `HOBBY`, `QUIT_HABIT` |
 | `routine_executions.status` | `PENDING`, `COMPLETED`, `MISSED` |
 | `chat_rooms.room_type` | `CHALLENGE`, `DIRECT` |
 | `chat_room_members.role` | `OWNER`, `MEMBER` |
