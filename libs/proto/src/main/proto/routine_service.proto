@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package routinely.routine.v1;
+
+option java_multiple_files = true;
+option java_package = "com.routinely.proto.routine";
+option java_outer_classname = "RoutineServiceProto";
+
+service RoutineGrpcService {
+  // ChallengeService → RoutineService
+  // 카테고리 목록 조회 (challenge-service Redis 캐싱 — TTL 24h)
+  rpc ListCategories(ListCategoriesRequest) returns (ListCategoriesResponse);
+}
+
+message ListCategoriesRequest {}
+
+message CategoryItem {
+  string code          = 1;
+  string name          = 2;
+  string icon          = 3;
+  int32  display_order = 4;
+}
+
+message ListCategoriesResponse {
+  repeated CategoryItem categories = 1;
+}
