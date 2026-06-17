@@ -13,6 +13,11 @@ spring:
       port: ${REDIS_PORT:6379}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+  grpc:
+    client:
+      channels:
+        routine-service:
+          address: "static://${ROUTINE_SERVICE_HOST:localhost}:${ROUTINE_SERVICE_GRPC_PORT:9082}"
 
 gateway:
   secret: ${GATEWAY_SECRET:local-secret}

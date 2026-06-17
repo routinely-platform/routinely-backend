@@ -90,7 +90,7 @@ class ChallengeServiceTest {
                 LocalDate.of(2026, 6, 24)
         );
 
-        ChallengeResult result = challengeService.createChallenge(100L, command);
+        ChallengeResult result = challengeService.createChallengeAfterCategoryValidation(100L, command);
 
         ArgumentCaptor<Challenge> challengeCaptor = ArgumentCaptor.forClass(Challenge.class);
         verify(challengeRepository).save(challengeCaptor.capture());
@@ -138,7 +138,7 @@ class ChallengeServiceTest {
                 LocalDate.of(2026, 6, 24)
         );
 
-        ChallengeResult result = challengeService.createChallenge(100L, command);
+        ChallengeResult result = challengeService.createChallengeAfterCategoryValidation(100L, command);
 
         ArgumentCaptor<Challenge> challengeCaptor = ArgumentCaptor.forClass(Challenge.class);
         verify(challengeRepository).save(challengeCaptor.capture());
