@@ -1,5 +1,6 @@
 package com.routinely.challenge_service.presentation.rest.challenge;
 
+import com.routinely.challenge_service.application.ChallengeCreationService;
 import com.routinely.challenge_service.application.ChallengeService;
 import com.routinely.challenge_service.application.dto.ChallengeListResult;
 import com.routinely.challenge_service.application.dto.ChallengeMemberResult;
@@ -45,9 +46,12 @@ import static org.springframework.http.HttpStatus.CREATED;
 public class ChallengeController {
 
     private final ChallengeService challengeService;
+    private final ChallengeCreationService challengeCreationService;
 
-    public ChallengeController(ChallengeService challengeService) {
+    public ChallengeController(ChallengeService challengeService,
+                               ChallengeCreationService challengeCreationService) {
         this.challengeService = challengeService;
+        this.challengeCreationService = challengeCreationService;
     }
 
     @PostMapping
@@ -55,7 +59,7 @@ public class ChallengeController {
             @RequestHeader(HeaderConstants.USER_ID) Long userId,
             @RequestBody @Valid CreateChallengeRequest request) {
 
-        ChallengeResult result = challengeService.createChallenge(userId, request.toCommand());
+        ChallengeResult result = challengeCreationService.createChallenge(userId, request.toCommand());
         return ResponseEntity.status(CREATED)
                 .body(ApiResponse.ok("챌린지가 생성되었습니다.", ChallengeResponse.from(result)));
     }

@@ -74,7 +74,7 @@ public class ChallengeService {
     }
 
     @Transactional
-    public ChallengeResult createChallenge(Long creatorUserId, CreateChallengeCommand command) {
+    public ChallengeResult createChallengeAfterCategoryValidation(Long creatorUserId, CreateChallengeCommand command) {
         String inviteCode = command.isPublic() ? null : generateInviteCode();
 
         Challenge challenge = Challenge.create(command, creatorUserId, inviteCode);
@@ -83,7 +83,7 @@ public class ChallengeService {
         ChallengeMember leader = ChallengeMember.createLeader(savedChallenge, creatorUserId, now());
         challengeMemberRepository.save(leader);
 
-        // TODO: #48 - ChallengeCreatedEvent Outbox 저장
+        // TODO: #132 - ChallengeCreatedEvent Outbox 저장
         //   - routine-service: 챌린지 연결 루틴 템플릿 생성
         //   - notification-service: 초대 대상자에게 초대 알림 발송
 
