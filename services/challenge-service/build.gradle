@@ -18,6 +18,8 @@ dependencies {
 	implementation 'net.javacrumbs.shedlock:shedlock-provider-redis-spring:6.9.1'
 	implementation 'io.grpc:grpc-services'
 	implementation 'org.springframework.grpc:spring-grpc-server-spring-boot-starter'
+	implementation 'org.springframework.grpc:spring-grpc-client-spring-boot-starter'
+	implementation 'org.springframework.cloud:spring-cloud-starter-circuitbreaker-resilience4j'
 	implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
 	annotationProcessor 'com.querydsl:querydsl-apt:5.1.0:jakarta'
 	annotationProcessor 'jakarta.annotation:jakarta.annotation-api'

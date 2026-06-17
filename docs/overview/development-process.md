@@ -86,7 +86,7 @@ Spring Initializr에서 받은 zip을 통째로 쓰지 않는다.
 | `services/gateway` | Gateway, Eureka Discovery Client | `common-core`, `common-observability` |
 | `services/user-service` | PostgreSQL Driver, Flyway | `common-web`, `common-jpa`, `common-observability`, `spring-security-crypto` |
 | `services/routine-service` | PostgreSQL Driver, Flyway, Kafka, **Spring gRPC Server, Spring gRPC Client** | `common-web`, `common-jpa`, `common-observability`, `proto` |
-| `services/challenge-service` | PostgreSQL Driver, Flyway, Kafka, **Spring gRPC Server** | `common-web`, `common-jpa`, `common-observability`, `proto` |
+| `services/challenge-service` | PostgreSQL Driver, Flyway, Kafka, **Spring gRPC Server, Spring gRPC Client** | `common-web`, `common-jpa`, `common-observability`, `proto` |
 | `services/chat-service` | WebSocket, PostgreSQL Driver, Flyway, Kafka, **Spring gRPC Client** | `common-web`, `common-jpa`, `common-observability`, `proto` |
 | `services/notification-service` | PostgreSQL Driver, Flyway, Kafka | `common-web`, `common-jpa`, `common-observability` |
 
