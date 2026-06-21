@@ -7,9 +7,11 @@ import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
+import java.util.Set;
 
 public record CreateChallengeRequest(
         @NotBlank(message = "챌린지 이름은 필수입니다.")
@@ -35,7 +37,21 @@ public record CreateChallengeRequest(
         LocalDate startedAt,
 
         @NotNull(message = "종료일은 필수입니다.")
-        LocalDate endedAt) {
+        LocalDate endedAt,
+
+        @NotBlank(message = "루틴 이름은 필수입니다.")
+        @Size(max = 100, message = "루틴 이름은 100자 이하여야 합니다.")
+        String routineTitle,
+
+        @NotBlank(message = "반복 유형은 필수입니다.")
+        @Pattern(regexp = "^(DAILY|DAILY_N|WEEKLY|WEEKLY_N|MONTHLY_N)$", message = "올바르지 않은 반복 유형입니다.")
+        String repeatType,
+
+        @Min(value = 1, message = "반복 횟수는 1 이상이어야 합니다.")
+        Integer repeatValue) {
+
+    // repeat_value는 DAILY_N/WEEKLY_N/MONTHLY_N에서만 의미가 있다 (routine_templates.ck_rt_repeat_value 미러링).
+    private static final Set<String> REPEAT_VALUE_REQUIRED_TYPES = Set.of("DAILY_N", "WEEKLY_N", "MONTHLY_N");
 
     @JsonIgnore
     @AssertTrue(message = "종료일은 시작일보다 빠를 수 없습니다.")
@@ -43,7 +59,19 @@ public record CreateChallengeRequest(
         return startedAt == null || endedAt == null || !endedAt.isBefore(startedAt);
     }
 
+    @JsonIgnore
+    @AssertTrue(message = "반복 횟수는 DAILY_N/WEEKLY_N/MONTHLY_N에서만 지정할 수 있으며, 해당 유형에서는 필수입니다.")
+    public boolean isRepeatValueValid() {
+        if (repeatType == null) {
+            return true; // repeatType 누락은 @NotBlank가 처리한다.
+        }
+        boolean valueRequired = REPEAT_VALUE_REQUIRED_TYPES.contains(repeatType);
+        return valueRequired ? repeatValue != null : repeatValue == null;
+    }
+
     public CreateChallengeCommand toCommand() {
-        return new CreateChallengeCommand(title, description, isPublic, maxMembers, categoryCode, startedAt, endedAt);
+        return new CreateChallengeCommand(
+                title, description, isPublic, maxMembers, categoryCode, startedAt, endedAt,
+                routineTitle, repeatType, repeatValue);
     }
 }

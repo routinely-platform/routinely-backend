@@ -7,6 +7,7 @@ import com.routinely.challenge_service.application.dto.ChallengeMemberResult;
 import com.routinely.challenge_service.application.dto.ChallengeResult;
 import com.routinely.challenge_service.application.dto.CreateChallengeCommand;
 import com.routinely.challenge_service.application.dto.UpdateChallengeCommand;
+import com.routinely.challenge_service.application.event.ChallengeCreatedEvent;
 import com.routinely.challenge_service.application.event.ChallengeMemberJoinedEvent;
 import com.routinely.challenge_service.application.event.ChallengeMemberLeftEvent;
 import com.routinely.challenge_service.domain.challenge.Challenge;
@@ -52,6 +53,8 @@ import static com.routinely.core.exception.ErrorCode.VALIDATION_FAILED;
 @Transactional(readOnly = true)
 public class ChallengeService {
 
+    private static final String AGGREGATE_TYPE = "challenge";
+
     private final ChallengeRepository challengeRepository;
     private final ChallengeQueryRepository challengeQueryRepository;
     private final ChallengeMemberRepository challengeMemberRepository;
@@ -83,9 +86,7 @@ public class ChallengeService {
         ChallengeMember leader = ChallengeMember.createLeader(savedChallenge, creatorUserId, now());
         challengeMemberRepository.save(leader);
 
-        // TODO: #132 - ChallengeCreatedEvent Outbox 저장
-        //   - routine-service: 챌린지 연결 루틴 템플릿 생성
-        //   - notification-service: 초대 대상자에게 초대 알림 발송
+        saveCreatedOutbox(savedChallenge, creatorUserId, command, toEventOccurredAt(now()));
 
         return ChallengeResult.from(
                 savedChallenge,
@@ -248,6 +249,30 @@ public class ChallengeService {
         }
     }
 
+    private void saveCreatedOutbox(Challenge challenge, Long creatorUserId, CreateChallengeCommand command, String occurredAt) {
+        // routine-service가 추가 RPC 없이 루틴 템플릿을 생성할 수 있도록 self-contained payload를 구성한다.
+        // 루틴 필드(routineTitle/repeatType/repeatValue)는 challenge-service가 저장하지 않고 그대로 전달한다.
+        // 선호 시간은 챌린지 템플릿이 정하지 않으며, 멤버별 routine 인스턴스에서 개별 설정한다 (ADR-0035).
+        ChallengeCreatedEvent event = new ChallengeCreatedEvent(
+                UUID.randomUUID().toString(),
+                occurredAt,
+                challenge.getId(),
+                creatorUserId,
+                challenge.getCategoryCode(),
+                command.routineTitle(),
+                command.repeatType(),
+                command.repeatValue(),
+                challenge.getStartedAt().toString(),
+                challenge.getEndedAt().toString()
+        );
+        String payload = serializeEvent(event);
+        // 챌린지는 한 번만 생성되므로 challengeId만으로 유일성을 보장한다.
+        String idempotencyKey = KafkaTopic.CHALLENGE_CREATED + ":" + challenge.getId();
+        challengeOutboxRepository.save(
+                ChallengeOutbox.create(AGGREGATE_TYPE, challenge.getId(), KafkaTopic.CHALLENGE_CREATED, payload, idempotencyKey)
+        );
+    }
+
     private void saveJoinedOutbox(Challenge challenge, Long userId, ChallengeMemberRole role, String occurredAt) {
         ChallengeMemberJoinedEvent event = new ChallengeMemberJoinedEvent(
                 UUID.randomUUID().toString(),
@@ -260,7 +285,7 @@ public class ChallengeService {
         String payload = serializeEvent(event);
         String idempotencyKey = KafkaTopic.CHALLENGE_MEMBER_JOINED + ":" + challenge.getId() + ":" + userId + ":" + occurredAt;
         challengeOutboxRepository.save(
-                ChallengeOutbox.create("challenge", challenge.getId(), KafkaTopic.CHALLENGE_MEMBER_JOINED, payload, idempotencyKey)
+                ChallengeOutbox.create(AGGREGATE_TYPE, challenge.getId(), KafkaTopic.CHALLENGE_MEMBER_JOINED, payload, idempotencyKey)
         );
     }
 
@@ -275,7 +300,7 @@ public class ChallengeService {
         String payload = serializeEvent(event);
         String idempotencyKey = KafkaTopic.CHALLENGE_MEMBER_LEFT + ":" + challengeId + ":" + userId + ":" + occurredAt;
         challengeOutboxRepository.save(
-                ChallengeOutbox.create("challenge", challengeId, KafkaTopic.CHALLENGE_MEMBER_LEFT, payload, idempotencyKey)
+                ChallengeOutbox.create(AGGREGATE_TYPE, challengeId, KafkaTopic.CHALLENGE_MEMBER_LEFT, payload, idempotencyKey)
         );
     }
 

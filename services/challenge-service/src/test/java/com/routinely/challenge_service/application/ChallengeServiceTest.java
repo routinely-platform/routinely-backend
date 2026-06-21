@@ -87,7 +87,10 @@ class ChallengeServiceTest {
                 10,
                 "EXERCISE",
                 LocalDate.of(2026, 5, 25),
-                LocalDate.of(2026, 6, 24)
+                LocalDate.of(2026, 6, 24),
+                "아침 러닝 30분",
+                "DAILY",
+                null
         );
 
         ChallengeResult result = challengeService.createChallengeAfterCategoryValidation(100L, command);
@@ -135,7 +138,10 @@ class ChallengeServiceTest {
                 10,
                 "EXERCISE",
                 LocalDate.of(2026, 5, 25),
-                LocalDate.of(2026, 6, 24)
+                LocalDate.of(2026, 6, 24),
+                "아침 러닝 30분",
+                "DAILY",
+                null
         );
 
         ChallengeResult result = challengeService.createChallengeAfterCategoryValidation(100L, command);
@@ -145,6 +151,51 @@ class ChallengeServiceTest {
         assertThat(challengeCaptor.getValue().isPublic()).isTrue();
         assertThat(challengeCaptor.getValue().getInviteCode()).isNull();
         assertThat(result.inviteCode()).isNull();
+    }
+
+    @Test
+    @DisplayName("챌린지생성_challenge.created이벤트를_Outbox에저장한다")
+    void createChallenge_savesChallengeCreatedOutbox() {
+        when(challengeRepository.save(any(Challenge.class))).thenAnswer(invocation -> {
+            Challenge challenge = invocation.getArgument(0);
+            ReflectionTestUtils.setField(challenge, "id", 1L);
+            ReflectionTestUtils.setField(challenge, "createdAt", LocalDateTime.now(FIXED_CLOCK));
+            return challenge;
+        });
+
+        CreateChallengeCommand command = new CreateChallengeCommand(
+                "30일 러닝 챌린지",
+                "매일 달리기",
+                true,
+                10,
+                "EXERCISE",
+                LocalDate.of(2026, 5, 25),
+                LocalDate.of(2026, 6, 24),
+                "아침 러닝 30분",
+                "WEEKLY_N",
+                3
+        );
+
+        challengeService.createChallengeAfterCategoryValidation(100L, command);
+
+        ArgumentCaptor<ChallengeOutbox> outboxCaptor = ArgumentCaptor.forClass(ChallengeOutbox.class);
+        verify(challengeOutboxRepository).save(outboxCaptor.capture());
+        ChallengeOutbox outbox = outboxCaptor.getValue();
+        assertThat(outbox.getEventType()).isEqualTo("challenge.created");
+        assertThat(outbox.getAggregateType()).isEqualTo("challenge");
+        assertThat(outbox.getAggregateId()).isEqualTo(1L);
+        assertThat(outbox.getIdempotencyKey()).isEqualTo("challenge.created:1");
+        assertThat(outbox.getPayload())
+                .contains("\"occurredAt\":\"2026-05-24T00:00:00Z\"")
+                .contains("\"challengeId\":1")
+                .contains("\"creatorUserId\":100")
+                .contains("\"categoryCode\":\"EXERCISE\"")
+                .contains("\"routineTitle\":\"아침 러닝 30분\"")
+                .contains("\"repeatType\":\"WEEKLY_N\"")
+                .contains("\"repeatValue\":3")
+                .doesNotContain("preferredTime")
+                .contains("\"startedAt\":\"2026-05-25\"")
+                .contains("\"endedAt\":\"2026-06-24\"");
     }
 
     @Test

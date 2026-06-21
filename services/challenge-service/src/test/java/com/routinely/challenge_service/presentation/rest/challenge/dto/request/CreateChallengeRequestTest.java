@@ -51,7 +51,10 @@ class CreateChallengeRequestTest {
                 10,
                 "EXERCISE",
                 LocalDate.now().plusDays(1),
-                LocalDate.now().plusDays(30)
+                LocalDate.now().plusDays(30),
+                "아침 러닝 30분",
+                "DAILY",
+                null
         );
 
         Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
@@ -73,7 +76,10 @@ class CreateChallengeRequestTest {
                 10,
                 "EXERCISE",
                 LocalDate.now().plusDays(1),
-                LocalDate.now().plusDays(30)
+                LocalDate.now().plusDays(30),
+                "아침 러닝 30분",
+                "DAILY",
+                null
         );
 
         Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
@@ -95,7 +101,10 @@ class CreateChallengeRequestTest {
                 1,
                 "EXERCISE",
                 LocalDate.now().plusDays(1),
-                LocalDate.now().plusDays(30)
+                LocalDate.now().plusDays(30),
+                "아침 러닝 30분",
+                "DAILY",
+                null
         );
 
         Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
@@ -117,7 +126,10 @@ class CreateChallengeRequestTest {
                 10,
                 "A".repeat(31),
                 LocalDate.now().plusDays(1),
-                LocalDate.now().plusDays(30)
+                LocalDate.now().plusDays(30),
+                "아침 러닝 30분",
+                "DAILY",
+                null
         );
 
         Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
@@ -139,7 +151,10 @@ class CreateChallengeRequestTest {
                 10,
                 "EXERCISE",
                 LocalDate.now().minusDays(1),
-                LocalDate.now().plusDays(30)
+                LocalDate.now().plusDays(30),
+                "아침 러닝 30분",
+                "DAILY",
+                null
         );
 
         Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
@@ -162,13 +177,211 @@ class CreateChallengeRequestTest {
                 10,
                 "EXERCISE",
                 startedAt,
-                startedAt.minusDays(1)
+                startedAt.minusDays(1),
+                "아침 러닝 30분",
+                "DAILY",
+                null
         );
 
         Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
 
         assertThat(violations)
                 .anySatisfy(violation -> assertThat(violation.getMessage()).isEqualTo("종료일은 시작일보다 빠를 수 없습니다."));
+    }
+
+    @Test
+    @DisplayName("루틴이름이공백이면_검증에실패한다")
+    void validate_whenRoutineTitleBlank_fails() {
+        CreateChallengeRequest request = new CreateChallengeRequest(
+                "30일 러닝 챌린지",
+                "매일 달리기",
+                true,
+                10,
+                "EXERCISE",
+                LocalDate.now().plusDays(1),
+                LocalDate.now().plusDays(30),
+                "   ",
+                "DAILY",
+                null
+        );
+
+        Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
+
+        assertThat(violations)
+                .anySatisfy(violation -> {
+                    assertThat(violation.getPropertyPath()).hasToString("routineTitle");
+                    assertThat(violation.getMessage()).isEqualTo("루틴 이름은 필수입니다.");
+                });
+    }
+
+    @Test
+    @DisplayName("반복유형이공백이면_검증에실패한다")
+    void validate_whenRepeatTypeBlank_fails() {
+        CreateChallengeRequest request = new CreateChallengeRequest(
+                "30일 러닝 챌린지",
+                "매일 달리기",
+                true,
+                10,
+                "EXERCISE",
+                LocalDate.now().plusDays(1),
+                LocalDate.now().plusDays(30),
+                "아침 러닝 30분",
+                "   ",
+                null
+        );
+
+        Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
+
+        assertThat(violations)
+                .anySatisfy(violation -> {
+                    assertThat(violation.getPropertyPath()).hasToString("repeatType");
+                    assertThat(violation.getMessage()).isEqualTo("반복 유형은 필수입니다.");
+                });
+    }
+
+    @Test
+    @DisplayName("반복유형이유효하지않으면_검증에실패한다")
+    void validate_whenRepeatTypeInvalid_fails() {
+        CreateChallengeRequest request = new CreateChallengeRequest(
+                "30일 러닝 챌린지",
+                "매일 달리기",
+                true,
+                10,
+                "EXERCISE",
+                LocalDate.now().plusDays(1),
+                LocalDate.now().plusDays(30),
+                "아침 러닝 30분",
+                "INVALID_TYPE",
+                null
+        );
+
+        Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
+
+        assertThat(violations)
+                .anySatisfy(violation -> {
+                    assertThat(violation.getPropertyPath()).hasToString("repeatType");
+                    assertThat(violation.getMessage()).isEqualTo("올바르지 않은 반복 유형입니다.");
+                });
+    }
+
+    @Test
+    @DisplayName("WEEKLY_N인데반복횟수가없으면_검증에실패한다")
+    void validate_whenWeeklyNWithoutRepeatValue_fails() {
+        CreateChallengeRequest request = new CreateChallengeRequest(
+                "30일 러닝 챌린지",
+                "매일 달리기",
+                true,
+                10,
+                "EXERCISE",
+                LocalDate.now().plusDays(1),
+                LocalDate.now().plusDays(30),
+                "아침 러닝 30분",
+                "WEEKLY_N",
+                null
+        );
+
+        Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
+
+        assertThat(violations)
+                .anySatisfy(violation -> {
+                    assertThat(violation.getPropertyPath()).hasToString("repeatValueValid");
+                    assertThat(violation.getMessage())
+                            .isEqualTo("반복 횟수는 DAILY_N/WEEKLY_N/MONTHLY_N에서만 지정할 수 있으며, 해당 유형에서는 필수입니다.");
+                });
+    }
+
+    @Test
+    @DisplayName("DAILY_N인데반복횟수가없으면_검증에실패한다")
+    void validate_whenDailyNWithoutRepeatValue_fails() {
+        CreateChallengeRequest request = new CreateChallengeRequest(
+                "30일 러닝 챌린지",
+                "매일 달리기",
+                true,
+                10,
+                "EXERCISE",
+                LocalDate.now().plusDays(1),
+                LocalDate.now().plusDays(30),
+                "아침 러닝 30분",
+                "DAILY_N",
+                null
+        );
+
+        Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
+
+        assertThat(violations)
+                .anySatisfy(violation -> {
+                    assertThat(violation.getPropertyPath()).hasToString("repeatValueValid");
+                    assertThat(violation.getMessage())
+                            .isEqualTo("반복 횟수는 DAILY_N/WEEKLY_N/MONTHLY_N에서만 지정할 수 있으며, 해당 유형에서는 필수입니다.");
+                });
+    }
+
+    @Test
+    @DisplayName("DAILY_N에반복횟수가있으면_검증에성공한다")
+    void validate_whenDailyNWithRepeatValue_succeeds() {
+        CreateChallengeRequest request = new CreateChallengeRequest(
+                "30일 러닝 챌린지",
+                "매일 달리기",
+                true,
+                10,
+                "EXERCISE",
+                LocalDate.now().plusDays(1),
+                LocalDate.now().plusDays(30),
+                "아침 러닝 30분",
+                "DAILY_N",
+                3
+        );
+
+        Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
+
+        assertThat(violations).isEmpty();
+    }
+
+    @Test
+    @DisplayName("WEEKLY_N인데반복횟수가0이면_검증에실패한다")
+    void validate_whenWeeklyNWithNonPositiveRepeatValue_fails() {
+        CreateChallengeRequest request = new CreateChallengeRequest(
+                "30일 러닝 챌린지",
+                "매일 달리기",
+                true,
+                10,
+                "EXERCISE",
+                LocalDate.now().plusDays(1),
+                LocalDate.now().plusDays(30),
+                "아침 러닝 30분",
+                "WEEKLY_N",
+                0
+        );
+
+        Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
+
+        assertThat(violations)
+                .anySatisfy(violation -> {
+                    assertThat(violation.getPropertyPath()).hasToString("repeatValue");
+                    assertThat(violation.getMessage()).isEqualTo("반복 횟수는 1 이상이어야 합니다.");
+                });
+    }
+
+    @Test
+    @DisplayName("DAILY인데반복횟수가있으면_검증에실패한다")
+    void validate_whenDailyWithRepeatValue_fails() {
+        CreateChallengeRequest request = new CreateChallengeRequest(
+                "30일 러닝 챌린지",
+                "매일 달리기",
+                true,
+                10,
+                "EXERCISE",
+                LocalDate.now().plusDays(1),
+                LocalDate.now().plusDays(30),
+                "아침 러닝 30분",
+                "DAILY",
+                3
+        );
+
+        Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
+
+        assertThat(violations)
+                .anySatisfy(violation -> assertThat(violation.getPropertyPath()).hasToString("repeatValueValid"));
     }
 
     private CreateChallengeRequest validRequest() {
@@ -179,7 +392,10 @@ class CreateChallengeRequestTest {
                 10,
                 "EXERCISE",
                 LocalDate.now().plusDays(1),
-                LocalDate.now().plusDays(30)
+                LocalDate.now().plusDays(30),
+                "아침 러닝 30분",
+                "DAILY",
+                null
         );
     }
 }
