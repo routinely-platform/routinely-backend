@@ -91,7 +91,7 @@ RabbitMQ는 채택하지 않는다.
 
 Routinely의 핵심 흐름은 이벤트 기반이다:
 
-- `routine.execution.done`
+- `routine.execution.completed`
 - `challenge.member.joined`
 - `chat.message.created`
 
@@ -142,12 +142,21 @@ RabbitMQ는 작업 큐 성격에 강점이 있으나,
 
 ## Usage in Routinely
 
-Kafka는 다음 이벤트에 사용된다:
+### 구현 완료 토픽 (challenge-service)
 
-- `routine.execution.done`
-- `challenge.member.joined`
-- `challenge.member.left`
-- `chat.message.created`
+| 토픽 | 발행 서비스 | 소비 서비스 |
+|---|---|---|
+| `challenge.created` | challenge-service | routine-service |
+| `challenge.member.joined` | challenge-service | chat-service |
+| `challenge.member.left` | challenge-service | chat-service |
+| `challenge.started` | challenge-service | routine-service |
+
+### 구현 예정 토픽
+
+| 토픽 | 발행 서비스 | 소비 서비스 |
+|---|---|---|
+| `routine.execution.completed` | routine-service | challenge-service, notification-service |
+| `chat.message.created` | chat-service | chat-service (멀티 인스턴스 브로드캐스트) |
 
 Kafka는 "이 일이 발생했다"는 사실을 전달하는 용도로 사용하며,
 서비스 내부 작업 처리는 담당하지 않는다.
