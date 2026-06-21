@@ -91,7 +91,8 @@
 
 - `docs/requirements/event-spec.md`에 `challenge.created` 토픽 명세 추가 필요 (현재 미정의)
 - 페이로드에는 routine-service가 추가 RPC 없이 자기 완결적으로 템플릿을 생성할 수 있도록
-  `challengeId`, `routineTitle`, `repeatType`, `repeatValue`, `preferredTime`, `startedAt`, `endedAt` 등을 포함한다
+  `challengeId`, `routineTitle`, `repeatType`, `repeatValue`, `startedAt`, `endedAt` 등을 포함한다
+  (선호 수행 시각은 멤버별 `routines` 인스턴스에서 설정하므로 페이로드에 포함하지 않는다 — ADR-0035)
 - `ChallengeService.createChallenge()`의 `TODO: #48` 주석은 이슈 번호가 낡았다
   (실제 #48은 Redis ZSET 랭킹 이슈) — 구현 이슈 생성 시 번호 정정 필요
 

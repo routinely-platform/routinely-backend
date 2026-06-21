@@ -342,11 +342,17 @@ public class ApiResponse<T> {
   "categoryCode": "EXERCISE",
   "isPublic": true,
   "maxMembers": 10,
-  "categoryCode": "EXERCISE",
   "startedAt": "2025-02-01",
-  "endedAt": "2025-03-02"
+  "endedAt": "2025-03-02",
+  "routineTitle": "아침 운동 30분",
+  "repeatType": "DAILY",
+  "repeatValue": null
 }
 ```
+
+> 루틴 정보(`routineTitle`, `repeatType`, `repeatValue`)도 함께 입력한다. challenge-service는 저장하지 않고 `challenge.created` 이벤트로 전달한다 (#132).
+> `repeatType`: `DAILY`(매일) \| `DAILY_N`(일 N회) \| `WEEKLY`(매주 1회) \| `WEEKLY_N`(주 N회) \| `MONTHLY_N`(월 N회). `repeatValue`는 `DAILY_N`/`WEEKLY_N`/`MONTHLY_N`일 때만 1 이상으로 필수이며, 그 외 유형에서는 `null`이다.
+> 선호 수행 시각은 챌린지 생성 시 입력받지 않는다. 챌린지 루틴은 모든 멤버에게 동일하지만(ADR-0026), 알림 시각은 개인 일과에 종속되므로 멤버 각자가 본인 `routines` 인스턴스에서 설정한다 (ADR-0035).
 
 **Response** `201`
 ```json
@@ -669,13 +675,13 @@ public class ApiResponse<T> {
   "title": "아침 달리기",
   "categoryCode": "EXERCISE",
   "repeatType": "DAILY",
-  "repeatValue": null,
-  "preferredTime": "07:00:00"
+  "repeatValue": null
 }
 ```
 
 > 개인 루틴 생성 시 `challengeId` 없이 요청한다.  
-> 챌린지 루틴은 `challenge.created` 이벤트를 받은 routine-service가 내부적으로 생성한다 (클라이언트 직접 호출 아님).
+> 챌린지 루틴은 `challenge.created` 이벤트를 받은 routine-service가 내부적으로 생성한다 (클라이언트 직접 호출 아님).  
+> 선호 수행 시각(`preferredTime`)은 템플릿(정의)이 아니라 루틴 인스턴스 속성이다. `POST /api/v1/routines`에서 설정한다 (ADR-0035).
 
 **Response** `201`
 ```json
@@ -688,7 +694,6 @@ public class ApiResponse<T> {
     "categoryCode": "EXERCISE",
     "repeatType": "DAILY",
     "repeatValue": null,
-    "preferredTime": "07:00:00",
     "challengeId": null
   }
 }
@@ -717,10 +722,11 @@ public class ApiResponse<T> {
 **Request**
 ```json
 {
-  "title": "저녁 달리기",
-  "preferredTime": "19:00:00"
+  "title": "저녁 달리기"
 }
 ```
+
+> 템플릿은 루틴의 정의(`title`, `repeatType`, `repeatValue`)만 수정한다. 선호 수행 시각은 `PATCH /api/v1/routines/{routineId}`에서 수정한다 (ADR-0035).
 
 **Response** `200`
 ```json
@@ -729,8 +735,7 @@ public class ApiResponse<T> {
   "message": "루틴 템플릿이 수정되었습니다.",
   "data": {
     "templateId": 1,
-    "title": "저녁 달리기",
-    "preferredTime": "19:00:00"
+    "title": "저녁 달리기"
   }
 }
 ```
@@ -761,9 +766,13 @@ public class ApiResponse<T> {
   "routineTemplateId": 1,
   "startedAt": "2025-02-01",
   "endedAt": "2025-03-02",
+  "preferredTime": "07:00:00",
   "challengeId": null
 }
 ```
+
+> `preferredTime`(HH:mm:ss)은 알림 발송 기준 시각이며 선택값이다. 생략(`null`)하면 리마인더를 발송하지 않는다.
+> 챌린지 루틴 인스턴스는 `challenge.started` 수신 시 `preferredTime = null`로 생성되며, 멤버가 이후 `PATCH /api/v1/routines/{routineId}`로 설정한다 (ADR-0035).
 
 **Response** `201`
 ```json
@@ -776,6 +785,7 @@ public class ApiResponse<T> {
     "title": "아침 달리기",
     "startedAt": "2025-02-01",
     "endedAt": "2025-03-02",
+    "preferredTime": "07:00:00",
     "isActive": true
   }
 }
@@ -818,6 +828,33 @@ public class ApiResponse<T> {
       "completedAt": null
     }
   ]
+}
+```
+
+---
+
+#### `PATCH /api/v1/routines/{routineId}` — 알림 시간 설정/수정
+- Auth: ✅
+
+**Request**
+```json
+{
+  "preferredTime": "07:00:00"
+}
+```
+
+> 본인 루틴 인스턴스의 선호 수행 시각(알림 발송 기준)을 설정·수정한다. `null`로 보내면 리마인더를 끈다.
+> 개인/챌린지 루틴 모두 인스턴스 단위로 멤버가 직접 설정한다 (ADR-0035).
+
+**Response** `200`
+```json
+{
+  "success": true,
+  "message": "알림 시간이 설정되었습니다.",
+  "data": {
+    "routineId": 1,
+    "preferredTime": "07:00:00"
+  }
 }
 ```
 
@@ -1318,7 +1355,7 @@ data: {"notificationId":2,"type":"CHALLENGE_EVENT","title":"새 멤버가 참여
 | `challenges.status` | `WAITING`, `ACTIVE`, `ENDED` |
 | `challenge_members.role` | `LEADER`, `MEMBER` |
 | `challenge_members.status` | `ACTIVE`, `LEFT`, `EXPELLED` |
-| `routine_templates.repeat_type` | `DAILY`, `WEEKLY`, `WEEKLY_N`, `MONTHLY_N` |
+| `routine_templates.repeat_type` | `DAILY`, `DAILY_N`, `WEEKLY`, `WEEKLY_N`, `MONTHLY_N` |
 | `categories.code` / `routine_templates.category_code` / `challenges.category_code` | `EXERCISE`, `READING`, `STUDY`, `LANGUAGE`, `HEALTH`, `SLEEP`, `DIET`, `MEDITATION`, `SELF_IMPROVE`, `PRODUCTIVITY`, `HOBBY`, `QUIT_HABIT` |
 | `routine_executions.status` | `PENDING`, `COMPLETED`, `MISSED` |
 | `chat_rooms.room_type` | `CHALLENGE`, `DIRECT` |

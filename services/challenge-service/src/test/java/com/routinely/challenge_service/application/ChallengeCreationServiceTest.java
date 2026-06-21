@@ -82,7 +82,10 @@ class ChallengeCreationServiceTest {
                 10,
                 categoryCode,
                 LocalDate.of(2026, 5, 25),
-                LocalDate.of(2026, 6, 24)
+                LocalDate.of(2026, 6, 24),
+                "아침 러닝 30분",
+                "DAILY",
+                null
         );
     }
 }
