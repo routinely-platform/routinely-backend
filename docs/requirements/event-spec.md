@@ -41,6 +41,7 @@
 |------|-----------|---------------|---------------|
 | `routine.execution.completed` | RoutineService | RoutineService, ChallengeService, NotificationService | `userId` |
 | `routine.notification.scheduled` | RoutineService | NotificationService | `userId` |
+| `challenge.created` | ChallengeService | RoutineService | `challengeId` |
 | `challenge.started` | ChallengeService | RoutineService, NotificationService, ChatService | `challengeId` |
 | `challenge.ended` | ChallengeService | RoutineService, NotificationService, ChatService | `challengeId` |
 | `challenge.member.joined` | ChallengeService | ChatService, NotificationService | `challengeId` |
@@ -132,7 +133,56 @@
 
 ---
 
-### 3. `challenge.started`
+### 3. `challenge.created`
+
+챌린지가 생성되었을 때 발행한다. routine-service가 소비해 챌린지 연결 루틴 템플릿(`routine_templates`, `challenge_id` UNIQUE)을 생성한다. (ADR-0034, 소비는 #133)
+
+| 항목 | 내용 |
+|------|------|
+| Publisher | ChallengeService |
+| Partition Key | `challengeId` |
+| Consumer Group | `routine-service.challenge.created` |
+
+**Payload**
+
+```json
+{
+  "eventId": "550e8400-e29b-41d4-a716-446655440007",
+  "occurredAt": "2026-05-24T00:00:00Z",
+  "challengeId": 1,
+  "creatorUserId": 100,
+  "categoryCode": "EXERCISE",
+  "routineTitle": "아침 러닝 30분",
+  "repeatType": "WEEKLY_N",
+  "repeatValue": 3,
+  "startedAt": "2026-05-25",
+  "endedAt": "2026-06-24"
+}
+```
+
+| 필드 | 타입 | 필수 | routine_templates 매핑 | 설명 |
+|------|------|:----:|------|------|
+| `eventId` | string (UUID) | ✅ | — | Inbox 멱등성 키 |
+| `occurredAt` | string (ISO 8601) | ✅ | — | 이벤트 발생 시각 |
+| `challengeId` | long | ✅ | `challenge_id` (UNIQUE) | 소비자 멱등 키 |
+| `creatorUserId` | long | ✅ | `user_id` | 템플릿 생성자 |
+| `categoryCode` | string | ✅ | `category_code` | 카테고리 코드 |
+| `routineTitle` | string | ✅ | `title` | 루틴명 |
+| `repeatType` | string | ✅ | `repeat_type` | `DAILY` \| `DAILY_N` \| `WEEKLY` \| `WEEKLY_N` \| `MONTHLY_N` |
+| `repeatValue` | int | ❌ | `repeat_value` | `DAILY_N`/`WEEKLY_N`/`MONTHLY_N`일 때만 존재(≥1) |
+| `startedAt` | string (yyyy-MM-dd) | ✅ | — | 챌린지 시작일 |
+| `endedAt` | string (yyyy-MM-dd) | ✅ | — | 챌린지 종료일 |
+
+> routine-service가 추가 RPC 호출 없이 루틴 템플릿을 생성할 수 있도록 self-contained payload를 유지한다.
+> 선호 수행 시각(`preferred_time`)은 이 payload에 포함하지 않는다. 챌린지 루틴 템플릿은 항상 `preferred_time = NULL`로 생성되며, 알림 시각은 멤버별 `routines` 인스턴스에서 개별 설정한다 (ADR-0035).
+
+**소비자 처리**
+
+- **RoutineService**: `routine_inbox`에 저장(`eventId` 멱등성) 후, 스케줄러가 챌린지 연결 루틴 템플릿(`routine_templates.challenge_id = challengeId`, UNIQUE)을 생성한다 (#133)
+
+---
+
+### 4. `challenge.started`
 
 챌린지 시작일이 도래해 스케줄러가 WAITING → ACTIVE 상태 전이를 완료했을 때 발행한다. (ADR-0033)
 
@@ -170,7 +220,7 @@
 
 ---
 
-### 4. `challenge.member.joined`
+### 5. `challenge.member.joined`
 
 사용자가 챌린지에 참여했을 때 발행한다.
 
@@ -209,7 +259,7 @@
 
 ---
 
-### 5. `challenge.member.left`
+### 6. `challenge.member.left`
 
 사용자가 챌린지를 탈퇴하거나 추방되었을 때 발행한다.
 
@@ -244,7 +294,7 @@
 
 ---
 
-### 6. `challenge.ended`
+### 7. `challenge.ended`
 
 챌린지 종료일이 지나 스케줄러가 ACTIVE → ENDED 상태 전이를 완료했을 때 발행한다. (ADR-0033)
 
@@ -282,7 +332,7 @@
 
 ---
 
-### 7. `chat.message.created`
+### 8. `chat.message.created`
 
 채팅 메시지가 PostgreSQL에 저장되었을 때 발행한다.
 ChatService 멀티 인스턴스 간 WebSocket 브로드캐스트 용도. (ADR-0016)

@@ -12,7 +12,6 @@ CREATE TABLE routine_templates (
                                    category       VARCHAR(20)                           NOT NULL,
                                    repeat_type    VARCHAR(20)                           NOT NULL,
                                    repeat_value   INT                                   NULL,
-                                   preferred_time TIME                                  NULL,
                                    is_deleted     BOOLEAN      DEFAULT false            NOT NULL,
                                    deleted_at     TIMESTAMPTZ                           NULL,
                                    created_at     TIMESTAMPTZ  DEFAULT now()            NOT NULL,
@@ -20,9 +19,9 @@ CREATE TABLE routine_templates (
 
                                    CONSTRAINT pk_routine_templates PRIMARY KEY (id),
                                    CONSTRAINT ck_rt_repeat_value   CHECK (
-                                       (repeat_type IN ('WEEKLY_N', 'MONTHLY_N') AND repeat_value IS NOT NULL)
+                                       (repeat_type IN ('DAILY_N', 'WEEKLY_N', 'MONTHLY_N') AND repeat_value IS NOT NULL)
                                            OR
-                                       (repeat_type NOT IN ('WEEKLY_N', 'MONTHLY_N') AND repeat_value IS NULL)
+                                       (repeat_type NOT IN ('DAILY_N', 'WEEKLY_N', 'MONTHLY_N') AND repeat_value IS NULL)
                                        )
 );
 
@@ -32,9 +31,8 @@ COMMENT ON COLUMN routine_templates.owner_id       IS '템플릿 소유자 ID �
 COMMENT ON COLUMN routine_templates.owner_type     IS '소유자 유형 — PERSONAL: 개인 루틴 / CHALLENGE: 챌린지 루틴 (참여자 전원 공유, 개인화 불가 — ADR-0026)';
 COMMENT ON COLUMN routine_templates.title          IS '루틴명 (예: 아침 러닝 30분)';
 COMMENT ON COLUMN routine_templates.category       IS '루틴 카테고리 — 서버 Enum으로 검증';
-COMMENT ON COLUMN routine_templates.repeat_type    IS '반복 유형 — DAILY/WEEKLY/WEEKLY_N/MONTHLY_N, 서버 Enum으로 검증';
-COMMENT ON COLUMN routine_templates.repeat_value   IS '반복 횟수 — WEEKLY_N/MONTHLY_N일 때 N값, 나머지는 NULL';
-COMMENT ON COLUMN routine_templates.preferred_time IS '선호 수행 시간 — 알림 발송 기준 시각 (선택)';
+COMMENT ON COLUMN routine_templates.repeat_type    IS '반복 유형 — DAILY/DAILY_N/WEEKLY/WEEKLY_N/MONTHLY_N, 서버 Enum으로 검증';
+COMMENT ON COLUMN routine_templates.repeat_value   IS '반복 횟수 — DAILY_N/WEEKLY_N/MONTHLY_N일 때 N값, 나머지는 NULL';
 COMMENT ON COLUMN routine_templates.is_deleted     IS '소프트 딜리트 여부 — 물리 삭제 없이 false→true 처리';
 COMMENT ON COLUMN routine_templates.deleted_at     IS '소프트 딜리트 처리 시각';
 COMMENT ON COLUMN routine_templates.created_at     IS '템플릿 생성일시';
@@ -49,6 +47,7 @@ CREATE TABLE routines (
                           challenge_id        BIGINT                                NULL,
                           started_at          DATE                                  NOT NULL,
                           ended_at            DATE                                  NOT NULL,
+                          preferred_time      TIME                                  NULL,
                           is_active           BOOLEAN      DEFAULT true             NOT NULL,
                           created_at          TIMESTAMPTZ  DEFAULT now()            NOT NULL,
                           updated_at          TIMESTAMPTZ  DEFAULT now()            NOT NULL,
@@ -66,6 +65,7 @@ COMMENT ON COLUMN routines.user_id             IS '루틴 소유 사용자 ID (u
 COMMENT ON COLUMN routines.challenge_id        IS '챌린지 루틴인 경우 챌린지 ID (challenge-service 참조 — FK 불가) — 개인 루틴이면 NULL';
 COMMENT ON COLUMN routines.started_at          IS '루틴 시작일';
 COMMENT ON COLUMN routines.ended_at            IS '루틴 종료일';
+COMMENT ON COLUMN routines.preferred_time      IS '선호 수행 시간 — 멤버별 알림 발송 기준 시각 (선택). NULL이면 리마인더 미발송. 개인/챌린지 루틴 모두 인스턴스 단위로 개별 설정 (ADR-0035)';
 COMMENT ON COLUMN routines.is_active           IS '루틴 활성 여부 — 일시정지/삭제 시 false';
 COMMENT ON COLUMN routines.created_at          IS '루틴 생성일시';
 COMMENT ON COLUMN routines.updated_at          IS '루틴 최종 수정일시 — 애플리케이션 레벨에서 갱신';
