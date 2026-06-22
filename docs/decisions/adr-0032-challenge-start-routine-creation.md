@@ -225,4 +225,4 @@ CREATE INDEX idx_{service}_inbox_pending ON {inbox} (received_at) WHERE status =
 - [ADR-0012: Outbox 패턴](adr-0012-outbox-pattern.md) — Producer 측 이벤트 발행 정합성
 - [ADR-0013: 멱등성 전략](adr-0013-idempotency-strategy.md) — Inbox 기반 중복 처리 방지
 - [ADR-0014: Kafka Consumer 복원력](adr-0014-kafka-consumer-resilience-strategy.md) — Inbox, @RetryableTopic, DLT
-- [ADR-0026: 챌린지 루틴 고정 정책](adr-0026-challenge-routine-fixed-policy.md) — 챌린지 루틴 템플릿 1개 고정
+- [ADR-0036: 챌린지 루틴 고정 정책](adr-0036-challenge-routine-fixed-policy.md) — 챌린지 루틴 템플릿 1개 고정
