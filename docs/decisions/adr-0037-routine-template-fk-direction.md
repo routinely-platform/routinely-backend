@@ -1,4 +1,4 @@
-# ADR-0027: routine_templates FK 방향 결정 (challenge_id in routine_templates)
+# ADR-0037: routine_templates FK 방향 결정 (challenge_id in routine_templates)
 
 - **Status**: Accepted
 - **Date**: 2026-05-19
@@ -107,4 +107,4 @@ GET /challenges/5
 
 ### 부정적 영향
 - 챌린지 상세 조회 시 BFF에서 2회 gRPC 호출 필요
-- `GetChallengeContext` gRPC 요청 파라미터가 `routine_template_id` → `challenge_id`로 변경됨 (ADR-0026 참고)
+- `GetChallengeContext` gRPC 요청 파라미터가 `routine_template_id` → `challenge_id`로 변경됨 (ADR-0036 참고)
