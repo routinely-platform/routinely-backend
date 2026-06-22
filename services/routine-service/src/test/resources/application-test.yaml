@@ -1,4 +1,10 @@
 spring:
+  task:
+    scheduling:
+      enabled: false
+  grpc:
+    server:
+      port: 0
   datasource:
     url: jdbc:tc:postgresql:17-alpine:///routine_db
     driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
@@ -9,6 +15,9 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+  kafka:
+    listener:
+      auto-startup: false
 
 eureka:
   client:
