@@ -8,7 +8,7 @@
 
 ## 1. Context
 
-챌린지 생성 시 routine-service에 루틴 템플릿(`routine_templates`, `owner_type = CHALLENGE`)이 생성되어야 한다.
+챌린지 생성 시 routine-service에 챌린지 연결 루틴 템플릿(`routine_templates`)이 생성되어야 한다. 챌린지 연결은 별도 `owner_type` 컬럼이 아니라 `routine_templates.challenge_id`(UNIQUE)로 표현한다 (ADR-0027 routine_templates FK 방향 결정).
 
 - 템플릿의 `repeat_type`, `repeat_value` 등은 챌린지 생성 시 결정·고정된다 (ADR-0026)
 - 챌린지 시작 시 발행되는 `challenge.started` 이벤트 페이로드가 `routineTemplateId`를 포함하므로, **시작 전에 템플릿이 반드시 존재해야 한다** (ADR-0032)
@@ -103,4 +103,5 @@
 - [ADR-0007: 서비스 간 통신 전략](adr-0007-communication-strategy.md) — Command → gRPC / Event → Kafka 원칙
 - [ADR-0012: Outbox 패턴](adr-0012-outbox-pattern.md) — 발행 정합성
 - [ADR-0026: 챌린지 루틴 고정 정책](adr-0026-challenge-routine-fixed-policy.md) — 템플릿은 생성 시 결정·고정
+- [ADR-0027: routine_templates FK 방향](adr-0027-routine-template-fk-direction.md) — 챌린지 연결을 owner_type이 아닌 challenge_id로 표현
 - [ADR-0032: 챌린지 시작 시 루틴 생성](adr-0032-challenge-start-routine-creation.md) — 시작 시점 routines 비동기 생성 (본 ADR과 대칭)

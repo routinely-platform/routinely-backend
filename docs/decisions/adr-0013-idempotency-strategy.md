@@ -76,6 +76,44 @@ Kafka Consumer는 `inbox` 테이블에 event_id를 기록하여 중복 처리를
 
 이벤트에는 반드시 고유한 `event_id`(UUID)가 포함되어야 한다.
 
+#### 구현 방식: 즉시 처리(A) vs 수신·처리 분리(B)
+
+위 4단계는 수신과 처리를 한 트랜잭션에서 끝내는 **즉시 처리(A 방식)**다.
+처리 비용이 작고 부수효과가 없을 때 적합하다.
+
+처리에 시간이 걸리거나 처리 실패를 Kafka 재처리와 분리하고 싶을 때는
+**수신·처리 분리(B 방식)**를 쓴다. Consumer는 Inbox에 `RECEIVED`로 저장만 하고
+즉시 오프셋을 커밋하며, 별도 스케줄러가 `RECEIVED` 건을 폴링해 비즈니스 처리를 수행한다.
+
+| 항목 | A: 즉시 처리 | B: 수신·처리 분리 |
+|---|---|---|
+| Consumer 책임 | 멱등 체크 + 비즈니스 처리 + Inbox 저장 | Inbox 저장만 (`RECEIVED`) |
+| 처리 주체 | Consumer 스레드 | 폴링 스케줄러 |
+| 처리 실패 영향 | Kafka 오프셋 미커밋 → Kafka 재처리 | Inbox 상태로 재시도 (Kafka 무관) |
+| 대칭성 | — | Outbox Poller와 대칭 |
+
+`routine-service`의 `challenge.created` 소비(루틴 템플릿 생성)는 **B 방식**을 채택한다.
+`routine_inbox`의 상태 라이프사이클(`RECEIVED → PROCESSED / FAILED`)이 B 방식을 전제로 설계되어 있고,
+Kafka 소비를 템플릿 생성 지연·실패와 분리하기 위함이다 (ADR-0034).
+
+#### Inbox 처리 측 재시도 모델
+
+B 방식의 처리 실패는 Outbox의 `PENDING` 재시도(아래 3️⃣)와 **대칭적으로** 다룬다.
+이를 위해 `routine_inbox`에 `retry_count`, `last_error` 컬럼을 둔다.
+
+```
+처리 실패
+├── retry_count 증가, last_error 기록
+├── retry_count ≤ MAX_RETRY(5) → RECEIVED 유지 → 다음 폴링에서 재시도
+└── retry_count >  MAX_RETRY     → FAILED (영구 실패, 수동 모니터링 대상)
+```
+
+- 일시적 장애(DB 순단, 락 경합, JSON 직렬화 오류) 한 번에 영구 실패(`FAILED`)하지 않는다.
+- 멱등성은 2계층으로 보장한다:
+  - **수신 중복**: `message_id`(=event_id) UNIQUE — 사전 `exists` 조회로 거르고, 동시 수신 race로 저장 시점에 제약을 위반하면 예외를 잡아 무시 후 ACK
+  - **처리 중복**: 도메인 UNIQUE(`routine_templates.challenge_id`) — 재시도/중복 처리 시 템플릿 재생성 방지
+- 처리 스케줄러는 ShedLock(Redis)으로 멀티 인스턴스 중복 실행을 방지한다 (ADR-0033, ADR-0014).
+
 ---
 
 ### 3️⃣ Outbox Worker — PENDING 상태 재시도
@@ -118,3 +156,5 @@ PGMQ는 visibility timeout 기반으로 동작한다.
 - [ADR-0012: Outbox 패턴](adr-0012-outbox-pattern.md) — Producer 측 이벤트 발행 정합성
 - [ADR-0017: 알림 스케줄링](adr-0017-notification-scheduling-strategy.md) — PGMQ 멱등성 처리
 - [ADR-0014: Kafka Consumer 복원력](adr-0014-kafka-consumer-resilience-strategy.md) — Inbox, @RetryableTopic, DLT 상세
+- [ADR-0033: 스케줄러 분산 락](adr-0033-challenge-scheduler-distributed-lock.md) — Inbox 처리 스케줄러 중복 실행 방지
+- [ADR-0034: 챌린지 생성 시 루틴 템플릿 비동기 처리](adr-0034-challenge-creation-routine-template-async.md) — Inbox B 방식 적용 사례
