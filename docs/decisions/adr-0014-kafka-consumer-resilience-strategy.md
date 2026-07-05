@@ -29,20 +29,22 @@ Consumer는 "이벤트를 반드시, 그리고 정확히 한 번 처리"하는 �
 
 ## Decision
 
-Routinely는 Kafka 이벤트 파이프라인의 복원력을 위해 다음 4가지 전략을 조합한다:
+Routinely의 Kafka 이벤트 파이프라인 복원력은 **Producer는 Outbox, Consumer는 Inbox(수신·처리 분리, B 방식)** 로 확보한다.
 
 **Producer 측:**
 1. **Outbox Worker 비동기 ACK** — Kafka Broker의 ACK를 확인한 후에만 outbox 상태 변경
 
-**Consumer 측:**
-2. **@RetryableTopic** — 처리 실패 시 자동 재시도
-3. **Inbox 패턴** — 중복 메시지 처리 방지 (멱등성 보장)
-4. **DLT (Dead Letter Topic)** — 최종 실패 메시지 격리 및 수동 처리
+**Consumer 측 (채택):**
+2. **Inbox 패턴 (수신·처리 분리)** — 수신은 `RECEIVED`로 저장 후 즉시 오프셋 커밋, 처리는 폴링 스케줄러가 담당.
+   중복 방지(멱등성) + 재시도(`retry_count`) + 최종 실패 격리(`FAILED`)를 **하나의 inbox 테이블**로 해결한다.
 
-> **구현 현황(2026-07)**: 아래 2~4는 설계 옵션으로 함께 검토했으나, **실제 채택된 Consumer 복원력은
-> Inbox 패턴을 "수신·처리 분리(B 방식)"로 구현한 형태**다. `@RetryableTopic`과 DLT는 도입하지 않았고,
-> 그 역할(재시도·최종 실패 격리)을 Inbox 상태 모델(`RECEIVED`/`retry_count`/`FAILED`)이 대체한다.
-> 상세는 아래 [구현 현황](#구현-현황--채택-inbox-수신처리-분리b-방식) 절 참고.
+**검토했으나 미채택한 대안:**
+- **@RetryableTopic** — 처리 실패 시 retry 토픽 기반 자동 재시도 (개념은 §2)
+- **DLT (Dead Letter Topic)** — 최종 실패 메시지를 별도 토픽으로 격리 (개념은 §4)
+
+> 아래 §2·§4는 **미채택 대안**의 개념 설명으로 남겨둔다. 실제 구현은 Inbox B 방식이며,
+> `@RetryableTopic`·DLT의 역할(재시도·최종 실패 격리)을 Inbox 상태 모델(`RECEIVED`/`retry_count`/`FAILED`)이
+> 대체한다. 채택 근거는 아래 [구현 현황](#구현-현황--채택-inbox-수신처리-분리b-방식) 절 참고.
 
 ---
 
@@ -117,7 +119,9 @@ public class OutboxWorker {
 
 ---
 
-## 2. @RetryableTopic — 자동 재시도
+## 2. (미채택 대안) @RetryableTopic — 자동 재시도
+
+> 이 절은 **검토했으나 채택하지 않은 대안**의 개념 설명이다. 실제 재시도는 Inbox `retry_count`로 처리한다([구현 현황](#구현-현황--채택-inbox-수신처리-분리b-방식) 참고).
 
 ### 개념
 
@@ -226,7 +230,9 @@ Consumer는 Inbox로 "정확히 한 번 처리"를 보장한다.
 
 ---
 
-## 4. DLT (Dead Letter Topic) — 최종 실패 처리
+## 4. (미채택 대안) DLT (Dead Letter Topic) — 최종 실패 처리
+
+> 이 절은 **검토했으나 채택하지 않은 대안**의 개념 설명이다. 실제 최종 실패 격리는 Inbox `FAILED` 상태로 처리한다([구현 현황](#구현-현황--채택-inbox-수신처리-분리b-방식) 참고).
 
 ### 개념
 
@@ -270,6 +276,7 @@ public void handleDlt(RoutineCompletedEvent event, @Header(KafkaHeaders.ORIGINAL
 | 관심사 | @RetryableTopic + DLT | 채택: Inbox + 스케줄러 |
 |---|---|---|
 | 재시도 저장소 | 별도 retry 토픽들(-retry-0/1/2) | `*_inbox` 단일 테이블 (`retry_count`) |
+| 재시도 간격 | 지수 backoff (예: 1→2→4초) | **고정 폴링 주기** (backoff 없음) |
 | Kafka 소비 결합 | 처리 실패가 retry 토픽 소비와 결합 | 수신 즉시 ACK → 처리와 분리 |
 | 최종 실패 격리 | DLT 토픽 | Inbox `FAILED` 상태 (같은 테이블에서 조회·복구) |
 | Outbox와 대칭 | 비대칭 | Outbox `PENDING` ↔ Inbox `RECEIVED` 재시도로 대칭 |
@@ -280,6 +287,8 @@ public void handleDlt(RoutineCompletedEvent event, @Header(KafkaHeaders.ORIGINAL
   유지해 재시도한다. `MAX_RETRY(5)` 초과 시에만 `FAILED`로 전이해 격리한다.
 - **`FAILED` 상태가 DLT의 "최종 실패 격리·수동 복구" 역할을 대신한다.** 별도 토픽/컨슈머 없이 같은 테이블에서
   실패 건을 조회·모니터링·재처리할 수 있다.
+- 재시도는 **고정 폴링 주기**(예: 5초)로 이뤄지며 **지수 backoff는 없다.** 일시적 장애는 폴링 주기 내 재시도로
+  회복되고, 세밀한 backoff가 필요한 저수준 재시도가 생기면 그때 `@RetryableTopic` 부분 도입을 재검토한다.
 
 ### 서비스별 적용
 
@@ -310,12 +319,12 @@ public void handleDlt(RoutineCompletedEvent event, @Header(KafkaHeaders.ORIGINAL
        ↓
 [Kafka]
        ↓
-[Consumer Service]
-  1. 이벤트 수신
-  2. Inbox 중복 확인 → 중복이면 스킵
-  3. 비즈니스 로직 처리 + inbox 저장 (같은 트랜잭션)
-  4. 처리 실패 시 → @RetryableTopic (자동 재시도, backoff)
-  5. 재시도 모두 실패 → DLT (알림 + 수동 처리)
+[Consumer Service]  (Inbox 수신·처리 분리 — B 방식)
+  1. 이벤트 수신 → inbox에 RECEIVED로 저장만 하고 즉시 오프셋 커밋
+     (수신 중복은 message_id UNIQUE로 방어)
+  2. 폴링 스케줄러가 RECEIVED 건을 독립 트랜잭션으로 처리
+  3. 처리 실패 시 → retry_count 증가, RECEIVED 유지 → 다음 폴링에서 재시도 (고정 주기)
+  4. retry_count > MAX_RETRY(5) → FAILED로 격리 (같은 테이블에서 조회·수동 복구)
 ```
 
 ---
@@ -325,14 +334,16 @@ public void handleDlt(RoutineCompletedEvent event, @Header(KafkaHeaders.ORIGINAL
 ### Positive
 
 - Producer-Consumer 양쪽 모두 이벤트 정합성 보장 (Outbox + Inbox)
-- 일시적 장애에 대한 자동 복구 (@RetryableTopic)
-- 중복 처리 방지로 데이터 정합성 확보 (Inbox)
-- 최종 실패 메시지 유실 방지 (DLT)
+- 일시적 장애에 대한 자동 복구 (Inbox 스케줄러 재시도 — `RECEIVED` 유지 후 재폴링)
+- 중복 처리 방지로 데이터 정합성 확보 (Inbox `message_id` UNIQUE)
+- 최종 실패 메시지 유실 방지 (Inbox `FAILED` 상태로 격리 — 같은 테이블에서 조회·복구)
+- 수신과 처리를 분리해 Kafka 소비가 비즈니스 처리 지연·실패와 결합되지 않음 (Outbox와 대칭)
 
 ### Negative
 
 - Consumer 서비스마다 inbox 테이블 관리 필요
-- DLT 모니터링 및 수동 재처리 운영 프로세스 필요
+- `FAILED` 건 모니터링·수동 재처리 운영 프로세스 필요 (DLT의 자동 알림과 달리 별도 구성해야 함)
+- 재시도가 고정 폴링 주기라 지수 backoff가 없음 (세밀한 backoff가 필요하면 별도 고려)
 - 이벤트에 반드시 고유한 event_id가 포함되어야 함
 
 ---
