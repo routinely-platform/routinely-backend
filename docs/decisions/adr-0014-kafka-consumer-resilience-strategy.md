@@ -39,6 +39,11 @@ Routinely는 Kafka 이벤트 파이프라인의 복원력을 위해 다음 4가�
 3. **Inbox 패턴** — 중복 메시지 처리 방지 (멱등성 보장)
 4. **DLT (Dead Letter Topic)** — 최종 실패 메시지 격리 및 수동 처리
 
+> **구현 현황(2026-07)**: 아래 2~4는 설계 옵션으로 함께 검토했으나, **실제 채택된 Consumer 복원력은
+> Inbox 패턴을 "수신·처리 분리(B 방식)"로 구현한 형태**다. `@RetryableTopic`과 DLT는 도입하지 않았고,
+> 그 역할(재시도·최종 실패 격리)을 Inbox 상태 모델(`RECEIVED`/`retry_count`/`FAILED`)이 대체한다.
+> 상세는 아래 [구현 현황](#구현-현황--채택-inbox-수신처리-분리b-방식) 절 참고.
+
 ---
 
 ## 1. Outbox Worker 비동기 ACK — Kafka 발행 보장
@@ -255,6 +260,42 @@ public void handleDlt(RoutineCompletedEvent event, @Header(KafkaHeaders.ORIGINAL
 
 ---
 
+## 구현 현황 — 채택: Inbox 수신·처리 분리(B 방식)
+
+위 4가지는 설계 옵션이며, **실제 채택된 Consumer 복원력 전략은 Inbox B 방식(수신·처리 분리)** 하나로 수렴했다.
+`@RetryableTopic`/DLT는 코드에 도입하지 않았고, 그 역할을 Inbox 상태 모델이 대신한다.
+
+### 왜 @RetryableTopic/DLT 대신 Inbox 스케줄러 재시도인가
+
+| 관심사 | @RetryableTopic + DLT | 채택: Inbox + 스케줄러 |
+|---|---|---|
+| 재시도 저장소 | 별도 retry 토픽들(-retry-0/1/2) | `*_inbox` 단일 테이블 (`retry_count`) |
+| Kafka 소비 결합 | 처리 실패가 retry 토픽 소비와 결합 | 수신 즉시 ACK → 처리와 분리 |
+| 최종 실패 격리 | DLT 토픽 | Inbox `FAILED` 상태 (같은 테이블에서 조회·복구) |
+| Outbox와 대칭 | 비대칭 | Outbox `PENDING` ↔ Inbox `RECEIVED` 재시도로 대칭 |
+
+- Consumer는 이벤트를 `*_inbox`에 `RECEIVED`로 **저장만 하고 즉시 오프셋을 커밋**한다 → Kafka 소비가
+  비즈니스 처리 지연·실패와 결합되지 않는다.
+- 폴링 스케줄러가 `RECEIVED` 건을 **독립 트랜잭션**으로 처리하고, 실패 시 `retry_count`를 올리며 `RECEIVED`를
+  유지해 재시도한다. `MAX_RETRY(5)` 초과 시에만 `FAILED`로 전이해 격리한다.
+- **`FAILED` 상태가 DLT의 "최종 실패 격리·수동 복구" 역할을 대신한다.** 별도 토픽/컨슈머 없이 같은 테이블에서
+  실패 건을 조회·모니터링·재처리할 수 있다.
+
+### 서비스별 적용
+
+| 서비스 | Consumer (저장 전용) | Scheduler (처리) | 소비 이벤트 |
+|---|---|---|---|
+| routine-service | `ChallengeCreatedConsumer` | `RoutineInboxScheduler` | `challenge.created` |
+| challenge-service (#48) | `ChallengeRankingInboxConsumer` | `ChallengeInboxScheduler` | `challenge.member.joined`, `routine.execution.completed` |
+
+- 멱등성(수신 중복 `message_id` UNIQUE, 처리 중복 UNIQUE/멱등 연산) 세부는 ADR-0013 참고.
+- 스케줄러 멀티 인스턴스 중복 실행 방지는 ShedLock(Redis) — ADR-0033 참고.
+
+> `@RetryableTopic`/DLT는 향후 "즉시 처리(A 방식)"가 필요한 저비용·무상태 Consumer가 생길 때 재검토할 수 있는
+> 대안으로 남겨둔다. 현재 파이프라인은 처리 비용·실패 격리 요구가 커서 Inbox B 방식이 더 적합하다.
+
+---
+
 ## 전체 흐름 요약
 
 ```
@@ -300,3 +341,5 @@ public void handleDlt(RoutineCompletedEvent event, @Header(KafkaHeaders.ORIGINAL
 
 - [ADR-0012: Outbox 패턴 도입](adr-0012-outbox-pattern.md) — Producer 측 이벤트 발행 정합성
 - [ADR-0013: 멱등성 전략](adr-0013-idempotency-strategy.md) — 시스템 전반 멱등성 원칙
+- [ADR-0028: 이벤트 기반 집계](adr-0028-event-driven-summary-aggregation.md) — challenge-service #48 랭킹 Consumer 적용
+- [ADR-0033: 스케줄러 분산 락](adr-0033-challenge-scheduler-distributed-lock.md) — Inbox 처리 스케줄러 중복 실행 방지
