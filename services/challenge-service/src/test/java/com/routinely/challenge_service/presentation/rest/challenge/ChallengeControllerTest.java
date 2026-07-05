@@ -1,6 +1,7 @@
 package com.routinely.challenge_service.presentation.rest.challenge;
 
 import com.routinely.challenge_service.application.ChallengeCreationService;
+import com.routinely.challenge_service.application.ChallengeRankingService;
 import com.routinely.challenge_service.application.ChallengeService;
 import com.routinely.challenge_service.domain.challenge.ChallengeSearchCondition;
 import com.routinely.challenge_service.domain.challenge.MyChallengeSearchCondition;
@@ -21,7 +22,9 @@ class ChallengeControllerTest {
 
     private final ChallengeService challengeService = mock(ChallengeService.class);
     private final ChallengeCreationService challengeCreationService = mock(ChallengeCreationService.class);
-    private final ChallengeController controller = new ChallengeController(challengeService, challengeCreationService);
+    private final ChallengeRankingService challengeRankingService = mock(ChallengeRankingService.class);
+    private final ChallengeController controller =
+            new ChallengeController(challengeService, challengeCreationService, challengeRankingService);
 
     @Test
     @DisplayName("공개챌린지목록조회_sort값이_잘못되면_검증예외를던진다")
