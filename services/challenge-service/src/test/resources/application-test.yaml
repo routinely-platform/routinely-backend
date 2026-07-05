@@ -15,6 +15,10 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.H2Dialect
+  kafka:
+    # @KafkaListener 컨테이너가 브로커 연결을 시도해 컨텍스트 로드가 실패하지 않도록 테스트에서는 비활성화한다.
+    listener:
+      auto-startup: false
 
 gateway:
   secret: test-gateway-secret
