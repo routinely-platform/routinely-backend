@@ -1,9 +1,11 @@
 package com.routinely.challenge_service.presentation.rest.challenge;
 
 import com.routinely.challenge_service.application.ChallengeCreationService;
+import com.routinely.challenge_service.application.ChallengeRankingService;
 import com.routinely.challenge_service.application.ChallengeService;
 import com.routinely.challenge_service.application.dto.ChallengeListResult;
 import com.routinely.challenge_service.application.dto.ChallengeMemberResult;
+import com.routinely.challenge_service.application.dto.ChallengeRankingResult;
 import com.routinely.challenge_service.application.dto.ChallengeResult;
 import com.routinely.challenge_service.domain.challenge.ChallengeLifecycleStatus;
 import com.routinely.challenge_service.domain.challenge.ChallengeSearchCondition;
@@ -15,6 +17,7 @@ import com.routinely.challenge_service.presentation.rest.challenge.dto.request.U
 import com.routinely.challenge_service.presentation.rest.challenge.dto.response.ChallengeDetailResponse;
 import com.routinely.challenge_service.presentation.rest.challenge.dto.response.ChallengeListResponse;
 import com.routinely.challenge_service.presentation.rest.challenge.dto.response.ChallengeMemberResponse;
+import com.routinely.challenge_service.presentation.rest.challenge.dto.response.ChallengeRankingResponse;
 import com.routinely.challenge_service.presentation.rest.challenge.dto.response.ChallengeResponse;
 import com.routinely.core.constant.HeaderConstants;
 import com.routinely.core.exception.BusinessException;
@@ -45,13 +48,19 @@ import static org.springframework.http.HttpStatus.CREATED;
 @RequestMapping("/api/v1/challenges")
 public class ChallengeController {
 
+    private static final int DEFAULT_RANKING_LIMIT = 3;
+    private static final int MAX_RANKING_LIMIT = 200;
+
     private final ChallengeService challengeService;
     private final ChallengeCreationService challengeCreationService;
+    private final ChallengeRankingService challengeRankingService;
 
     public ChallengeController(ChallengeService challengeService,
-                               ChallengeCreationService challengeCreationService) {
+                               ChallengeCreationService challengeCreationService,
+                               ChallengeRankingService challengeRankingService) {
         this.challengeService = challengeService;
         this.challengeCreationService = challengeCreationService;
+        this.challengeRankingService = challengeRankingService;
     }
 
     @PostMapping
@@ -123,6 +132,17 @@ public class ChallengeController {
         return ResponseEntity.ok(ApiResponse.ok("챌린지가 조회되었습니다.", ChallengeDetailResponse.from(result)));
     }
 
+    @GetMapping("/{id}/ranking")
+    public ResponseEntity<ApiResponse<ChallengeRankingResponse>> getChallengeRanking(
+            @RequestHeader(HeaderConstants.USER_ID) Long userId,
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "" + DEFAULT_RANKING_LIMIT) String limit) {
+
+        int parsedLimit = parseRankingLimit(limit);
+        ChallengeRankingResult result = challengeRankingService.getRanking(id, userId, parsedLimit);
+        return ResponseEntity.ok(ApiResponse.ok("챌린지 랭킹이 조회되었습니다.", ChallengeRankingResponse.from(result)));
+    }
+
     @PostMapping("/{challengeId}/members")
     public ResponseEntity<ApiResponse<ChallengeMemberResponse>> joinChallenge(
             @RequestHeader(HeaderConstants.USER_ID) Long userId,
@@ -153,6 +173,17 @@ public class ChallengeController {
             throw new BusinessException(VALIDATION_FAILED, "size는 1 이상이어야 합니다.");
         }
         return PageRequest.of(parsedPage, parsedSize);
+    }
+
+    private int parseRankingLimit(String limit) {
+        int parsedLimit = parseInt(limit, "limit");
+        if (parsedLimit < 1) {
+            throw new BusinessException(VALIDATION_FAILED, "limit은 1 이상이어야 합니다.");
+        }
+        if (parsedLimit > MAX_RANKING_LIMIT) {
+            throw new BusinessException(VALIDATION_FAILED, "limit은 %d 이하여야 합니다.".formatted(MAX_RANKING_LIMIT));
+        }
+        return parsedLimit;
     }
 
     private int parseInt(String value, String parameterName) {

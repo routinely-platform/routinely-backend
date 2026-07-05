@@ -84,6 +84,32 @@ ADR-0011 채택 이유 중 "집계 쿼리가 단순하다"는 전제가 ADR-0027
 | `challenge-service.routine.execution.completed` | challenge-service | `challenge_member_summary` UPSERT + Redis ZSET 갱신 |
 | `notification-service.routine.execution.completed` | notification-service | 스트릭/완료 알림 판단 (기존 유지) |
 
+### 4.1 `challenge.member.joined` 자기 소비 — 랭킹 시드 (#48)
+
+challenge-service는 **자신이 발행한** `challenge.member.joined` 이벤트를 **자신이 다시 소비**한다.
+멤버가 참여하면 아직 완료 기록이 없어도 달성률 0%인 랭킹 행이 즉시 노출되어야 하기 때문에,
+소비 시점에 `challenge_member_summary`를 생성하고 Redis ZSET에 `0`점으로 시드(seed)한다.
+
+| Consumer Group | 서비스 | 처리 내용 |
+|---|---|---|
+| `challenge-service.ranking.member.joined` | challenge-service (자기 소비) | `challenge_member_summary` 생성 + Redis ZSET `0`점 시드 |
+
+**왜 참여 트랜잭션에서 바로 처리하지 않고 이벤트로 우회하는가:**
+
+1. **집계 경로 단일화** — 랭킹 갱신을 담당하는 `ChallengeRankingInboxProcessor` 입장에서는
+   이벤트가 자기 것(`member.joined`)이든 남의 것(`routine.execution.completed`)이든 동일하게 취급한다.
+   참여만 동기 직접 호출로 처리하면 "랭킹을 갱신하는 방법"이 동기·비동기 두 갈래로 이원화되어
+   유지보수 지점이 늘어난다. 자기 이벤트도 같은 Inbox 파이프라인에 태워 **단일 경로**로 유지한다.
+
+2. **실패 격리** — 참여(멤버십 변경)는 DB 트랜잭션만으로 빠르게 확정하고, 랭킹 반영(Redis/summary)은
+   별도 스케줄러가 독립적으로 재시도(최대 5회, 초과 시 `FAILED`)한다.
+   join 트랜잭션 안에서 Redis를 직접 건드리면 Redis 지연·장애가 "챌린지 참여"라는 핵심 액션 자체를
+   지연·실패시킬 수 있으나, 이벤트로 분리하면 참여 확정에는 영향이 없다.
+
+3. **처리 멱등성** — 시드는 "이미 summary가 있으면 건너뛴다"로 처리한다.
+   참여 후 완료 기록이 쌓여 달성률이 오른 멤버가 이벤트 재처리로 0%로 리셋되면 안 되므로,
+   재시드 시 기존 값을 덮어쓰지 않고 스킵하는 것이 핵심이다.
+
 ---
 
 ## 5. Consequences

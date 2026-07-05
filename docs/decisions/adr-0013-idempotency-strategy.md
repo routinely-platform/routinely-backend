@@ -114,6 +114,33 @@ B 방식의 처리 실패는 Outbox의 `PENDING` 재시도(아래 3️⃣)와 **
   - **처리 중복**: 도메인 UNIQUE(`routine_templates.challenge_id`) — 재시도/중복 처리 시 템플릿 재생성 방지
 - 처리 스케줄러는 ShedLock(Redis)으로 멀티 인스턴스 중복 실행을 방지한다 (ADR-0033, ADR-0014).
 
+#### 적용 사례 — 서비스별 Inbox 채택 현황
+
+Inbox B 방식은 이제 두 서비스에서 동일한 구조로 사용된다.
+
+| 서비스 | 소비 이벤트 | 후속 처리 | "처리 중복" 방어 방식 |
+|---|---|---|---|
+| routine-service | `challenge.created` | 루틴 템플릿 생성 | 도메인 UNIQUE (`routine_templates.challenge_id`) |
+| challenge-service (#48) | `challenge.member.joined`, `routine.execution.completed` | 랭킹 집계 갱신 | 멱등 연산 (아래) |
+
+`challenge_inbox`에도 `retry_count`, `last_error`를 추가해(마이그레이션 V3) `routine_inbox`와 동일한
+`RECEIVED → PROCESSED / FAILED` 재시도 모델을 따른다. 처리 스케줄러(`ChallengeInboxScheduler`) 역시
+ShedLock으로 멀티 인스턴스 중복 실행을 방지한다.
+
+##### "처리 중복" 방어는 도메인마다 다르다 — UNIQUE 제약 vs 멱등 연산
+
+Inbox의 `message_id` UNIQUE는 **수신 중복**을 막지만, 스케줄러 재시도로 같은 메시지가
+**처리 단계에서 재실행**될 수 있다(예: ZSET 갱신 성공 후 트랜잭션 커밋 실패 → 다음 폴링에서 재처리).
+이 "처리 중복"은 도메인 부수효과의 성격에 따라 둘 중 하나로 흡수한다.
+
+- **DB UNIQUE 제약** — 부수효과가 "생성"인 경우(routine-service 템플릿 생성). UNIQUE 위반으로 재생성을 차단한다.
+- **멱등 연산(idempotent operation)** — 부수효과가 "덮어쓰기"인 경우(challenge-service 랭킹). 연산 자체가 멱등이라 재실행이 안전하다.
+  - `ZADD ranking:{challengeId} <달성률> <userId>` — 절대값 갱신이라 몇 번 실행해도 같은 값 (증분 `+1`이 아님)
+  - `challenge_member_summary` UPSERT — routine-service가 계산한 최종 집계값으로 덮어쓰므로 재실행해도 동일
+
+만약 랭킹 점수를 "완료 수 `+1`"로 설계했다면 처리 중복을 UNIQUE로 막아야 했겠지만,
+점수를 "달성률 절대값으로 set"하도록 설계(ADR-0028)해 **처리 멱등성을 연산 수준에서 확보**했다.
+
 ---
 
 ### 3️⃣ Outbox Worker — PENDING 상태 재시도
@@ -157,4 +184,5 @@ PGMQ는 visibility timeout 기반으로 동작한다.
 - [ADR-0017: 알림 스케줄링](adr-0017-notification-scheduling-strategy.md) — PGMQ 멱등성 처리
 - [ADR-0014: Kafka Consumer 복원력](adr-0014-kafka-consumer-resilience-strategy.md) — Inbox, @RetryableTopic, DLT 상세
 - [ADR-0033: 스케줄러 분산 락](adr-0033-challenge-scheduler-distributed-lock.md) — Inbox 처리 스케줄러 중복 실행 방지
-- [ADR-0034: 챌린지 생성 시 루틴 템플릿 비동기 처리](adr-0034-challenge-creation-routine-template-async.md) — Inbox B 방식 적용 사례
+- [ADR-0034: 챌린지 생성 시 루틴 템플릿 비동기 처리](adr-0034-challenge-creation-routine-template-async.md) — Inbox B 방식 적용 사례 (routine-service)
+- [ADR-0028: 이벤트 기반 집계](adr-0028-event-driven-summary-aggregation.md) — 랭킹 ZADD 절대값 설계로 처리 멱등성 확보 (challenge-service #48)
