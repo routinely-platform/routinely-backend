@@ -28,6 +28,19 @@ class BusinessExceptionTest {
     }
 
     @Test
+    @DisplayName("생성_원인예외전달_cause보존")
+    void constructor_cause_preservesCause() {
+        RuntimeException cause = new RuntimeException("database unavailable");
+
+        BusinessException exception =
+                new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR, "처리에 실패했습니다.", cause);
+
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.INTERNAL_SERVER_ERROR);
+        assertThat(exception.getMessage()).isEqualTo("처리에 실패했습니다.");
+        assertThat(exception.getCause()).isSameAs(cause);
+    }
+
+    @Test
     @DisplayName("RuntimeException을상속하여unchecked")
     void isRuntimeException() {
         assertThat(new BusinessException(ErrorCode.FORBIDDEN))

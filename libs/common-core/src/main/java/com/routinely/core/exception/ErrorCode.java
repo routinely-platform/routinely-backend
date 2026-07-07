@@ -41,7 +41,11 @@ public enum ErrorCode {
     CHAT_NOT_MEMBER("CHAT_NOT_MEMBER", "채팅방 멤버가 아닙니다.", ErrorStatus.FORBIDDEN),
 
     // Notification
-    NOTIFICATION_NOT_FOUND("NOTIFICATION_NOT_FOUND", "알림을 찾을 수 없습니다.", ErrorStatus.NOT_FOUND);
+    NOTIFICATION_NOT_FOUND("NOTIFICATION_NOT_FOUND", "알림을 찾을 수 없습니다.", ErrorStatus.NOT_FOUND),
+
+    // Storage
+    FILE_UPLOAD_FAILED("FILE_UPLOAD_FAILED", "파일 업로드에 실패했습니다.", ErrorStatus.INTERNAL_SERVER_ERROR),
+    FILE_DELETE_FAILED("FILE_DELETE_FAILED", "파일 삭제에 실패했습니다.", ErrorStatus.INTERNAL_SERVER_ERROR);
 
     private final String code;
     private final String message;
