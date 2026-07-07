@@ -79,3 +79,10 @@ resilience4j:
     instances:
       routine-service-cb:
         baseConfig: default
+
+# 파일 저장(S3) — 챌린지 대표 이미지 업로드용. common-storage 모듈 의존성은 걸어두되
+# 아직 미사용이라 비활성. TODO(#54 후속): 대표 이미지 업로드 구현 시 enabled: true + bucket/region 설정
+routinely:
+  storage:
+    s3:
+      enabled: false
