@@ -4,6 +4,7 @@ include 'libs:common-core'
 include 'libs:common-jpa'
 include 'libs:common-web'
 include 'libs:common-observability'
+include 'libs:common-storage'
 include 'libs:proto'
 
 include 'services:registry-service'

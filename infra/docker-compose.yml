@@ -68,6 +68,28 @@ services:
       retries: 10
       start_period: 30s
 
+  # ── LocalStack (S3 로컬 대체) ─────────────────────────────────────────────────
+  # 실 AWS 없이 로컬에서 파일 업로드를 개발/테스트하기 위한 S3 호환 스토리지.
+  # endpoint: http://localhost:4566, path-style-access 필요.
+  # 기동 시 init 스크립트가 routinely-dev 버킷을 자동 생성한다.
+  localstack:
+    image: localstack/localstack:3
+    container_name: routinely-localstack
+    environment:
+      SERVICES: s3
+      DEBUG: 0
+    ports:
+      - "4566:4566"
+    volumes:
+      - ./config/localstack/init-s3.sh:/etc/localstack/init/ready.d/init-s3.sh:ro
+    networks:
+      - routinely-net
+    healthcheck:
+      test: ["CMD", "awslocal", "s3", "ls"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 networks:
   routinely-net:
     name: routinely-net

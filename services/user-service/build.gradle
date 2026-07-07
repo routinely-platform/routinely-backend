@@ -10,6 +10,7 @@ dependencies {
 	implementation project(':libs:common-web')
 	implementation project(':libs:common-jpa')
 	implementation project(':libs:common-observability')
+	implementation project(':libs:common-storage')
 	implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
 	runtimeOnly 'org.postgresql:postgresql'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

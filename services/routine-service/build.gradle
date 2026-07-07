@@ -11,6 +11,7 @@ dependencies {
 	implementation project(':libs:common-web')
 	implementation project(':libs:common-jpa')
 	implementation project(':libs:common-observability')
+	implementation project(':libs:common-storage')
 	implementation project(':libs:proto')
 	implementation 'org.springframework.boot:spring-boot-starter-kafka'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
