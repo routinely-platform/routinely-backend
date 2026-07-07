@@ -1,0 +1,21 @@
+plugins {
+    id 'java-library'
+}
+
+ext {
+    // AWS SDK v2 는 Spring Boot BOM 에 포함되지 않아 버전을 직접 지정한다.
+    // 라이브러리 모듈이므로 BOM(dependencyManagement)이 아니라 의존성에 버전을 명시해야
+    // 이 모듈을 project() 로 의존하는 서비스까지 버전이 전파된다.
+    set('awsSdkVersion', "2.31.13")
+}
+
+dependencies {
+    api project(':libs:common-core')
+
+    api "software.amazon.awssdk:s3:${awsSdkVersion}"
+    // 동기 S3Client 용 HTTP 구현체 (없으면 런타임에 HTTP implementation 을 찾지 못한다)
+    implementation "software.amazon.awssdk:apache-client:${awsSdkVersion}"
+
+    implementation 'org.springframework.boot:spring-boot-autoconfigure'
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+}
