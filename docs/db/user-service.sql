@@ -10,6 +10,7 @@ CREATE TABLE users (
     nickname          VARCHAR(20)                        NOT NULL,
     role              VARCHAR(10)                        NOT NULL,
     profile_image_url VARCHAR(500)                       NULL,
+    profile_image_object_key VARCHAR(500)                NULL,
     is_active         BOOLEAN      DEFAULT true          NOT NULL,
     created_at        TIMESTAMPTZ  DEFAULT now()         NOT NULL,
     updated_at        TIMESTAMPTZ  DEFAULT now()         NOT NULL,
@@ -27,6 +28,7 @@ COMMENT ON COLUMN users.password_hash     IS 'BCrypt로 암호화된 비밀번�
 COMMENT ON COLUMN users.nickname          IS '서비스 내 표시되는 닉네임 (UNIQUE, 2~20자)';
 COMMENT ON COLUMN users.role              IS '계정 권한 — USER: 일반 사용자 / ADMIN: 관리자';
 COMMENT ON COLUMN users.profile_image_url IS '프로필 이미지 URL';
+COMMENT ON COLUMN users.profile_image_object_key IS '프로필 이미지 오브젝트 키 (S3 삭제/교체용)';
 COMMENT ON COLUMN users.is_active         IS '계정 활성 여부 — 회원 탈퇴 시 false로 변경 (소프트 딜리트)';
 COMMENT ON COLUMN users.created_at        IS '계정 생성일시';
 COMMENT ON COLUMN users.updated_at        IS '계정 정보 최종 수정일시 — 애플리케이션 레벨에서 갱신';

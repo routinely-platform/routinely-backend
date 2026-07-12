@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import com.routinely.core.exception.BusinessException;
 import com.routinely.user_service.application.user.dto.ProfileResult;
 import com.routinely.user_service.application.user.dto.UpdateProfileCommand;
+import com.routinely.user_service.domain.ProfileImage;
 import com.routinely.user_service.domain.User;
 import com.routinely.user_service.domain.UserRepository;
 import com.routinely.user_service.domain.UserRole;
@@ -127,7 +128,8 @@ class UserServiceTest {
         when(userRepository.findByIdAndIsActiveTrue(1L)).thenReturn(Optional.of(user));
         when(userRepository.existsByNickname("중복닉네임")).thenReturn(true);
 
-        assertThatThrownBy(() -> userService.updateProfile(new UpdateProfileCommand(1L, "중복닉네임", "새 소개")))
+        UpdateProfileCommand command = new UpdateProfileCommand(1L, "중복닉네임", "새 소개");
+        assertThatThrownBy(() -> userService.updateProfile(command))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("이미 사용 중인 닉네임입니다.");
 
@@ -145,7 +147,8 @@ class UserServiceTest {
         doThrow(new DataIntegrityViolationException("duplicate", new RuntimeException("uq_users_nickname")))
                 .when(userRepository).flush();
 
-        assertThatThrownBy(() -> userService.updateProfile(new UpdateProfileCommand(1L, "새닉네임", "소개")))
+        UpdateProfileCommand command = new UpdateProfileCommand(1L, "새닉네임", "소개");
+        assertThatThrownBy(() -> userService.updateProfile(command))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("이미 사용 중인 닉네임입니다.");
     }
@@ -159,7 +162,8 @@ class UserServiceTest {
         when(userRepository.findByIdAndIsActiveTrue(1L)).thenReturn(Optional.of(user));
         when(userRepository.existsByNickname("새닉네임")).thenReturn(false);
 
-        assertThatThrownBy(() -> userService.updateProfile(new UpdateProfileCommand(1L, "새닉네임", "새 소개")))
+        UpdateProfileCommand command = new UpdateProfileCommand(1L, "새닉네임", "새 소개");
+        assertThatThrownBy(() -> userService.updateProfile(command))
                 .isInstanceOfSatisfying(NicknameCooldownException.class, exception -> {
                     assertThat(exception.getErrorCode().getCode()).isEqualTo("NICKNAME_CHANGE_COOLDOWN_ACTIVE");
                     assertThat(exception.getMessage()).isEqualTo("닉네임은 아직 변경할 수 없습니다. 20일 후 다시 시도해주세요.");
@@ -231,7 +235,7 @@ class UserServiceTest {
                 .nickname(nickname)
                 .role(UserRole.USER)
                 .bio(bio)
-                .profileImageUrl(profileImageUrl)
+                .profileImage(profileImageUrl == null ? null : ProfileImage.of(profileImageUrl, "profile-images/2026/07/obj.jpg"))
                 .isActive(true)
                 .build();
 

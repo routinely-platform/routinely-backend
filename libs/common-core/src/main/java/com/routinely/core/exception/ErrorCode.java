@@ -45,7 +45,10 @@ public enum ErrorCode {
 
     // Storage
     FILE_UPLOAD_FAILED("FILE_UPLOAD_FAILED", "파일 업로드에 실패했습니다.", ErrorStatus.INTERNAL_SERVER_ERROR),
-    FILE_DELETE_FAILED("FILE_DELETE_FAILED", "파일 삭제에 실패했습니다.", ErrorStatus.INTERNAL_SERVER_ERROR);
+    FILE_DELETE_FAILED("FILE_DELETE_FAILED", "파일 삭제에 실패했습니다.", ErrorStatus.INTERNAL_SERVER_ERROR),
+    EMPTY_FILE("EMPTY_FILE", "빈 파일은 업로드할 수 없습니다.", ErrorStatus.BAD_REQUEST),
+    UNSUPPORTED_IMAGE_TYPE("UNSUPPORTED_IMAGE_TYPE", "지원하지 않는 이미지 형식입니다.", ErrorStatus.BAD_REQUEST),
+    FILE_SIZE_EXCEEDED("FILE_SIZE_EXCEEDED", "파일 크기가 허용 범위를 초과했습니다.", ErrorStatus.BAD_REQUEST);
 
     private final String code;
     private final String message;

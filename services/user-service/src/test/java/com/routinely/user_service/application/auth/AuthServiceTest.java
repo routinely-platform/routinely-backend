@@ -64,7 +64,7 @@ class AuthServiceTest {
                     .passwordHash(user.getPasswordHash())
                     .nickname(user.getNickname())
                     .role(user.getRole())
-                    .profileImageUrl(user.getProfileImageUrl())
+                    .profileImage(user.getProfileImage())
                     .isActive(user.isActive())
                     .build();
         });

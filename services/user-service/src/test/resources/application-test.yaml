@@ -23,3 +23,12 @@ user:
 eureka:
   client:
     enabled: false
+
+# S3 는 기본 설정(bucket/region)으로 Bean 만 생성한다. 실제 업로드는 단위 테스트에서 mock 으로 검증하며
+# 통합 컨텍스트에서는 네트워크 호출이 없어 안전하다.
+routinely:
+  storage:
+    s3:
+      enabled: true
+      bucket: test-bucket
+      region: ap-northeast-2

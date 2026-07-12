@@ -23,6 +23,10 @@ spring:
     redis:
       host: ${REDIS_HOST:redis}
       port: ${REDIS_PORT:6379}
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
 
 jwt:
   secret: ${JWT_SECRET}
@@ -46,9 +50,11 @@ eureka:
   instance:
     prefer-ip-address: true
 
-# 파일 저장(S3) — 프로필 사진 업로드용. common-storage 모듈 의존성은 걸어두되
-# 아직 미사용이라 비활성. TODO(#54 후속): 프로필 사진 업로드 구현 시 enabled: true + bucket/region 설정
+# 파일 저장(S3) — 프로필 사진 업로드용
 routinely:
   storage:
     s3:
-      enabled: false
+      enabled: true
+      bucket: ${S3_BUCKET:routinely-dev}
+      region: ${S3_REGION:ap-northeast-2}
+      public-base-url: ${S3_PUBLIC_BASE_URL:}

@@ -262,18 +262,20 @@ public class ApiResponse<T> {
 #### `PUT /api/v1/users/me/profile-image` — 프로필 이미지 생성/교체
 - Auth: ✅
 - Content-Type: `multipart/form-data`
-- 구현 시점: 추후 별도 이슈
+- 구현 이슈: #95
 
 **구현 메모**
 - 이미지 저장소의 객체 삭제/교체를 위해 `users.profile_image_object_key VARCHAR(500) NULL` 컬럼을 추가한다.
-- `profileImageUrl`은 클라이언트 표시용 URL이며, `profileImageObjectKey`는 S3/R2/MinIO 등 object storage 내부 객체 식별자로 사용한다.
-- 권장 저장 key 예시: `users/{userId}/profile/{uuid}.webp`
+- `profileImageUrl`은 클라이언트 표시용 URL이며, `profileImageObjectKey`는 S3 등 object storage 내부 객체 식별자로 사용한다.
+- 저장 key 규칙: `profile-images/{yyyy}/{MM}/{uuid}.{ext}` (매 업로드마다 새 key 발급 → 이전 객체는 트랜잭션 커밋 이후 best-effort 삭제)
+- MIME 타입과 파일 시그니처를 함께 검증한다.
+- 응답 바디는 `GET`/`PATCH /me` 와 동일한 전체 프로필(`ProfileResponse`)을 반환한다.
 
 **Request**
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `image` | file | ✅ | `image/jpeg`, `image/png`, `image/webp` |
+| `image` | file | ✅ | `image/jpeg`, `image/png`, `image/webp` (최대 5MB) |
 
 **Response** `200`
 ```json
@@ -284,7 +286,10 @@ public class ApiResponse<T> {
     "userId": 1,
     "email": "user@example.com",
     "nickname": "새닉네임",
-    "profileImageUrl": "https://cdn.example.com/users/1/profile/uuid.webp"
+    "bio": "매일 조금씩 성장하는 중",
+    "profileImageUrl": "https://cdn.example.com/profile-images/2026/07/uuid.jpg",
+    "createdAt": "2024-03-15T10:00:00Z",
+    "nicknameChangeableAt": "2024-04-14T10:00:00Z"
   }
 }
 ```
@@ -293,9 +298,9 @@ public class ApiResponse<T> {
 
 #### `DELETE /api/v1/users/me/profile-image` — 프로필 이미지 삭제
 - Auth: ✅
-- 구현 시점: 추후 별도 이슈
+- 구현 이슈: #95
 
-삭제 시 DB의 `profile_image_url`, `profile_image_object_key`를 함께 `NULL`로 변경하고, 트랜잭션 커밋 이후 기존 storage 객체를 삭제한다.
+삭제 시 DB의 `profile_image_url`, `profile_image_object_key`를 함께 `NULL`로 변경하고, 트랜잭션 커밋 이후 storage 객체를 best-effort 삭제한다. 이미지가 없으면 no-op. 응답은 전체 프로필(`ProfileResponse`)을 반환한다.
 
 **Response** `200`
 ```json
@@ -306,7 +311,10 @@ public class ApiResponse<T> {
     "userId": 1,
     "email": "user@example.com",
     "nickname": "새닉네임",
-    "profileImageUrl": null
+    "bio": "매일 조금씩 성장하는 중",
+    "profileImageUrl": null,
+    "createdAt": "2024-03-15T10:00:00Z",
+    "nicknameChangeableAt": "2024-04-14T10:00:00Z"
   }
 }
 ```

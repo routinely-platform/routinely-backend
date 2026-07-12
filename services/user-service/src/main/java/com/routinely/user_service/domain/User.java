@@ -4,6 +4,7 @@ import com.routinely.core.exception.BusinessException;
 import com.routinely.core.exception.ErrorCode;
 import com.routinely.jpa.entity.BaseEntity;
 import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -44,8 +45,8 @@ public class User extends BaseEntity {
     @Column(nullable = false, length = 10)
     private UserRole role;
 
-    @Column(name = "profile_image_url", length = 500)
-    private String profileImageUrl;
+    @Embedded
+    private ProfileImage profileImage;
 
     @Column(length = 100)
     private String bio;
@@ -63,7 +64,6 @@ public class User extends BaseEntity {
                 .passwordHash(passwordHash)
                 .nickname(nickname)
                 .role(UserRole.USER)
-                .profileImageUrl(null)
                 .build();
     }
 
@@ -79,6 +79,22 @@ public class User extends BaseEntity {
 
     public void updateBio(String bio) {
         this.bio = (bio != null && bio.isBlank()) ? null : bio;
+    }
+
+    public void changeProfileImage(ProfileImage profileImage) {
+        this.profileImage = profileImage;
+    }
+
+    public void removeProfileImage() {
+        this.profileImage = null;
+    }
+
+    public String getProfileImageUrl() {
+        return profileImage != null ? profileImage.getUrl() : null;
+    }
+
+    public String getProfileImageObjectKey() {
+        return profileImage != null ? profileImage.getObjectKey() : null;
     }
 
     private void validateNickname(String nickname) {

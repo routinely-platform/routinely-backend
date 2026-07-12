@@ -9,6 +9,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -19,7 +20,7 @@ public class GlobalExceptionHandler {
 
     // @Valid 검사 실패 시 Spring이 자동으로 던지는 예외 — BindingResult 파라미터 없이 동작
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiResponse<?>> handleValidation(MethodArgumentNotValidException e) {
+    public ResponseEntity<ApiResponse<Map<String, String>>> handleValidation(MethodArgumentNotValidException e) {
         Map<String, String> errors = new LinkedHashMap<>();
         for (FieldError fieldError : e.getBindingResult().getFieldErrors()) {
             errors.put(fieldError.getField(), fieldError.getDefaultMessage());
@@ -33,8 +34,19 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    // multipart 최대 파일 크기 초과 — 컨트롤러 진입 전에 Spring 이 던지는 예외
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxUploadSize(MaxUploadSizeExceededException e) {
+        log.warn("Upload size exceeded: {}", e.getMessage());
+        return ResponseEntity.status(ErrorCode.FILE_SIZE_EXCEEDED.getStatus().getCode())
+                .body(ApiResponse.fail(
+                        ErrorCode.FILE_SIZE_EXCEEDED.getCode(),
+                        ErrorCode.FILE_SIZE_EXCEEDED.getMessage()
+                ));
+    }
+
     @ExceptionHandler(BusinessException.class)
-    public ResponseEntity<ApiResponse<?>> handleBusiness(BusinessException e) {
+    public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException e) {
         ErrorCode errorCode = e.getErrorCode();
         log.warn("Business exception: code={}, message={}", errorCode.getCode(), e.getMessage());
         return ResponseEntity.status(errorCode.getStatus().getCode())
@@ -42,7 +54,7 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<?>> handleException(Exception e) {
+    public ResponseEntity<ApiResponse<Void>> handleException(Exception e) {
         log.error("Unexpected error", e);
         return ResponseEntity.internalServerError()
                 .body(ApiResponse.fail(
