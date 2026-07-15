@@ -26,6 +26,10 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
   data:
     redis:
       host: ${REDIS_HOST:redis}
@@ -80,9 +84,11 @@ resilience4j:
       routine-service-cb:
         baseConfig: default
 
-# 파일 저장(S3) — 챌린지 대표 이미지 업로드용. common-storage 모듈 의존성은 걸어두되
-# 아직 미사용이라 비활성. TODO(#54 후속): 대표 이미지 업로드 구현 시 enabled: true + bucket/region 설정
+# 파일 저장(S3) — 챌린지 대표 이미지 업로드용 (#142)
 routinely:
   storage:
     s3:
-      enabled: false
+      enabled: true
+      bucket: ${S3_BUCKET:routinely-dev}
+      region: ${S3_REGION:ap-northeast-2}
+      public-base-url: ${S3_PUBLIC_BASE_URL:}

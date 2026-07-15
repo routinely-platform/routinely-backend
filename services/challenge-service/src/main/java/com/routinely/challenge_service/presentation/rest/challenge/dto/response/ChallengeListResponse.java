@@ -35,6 +35,7 @@ public record ChallengeListResponse(
             int maxMembers,
             LocalDate startedAt,
             LocalDate endedAt,
+            String imageUrl,
             ChallengeMemberRole myRole
     ) {
 
@@ -49,6 +50,7 @@ public record ChallengeListResponse(
                     result.maxMembers(),
                     result.startedAt(),
                     result.endedAt(),
+                    result.imageUrl(),
                     result.myRole()
             );
         }

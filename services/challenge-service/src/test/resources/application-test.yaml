@@ -2,6 +2,10 @@ spring:
   task:
     scheduling:
       enabled: false
+  grpc:
+    server:
+      # 로컬 인스턴스/병렬 테스트와의 포트 충돌을 피하기 위해 랜덤 포트로 바인딩한다.
+      port: 0
   datasource:
     url: jdbc:h2:mem:challenge_test_db;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
     driver-class-name: org.h2.Driver
@@ -26,3 +30,11 @@ gateway:
 eureka:
   client:
     enabled: false
+
+# 컨텍스트 로드 시 FileStorage 빈 생성용. 실제 S3 호출은 하지 않는다.
+routinely:
+  storage:
+    s3:
+      enabled: true
+      bucket: test-bucket
+      region: ap-northeast-2

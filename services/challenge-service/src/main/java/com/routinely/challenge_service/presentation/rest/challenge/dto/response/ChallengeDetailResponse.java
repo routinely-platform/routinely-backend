@@ -19,6 +19,7 @@ public record ChallengeDetailResponse(
         LocalDate startedAt,
         LocalDate endedAt,
         Long creatorUserId,
+        String imageUrl,
         ChallengeMemberRole myRole) {
 
     public static ChallengeDetailResponse from(ChallengeResult result) {
@@ -35,6 +36,7 @@ public record ChallengeDetailResponse(
                 result.startedAt(),
                 result.endedAt(),
                 result.creatorUserId(),
+                result.imageUrl(),
                 result.myRole()
         );
     }

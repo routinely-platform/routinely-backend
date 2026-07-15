@@ -1,6 +1,7 @@
 package com.routinely.challenge_service.presentation.rest.challenge;
 
 import com.routinely.challenge_service.application.ChallengeCreationService;
+import com.routinely.challenge_service.application.ChallengeImageService;
 import com.routinely.challenge_service.application.ChallengeRankingService;
 import com.routinely.challenge_service.application.ChallengeService;
 import com.routinely.challenge_service.domain.challenge.ChallengeSearchCondition;
@@ -23,8 +24,9 @@ class ChallengeControllerTest {
     private final ChallengeService challengeService = mock(ChallengeService.class);
     private final ChallengeCreationService challengeCreationService = mock(ChallengeCreationService.class);
     private final ChallengeRankingService challengeRankingService = mock(ChallengeRankingService.class);
+    private final ChallengeImageService challengeImageService = mock(ChallengeImageService.class);
     private final ChallengeController controller =
-            new ChallengeController(challengeService, challengeCreationService, challengeRankingService);
+            new ChallengeController(challengeService, challengeCreationService, challengeRankingService, challengeImageService);
 
     @Test
     @DisplayName("공개챌린지목록조회_sort값이_잘못되면_검증예외를던진다")
@@ -79,5 +81,15 @@ class ChallengeControllerTest {
         });
 
         verify(challengeService, never()).getPublicChallenges(any(), any(ChallengeSearchCondition.class), any());
+    }
+
+    @Test
+    @DisplayName("대표이미지업로드_파일이없으면_EMPTY_FILE예외를던지고_서비스를호출하지않는다")
+    void uploadChallengeImage_whenNoFile_throwsEmptyFile() {
+        assertThatThrownBy(() -> controller.uploadChallengeImage(10L, 1L, null))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.EMPTY_FILE));
+
+        verify(challengeImageService, never()).upload(any());
     }
 }

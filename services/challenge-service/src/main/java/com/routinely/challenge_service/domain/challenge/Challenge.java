@@ -3,6 +3,7 @@ package com.routinely.challenge_service.domain.challenge;
 import com.routinely.challenge_service.application.dto.CreateChallengeCommand;
 import com.routinely.jpa.entity.BaseEntity;
 import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -63,6 +64,9 @@ public class Challenge extends BaseEntity {
     @Column(name = "ended_at", nullable = false)
     private LocalDate endedAt;
 
+    @Embedded
+    private ChallengeImage image;
+
     public static Challenge create(CreateChallengeCommand command, Long creatorUserId, String inviteCode) {
         return Challenge.builder()
                 .creatorUserId(creatorUserId)
@@ -114,5 +118,21 @@ public class Challenge extends BaseEntity {
 
     public void end() {
         this.status = ChallengeLifecycleStatus.ENDED;
+    }
+
+    public void changeImage(ChallengeImage image) {
+        this.image = image;
+    }
+
+    public void removeImage() {
+        this.image = null;
+    }
+
+    public String getImageUrl() {
+        return image == null ? null : image.getUrl();
+    }
+
+    public String getImageObjectKey() {
+        return image == null ? null : image.getObjectKey();
     }
 }
