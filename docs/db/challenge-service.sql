@@ -16,6 +16,8 @@ CREATE TABLE challenges (
                             category_code   VARCHAR(30)                            NOT NULL,
                             started_at      DATE                                   NOT NULL,
                             ended_at        DATE                                   NOT NULL,
+                            image_url        VARCHAR(500)                          NULL,
+                            image_object_key VARCHAR(500)                          NULL,
                             created_at      TIMESTAMPTZ   DEFAULT now()            NOT NULL,
                             updated_at      TIMESTAMPTZ   DEFAULT now()            NOT NULL,
 
@@ -39,6 +41,8 @@ COMMENT ON COLUMN challenges.status           IS '챌린지 상태 — WAITING: 
 COMMENT ON COLUMN challenges.category_code    IS '카테고리 코드 — routine-service categories.code 비정규화 사본 (생성 시점 1회 복사, 이후 불변)';
 COMMENT ON COLUMN challenges.started_at       IS '챌린지 시작일';
 COMMENT ON COLUMN challenges.ended_at         IS '챌린지 종료일';
+COMMENT ON COLUMN challenges.image_url        IS '대표 이미지 접근 URL (#142)';
+COMMENT ON COLUMN challenges.image_object_key IS '대표 이미지 저장소 오브젝트 키 — 삭제/교체용 (#142)';
 COMMENT ON COLUMN challenges.created_at       IS '챌린지 생성일시';
 COMMENT ON COLUMN challenges.updated_at       IS '챌린지 최종 수정일시 — 애플리케이션 레벨에서 갱신';
 
