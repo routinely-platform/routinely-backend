@@ -21,6 +21,7 @@ public record ChallengeResult(
         int currentMembers,
         LocalDateTime createdAt,
         Long creatorUserId,
+        String imageUrl,
         ChallengeMemberRole myRole) {
 
     public static ChallengeResult from(
@@ -43,6 +44,7 @@ public record ChallengeResult(
                 currentMembers,
                 challenge.getCreatedAt(),
                 challenge.getCreatorUserId(),
+                challenge.getImageUrl(),
                 myRole
         );
     }

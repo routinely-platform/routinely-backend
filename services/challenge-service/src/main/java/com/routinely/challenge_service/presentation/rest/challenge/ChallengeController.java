@@ -1,8 +1,10 @@
 package com.routinely.challenge_service.presentation.rest.challenge;
 
 import com.routinely.challenge_service.application.ChallengeCreationService;
+import com.routinely.challenge_service.application.ChallengeImageService;
 import com.routinely.challenge_service.application.ChallengeRankingService;
 import com.routinely.challenge_service.application.ChallengeService;
+import com.routinely.challenge_service.application.dto.ChallengeImageUploadCommand;
 import com.routinely.challenge_service.application.dto.ChallengeListResult;
 import com.routinely.challenge_service.application.dto.ChallengeMemberResult;
 import com.routinely.challenge_service.application.dto.ChallengeRankingResult;
@@ -21,25 +23,31 @@ import com.routinely.challenge_service.presentation.rest.challenge.dto.response.
 import com.routinely.challenge_service.presentation.rest.challenge.dto.response.ChallengeResponse;
 import com.routinely.core.constant.HeaderConstants;
 import com.routinely.core.exception.BusinessException;
+import com.routinely.core.exception.ErrorCode;
 import com.routinely.core.response.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import static com.routinely.core.exception.ErrorCode.VALIDATION_FAILED;
 import static org.springframework.http.HttpStatus.CREATED;
@@ -54,13 +62,16 @@ public class ChallengeController {
     private final ChallengeService challengeService;
     private final ChallengeCreationService challengeCreationService;
     private final ChallengeRankingService challengeRankingService;
+    private final ChallengeImageService challengeImageService;
 
     public ChallengeController(ChallengeService challengeService,
                                ChallengeCreationService challengeCreationService,
-                               ChallengeRankingService challengeRankingService) {
+                               ChallengeRankingService challengeRankingService,
+                               ChallengeImageService challengeImageService) {
         this.challengeService = challengeService;
         this.challengeCreationService = challengeCreationService;
         this.challengeRankingService = challengeRankingService;
+        this.challengeImageService = challengeImageService;
     }
 
     @PostMapping
@@ -160,6 +171,43 @@ public class ChallengeController {
 
         challengeService.leaveChallenge(challengeId, userId);
         return ResponseEntity.ok(ApiResponse.ok("챌린지에서 탈퇴되었습니다.", null));
+    }
+
+    @PutMapping(value = "/{challengeId}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<ChallengeDetailResponse>> uploadChallengeImage(
+            @RequestHeader(HeaderConstants.USER_ID) Long userId,
+            @PathVariable Long challengeId,
+            @RequestParam(value = "image", required = false) MultipartFile image) {
+
+        challengeImageService.upload(toUploadCommand(challengeId, userId, image));
+        ChallengeResult result = challengeService.getChallengeDetail(challengeId, userId);
+        return ResponseEntity.ok(ApiResponse.ok("챌린지 대표 이미지가 변경되었습니다.", ChallengeDetailResponse.from(result)));
+    }
+
+    @DeleteMapping("/{challengeId}/image")
+    public ResponseEntity<ApiResponse<ChallengeDetailResponse>> deleteChallengeImage(
+            @RequestHeader(HeaderConstants.USER_ID) Long userId,
+            @PathVariable Long challengeId) {
+
+        challengeImageService.delete(challengeId, userId);
+        ChallengeResult result = challengeService.getChallengeDetail(challengeId, userId);
+        return ResponseEntity.ok(ApiResponse.ok("챌린지 대표 이미지가 삭제되었습니다.", ChallengeDetailResponse.from(result)));
+    }
+
+    private ChallengeImageUploadCommand toUploadCommand(Long challengeId, Long userId, MultipartFile image) {
+        if (image == null || image.isEmpty()) {
+            throw new BusinessException(ErrorCode.EMPTY_FILE);
+        }
+        try {
+            return new ChallengeImageUploadCommand(
+                    challengeId,
+                    userId,
+                    image.getOriginalFilename(),
+                    image.getContentType(),
+                    image.getBytes());
+        } catch (IOException e) {
+            throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED, "파일을 읽는 중 오류가 발생했습니다.", e);
+        }
     }
 
     private Pageable createPageable(String page, String size) {
