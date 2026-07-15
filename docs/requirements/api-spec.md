@@ -508,6 +508,66 @@ public class ApiResponse<T> {
 
 ---
 
+#### `PUT /api/v1/challenges/{challengeId}/image` — 챌린지 대표 이미지 생성/교체
+- Auth: ✅ (LEADER만)
+- `multipart/form-data`, 파트명 `image`
+- 제약: MIME `image/jpeg`·`image/png`·`image/webp`, 최대 5MB, 매직넘버 시그니처 검증
+- 저장 key 규칙: `challenge-images/{yyyy}/{MM}/{uuid}.{ext}` (매 업로드마다 새 key 발급 → 이전 객체는 트랜잭션 커밋 이후 best-effort 삭제)
+- 응답은 갱신된 챌린지 상세(`imageUrl` 포함)
+- 구현 이슈: #142
+
+**Response** `200`
+```json
+{
+  "success": true,
+  "message": "챌린지 대표 이미지가 변경되었습니다.",
+  "data": {
+    "challengeId": 1,
+    "title": "매일 30분 독서",
+    "description": "함께 책 읽어요",
+    "categoryCode": "READING",
+    "isPublic": true,
+    "inviteCode": null,
+    "maxMembers": 10,
+    "currentMembers": 3,
+    "status": "WAITING",
+    "startedAt": "2026-07-20",
+    "endedAt": "2026-08-20",
+    "creatorUserId": 42,
+    "imageUrl": "https://cdn.example.com/challenge-images/2026/07/uuid.jpg",
+    "myRole": "LEADER"
+  }
+}
+```
+
+**Error**
+- `403 NOT_CHALLENGE_MEMBER` — 챌린지 멤버가 아님
+- `403 FORBIDDEN` — 방장이 아님
+- `400 EMPTY_FILE` / `400 UNSUPPORTED_IMAGE_TYPE` / `400 FILE_SIZE_EXCEEDED`
+
+---
+
+#### `DELETE /api/v1/challenges/{challengeId}/image` — 챌린지 대표 이미지 삭제
+- Auth: ✅ (LEADER만)
+- DB의 `image_url`/`image_object_key`를 NULL로 변경하고, 트랜잭션 커밋 이후 storage 객체를 best-effort 삭제한다.
+- 응답은 갱신된 챌린지 상세(`imageUrl`은 `null`)
+- 구현 이슈: #142
+
+**Response** `200`
+```json
+{
+  "success": true,
+  "message": "챌린지 대표 이미지가 삭제되었습니다.",
+  "data": {
+    "challengeId": 1,
+    "imageUrl": null,
+    "myRole": "LEADER"
+  }
+}
+```
+
+---
+
 <!-- POST-MVP: DELETE /api/v1/challenges/{challengeId} — 챌린지 삭제 기능은 MVP 범위에서 제외. 추후 구현 시 LEADER만 가능, 활성 멤버 존재 시 제한 여부 정책 결정 필요 -->
 
 #### `POST /api/v1/challenges/{challengeId}/end` — 챌린지 종료 (V2 예정)
