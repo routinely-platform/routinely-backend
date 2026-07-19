@@ -1015,6 +1015,8 @@ public class ApiResponse<T> {
 >
 > 구현 이슈: #139 (루틴 시작 시 최초 설정은 #56 `POST /routines`에서 처리)
 
+> 요청 본문의 `preferredTime` 값이 그대로 새 값이 된다 — `null`(또는 필드 생략) 이면 설정을 해제해 리마인더를 끈다.
+
 **Response** `200`
 ```json
 {
@@ -1026,6 +1028,10 @@ public class ApiResponse<T> {
   }
 }
 ```
+
+**Error**
+- `400 VALIDATION_FAILED` — `preferredTime` 형식 오류(HH:mm:ss 아님)
+- `404 ROUTINE_NOT_FOUND` — 없거나 본인 소유가 아닌 루틴
 
 ---
 
