@@ -4,14 +4,18 @@ import com.routinely.core.constant.HeaderConstants;
 import com.routinely.core.exception.BusinessException;
 import com.routinely.core.response.ApiResponse;
 import com.routinely.routine_service.application.routine.RoutineService;
+import com.routinely.routine_service.application.routine.dto.PreferredTimeResult;
 import com.routinely.routine_service.application.routine.dto.RoutineResult;
 import com.routinely.routine_service.presentation.rest.routine.dto.request.StartRoutineRequest;
+import com.routinely.routine_service.presentation.rest.routine.dto.request.UpdateRoutinePreferredTimeRequest;
+import com.routinely.routine_service.presentation.rest.routine.dto.response.RoutinePreferredTimeResponse;
 import com.routinely.routine_service.presentation.rest.routine.dto.response.RoutineResponse;
 import jakarta.validation.Valid;
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -58,6 +62,18 @@ public class RoutineController {
                 .toList();
 
         return ResponseEntity.ok(ApiResponse.ok("루틴 목록이 조회되었습니다.", response));
+    }
+
+    @PatchMapping("/{routineId}")
+    public ResponseEntity<ApiResponse<RoutinePreferredTimeResponse>> updatePreferredTime(
+            @RequestHeader(HeaderConstants.USER_ID) Long userId,
+            @PathVariable Long routineId,
+            @RequestBody @Valid UpdateRoutinePreferredTimeRequest request) {
+
+        PreferredTimeResult result = routineService.updatePreferredTime(
+                routineId, userId, request.toPreferredTime());
+        return ResponseEntity.ok(
+                ApiResponse.ok("알림 시간이 설정되었습니다.", RoutinePreferredTimeResponse.from(result)));
     }
 
     @DeleteMapping("/{routineId}")

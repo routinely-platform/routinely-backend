@@ -4,8 +4,11 @@ import com.routinely.core.exception.BusinessException;
 import com.routinely.core.exception.ErrorCode;
 import com.routinely.core.response.ApiResponse;
 import com.routinely.routine_service.application.routine.RoutineService;
+import com.routinely.routine_service.application.routine.dto.PreferredTimeResult;
 import com.routinely.routine_service.application.routine.dto.RoutineResult;
 import com.routinely.routine_service.presentation.rest.routine.dto.request.StartRoutineRequest;
+import com.routinely.routine_service.presentation.rest.routine.dto.request.UpdateRoutinePreferredTimeRequest;
+import com.routinely.routine_service.presentation.rest.routine.dto.response.RoutinePreferredTimeResponse;
 import com.routinely.routine_service.presentation.rest.routine.dto.response.RoutineResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -104,5 +107,34 @@ class RoutineControllerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody().getMessage()).isEqualTo("루틴이 중단되었습니다.");
         verify(routineService).stop(100L, 1L);
+    }
+
+    @Test
+    @DisplayName("선호시각설정하면_변환한LocalTime을서비스에전달하고설정메시지를반환한다")
+    void updatePreferredTime_delegatesParsedTime() {
+        when(routineService.updatePreferredTime(100L, 1L, LocalTime.of(7, 0)))
+                .thenReturn(new PreferredTimeResult(100L, LocalTime.of(7, 0)));
+
+        ResponseEntity<ApiResponse<RoutinePreferredTimeResponse>> response = controller.updatePreferredTime(
+                1L, 100L, new UpdateRoutinePreferredTimeRequest("07:00:00"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody().getMessage()).isEqualTo("알림 시간이 설정되었습니다.");
+        assertThat(response.getBody().getData().routineId()).isEqualTo(100L);
+        assertThat(response.getBody().getData().preferredTime()).isEqualTo("07:00:00");
+        verify(routineService).updatePreferredTime(100L, 1L, LocalTime.of(7, 0));
+    }
+
+    @Test
+    @DisplayName("선호시각을null로보내면_해제로서비스에null을전달한다")
+    void updatePreferredTime_whenNull_delegatesNull() {
+        when(routineService.updatePreferredTime(100L, 1L, null))
+                .thenReturn(new PreferredTimeResult(100L, null));
+
+        ResponseEntity<ApiResponse<RoutinePreferredTimeResponse>> response = controller.updatePreferredTime(
+                1L, 100L, new UpdateRoutinePreferredTimeRequest(null));
+
+        assertThat(response.getBody().getData().preferredTime()).isNull();
+        verify(routineService).updatePreferredTime(100L, 1L, null);
     }
 }
