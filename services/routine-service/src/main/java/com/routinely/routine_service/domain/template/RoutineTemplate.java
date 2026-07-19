@@ -81,4 +81,52 @@ public class RoutineTemplate extends BaseEntity {
         template.isDeleted = false;
         return template;
     }
+
+    /**
+     * 개인 루틴 템플릿을 생성한다. 챌린지와 연결되지 않으므로 challengeId는 NULL이다.
+     *
+     * @param repeatValue DAILY_N/WEEKLY_N/MONTHLY_N이면 필수, 그 외 NULL (CHECK 제약과 정합)
+     */
+    public static RoutineTemplate forPersonal(Long userId, String title, String categoryCode,
+                                              RepeatType repeatType, Integer repeatValue) {
+        RoutineTemplate template = new RoutineTemplate();
+        template.userId = userId;
+        template.title = title;
+        template.categoryCode = categoryCode;
+        template.repeatType = repeatType;
+        template.repeatValue = repeatValue;
+        template.isDeleted = false;
+        return template;
+    }
+
+    public void changeTitle(String title) {
+        this.title = title;
+    }
+
+    public void changeCategoryCode(String categoryCode) {
+        this.categoryCode = categoryCode;
+    }
+
+    /**
+     * 반복 유형과 반복 횟수는 {@code ck_rt_repeat_value} CHECK 제약과 정합해야 하므로 항상 쌍으로 변경한다.
+     */
+    public void changeRepeat(RepeatType repeatType, Integer repeatValue) {
+        this.repeatType = repeatType;
+        this.repeatValue = repeatValue;
+    }
+
+    /**
+     * 소프트 삭제 — 물리 삭제 대신 삭제 플래그와 삭제 시각만 기록한다.
+     */
+    public void softDelete(LocalDateTime deletedAt) {
+        this.isDeleted = true;
+        this.deletedAt = deletedAt;
+    }
+
+    /**
+     * 챌린지 연결 템플릿 여부 — 연결 템플릿은 개인 CRUD API로 수정/삭제할 수 없다.
+     */
+    public boolean isChallengeLinked() {
+        return challengeId != null;
+    }
 }

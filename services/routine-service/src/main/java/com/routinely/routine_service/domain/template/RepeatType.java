@@ -9,5 +9,12 @@ package com.routinely.routine_service.domain.template;
  * {@code DAILY / WEEKLY} 는 repeatValue가 NULL이어야 한다.
  */
 public enum RepeatType {
-    DAILY, DAILY_N, WEEKLY, WEEKLY_N, MONTHLY_N
+    DAILY, DAILY_N, WEEKLY, WEEKLY_N, MONTHLY_N;
+
+    /**
+     * 반복 횟수(repeatValue)가 필수인 유형인지 여부.
+     */
+    public boolean requiresValue() {
+        return this == DAILY_N || this == WEEKLY_N || this == MONTHLY_N;
+    }
 }
