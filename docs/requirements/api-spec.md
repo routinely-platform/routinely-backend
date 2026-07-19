@@ -767,59 +767,132 @@ public class ApiResponse<T> {
 }
 ```
 
+**Error**
+- `400 VALIDATION_FAILED` — 필수 필드 누락 / 유효하지 않은 카테고리 코드 / repeat 정합성 위반 (`repeatValue`는 DAILY_N/WEEKLY_N/MONTHLY_N에서 필수, DAILY/WEEKLY에서 생략)
+
 ---
 
 #### `GET /api/v1/routine-templates` — 내 루틴 템플릿 목록
 - Auth: ✅
-- Query: `type` (PERSONAL/CHALLENGE), `challengeId`, `categoryCode`
+- Query: `categoryCode` (선택)
+
+> **개인 템플릿만** 반환한다 (`challengeId` NULL, 미삭제). 챌린지 연결 템플릿은 챌린지/피드 맥락에서 노출한다.  
+> 정렬: 최신 생성 순 (id 내림차순).
 
 **Response** `200`
 ```json
 {
   "success": true,
   "message": "루틴 템플릿 목록이 조회되었습니다.",
-  "data": [ ... ]
+  "data": [
+    {
+      "templateId": 2,
+      "title": "독서 30분",
+      "categoryCode": "READING",
+      "repeatType": "WEEKLY_N",
+      "repeatValue": 3,
+      "challengeId": null
+    },
+    {
+      "templateId": 1,
+      "title": "아침 달리기",
+      "categoryCode": "EXERCISE",
+      "repeatType": "DAILY",
+      "repeatValue": null,
+      "challengeId": null
+    }
+  ]
 }
 ```
 
 ---
 
-#### `PATCH /api/v1/routine-templates/{templateId}` — 루틴 템플릿 수정
-- Auth: ✅
+#### `GET /api/v1/routine-templates/{templateId}` — 루틴 템플릿 상세
+- Auth: ✅ (소유자만, 개인 템플릿만)
 
-**Request**
+> 챌린지 연결 템플릿(`challengeId` NOT NULL)은 소유자여도 이 API로 조회할 수 없다. 챌린지 루틴은 챌린지/피드 맥락에서 노출한다.
+
+**Response** `200`
 ```json
 {
-  "title": "저녁 달리기"
+  "success": true,
+  "message": "루틴 템플릿이 조회되었습니다.",
+  "data": {
+    "templateId": 1,
+    "title": "아침 달리기",
+    "categoryCode": "EXERCISE",
+    "repeatType": "DAILY",
+    "repeatValue": null,
+    "challengeId": null
+  }
 }
 ```
 
-> 템플릿은 루틴의 정의(`title`, `repeatType`, `repeatValue`)만 수정한다. 선호 수행 시각은 `PATCH /api/v1/routines/{routineId}`에서 수정한다 (ADR-0035).
+**Error**
+- `404 ROUTINE_TEMPLATE_NOT_FOUND` — 없거나 삭제된 템플릿
+- `403 FORBIDDEN` — 소유자가 아님 / 챌린지 연결 템플릿
 
-**Response** `200`
+---
+
+#### `PATCH /api/v1/routine-templates/{templateId}` — 루틴 템플릿 수정
+- Auth: ✅ (소유자만, 개인 템플릿만)
+
+**Request** (부분 수정 — 보낸 필드만 변경)
+```json
+{
+  "title": "저녁 달리기",
+  "categoryCode": "EXERCISE",
+  "repeatType": "WEEKLY_N",
+  "repeatValue": 3
+}
+```
+
+> 템플릿은 루틴의 정의(`title`, `categoryCode`, `repeatType`, `repeatValue`)만 수정한다. 선호 수행 시각은 `PATCH /api/v1/routines/{routineId}`에서 수정한다 (ADR-0035).  
+> 반복 설정은 항상 쌍으로 수정한다 — `repeatValue`는 `repeatType`과 함께만 보낼 수 있으며, DAILY_N/WEEKLY_N/MONTHLY_N이면 필수, DAILY/WEEKLY면 생략한다 (`ck_rt_repeat_value` 제약 미러링).  
+> 챌린지 연결 템플릿(`challengeId` NOT NULL)은 이 API로 수정할 수 없다.
+
+**Response** `200` — 수정 후 전체 템플릿 반환
 ```json
 {
   "success": true,
   "message": "루틴 템플릿이 수정되었습니다.",
   "data": {
     "templateId": 1,
-    "title": "저녁 달리기"
+    "title": "저녁 달리기",
+    "categoryCode": "EXERCISE",
+    "repeatType": "WEEKLY_N",
+    "repeatValue": 3,
+    "challengeId": null
   }
 }
 ```
 
+**Error**
+- `400 VALIDATION_FAILED` — 수정 필드 없음 / 유효하지 않은 카테고리 코드 / repeat 정합성 위반
+- `403 FORBIDDEN` — 소유자가 아님 / 챌린지 연결 템플릿
+- `404 ROUTINE_TEMPLATE_NOT_FOUND` — 없거나 삭제된 템플릿
+
 ---
 
 #### `DELETE /api/v1/routine-templates/{templateId}` — 루틴 템플릿 삭제 (소프트)
-- Auth: ✅
+- Auth: ✅ (소유자만, 개인 템플릿만)
+
+> 물리 삭제하지 않고 `is_deleted = true` + `deleted_at`만 기록한다. 챌린지 연결 템플릿은 삭제할 수 없다.
 
 **Response** `200`
 ```json
 {
   "success": true,
-  "message": "루틴 템플릿이 삭제되었습니다."
+  "message": "루틴 템플릿이 삭제되었습니다.",
+  "data": null
 }
 ```
+
+**Error**
+- `403 FORBIDDEN` — 소유자가 아님 / 챌린지 연결 템플릿
+- `404 ROUTINE_TEMPLATE_NOT_FOUND` — 없거나 이미 삭제된 템플릿
+
+> 구현 이슈: #55
 
 ---
 
