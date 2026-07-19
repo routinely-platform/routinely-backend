@@ -907,13 +907,13 @@ public class ApiResponse<T> {
   "routineTemplateId": 1,
   "startedAt": "2025-02-01",
   "endedAt": "2025-03-02",
-  "preferredTime": "07:00:00",
-  "challengeId": null
+  "preferredTime": "07:00:00"
 }
 ```
 
+> **개인 루틴만** 시작한다. 요청의 `routineTemplateId`는 요청자 본인 소유의 개인 템플릿이어야 한다.
+> 챌린지 루틴 인스턴스는 이 API로 만들지 않는다 — `challenge.started` 수신 시 `preferredTime = null`로 자동 생성되며, 멤버가 이후 `PATCH /api/v1/routines/{routineId}`(#139)로 설정한다 (ADR-0032, ADR-0035).
 > `preferredTime`(HH:mm:ss)은 알림 발송 기준 시각이며 선택값이다. 생략(`null`)하면 리마인더를 발송하지 않는다.
-> 챌린지 루틴 인스턴스는 `challenge.started` 수신 시 `preferredTime = null`로 생성되며, 멤버가 이후 `PATCH /api/v1/routines/{routineId}`로 설정한다 (ADR-0035).
 
 **Response** `201`
 ```json
@@ -924,6 +924,7 @@ public class ApiResponse<T> {
     "routineId": 1,
     "routineTemplateId": 1,
     "title": "아침 달리기",
+    "challengeId": null,
     "startedAt": "2025-02-01",
     "endedAt": "2025-03-02",
     "preferredTime": "07:00:00",
@@ -932,20 +933,45 @@ public class ApiResponse<T> {
 }
 ```
 
+**Error**
+- `400 VALIDATION_FAILED` — 필수 필드 누락 / 종료일 < 시작일 / preferredTime 형식 오류
+- `403 FORBIDDEN` — 본인 소유 템플릿이 아님 / 챌린지 연결 템플릿(챌린지 루틴은 자동 생성)
+- `404 ROUTINE_TEMPLATE_NOT_FOUND` — 없거나 삭제된 템플릿
+
+> 구현 이슈: #56
+
 ---
 
 #### `GET /api/v1/routines` — 내 루틴 목록
 - Auth: ✅
-- Query: `isActive` (true/false), `challengeId`
+- Query: `isActive` (true/false, 선택), `challengeId` (선택)
+
+> 본인 루틴(개인 + 챌린지) 전체를 최신 생성 순(id 내림차순)으로 반환한다. `title`은 기반 템플릿 이름이다.
 
 **Response** `200`
 ```json
 {
   "success": true,
   "message": "루틴 목록이 조회되었습니다.",
-  "data": [ ... ]
+  "data": [
+    {
+      "routineId": 1,
+      "routineTemplateId": 1,
+      "title": "아침 달리기",
+      "challengeId": null,
+      "startedAt": "2025-02-01",
+      "endedAt": "2025-03-02",
+      "preferredTime": "07:00:00",
+      "isActive": true
+    }
+  ]
 }
 ```
+
+**Error**
+- `400 VALIDATION_FAILED` — `isActive`가 true/false가 아님 / `challengeId`가 숫자가 아님
+
+> 구현 이슈: #56
 
 ---
 
@@ -986,6 +1012,8 @@ public class ApiResponse<T> {
 
 > 본인 루틴 인스턴스의 선호 수행 시각(알림 발송 기준)을 설정·수정한다. `null`로 보내면 리마인더를 끈다.
 > 개인/챌린지 루틴 모두 인스턴스 단위로 멤버가 직접 설정한다 (ADR-0035).
+>
+> 구현 이슈: #139 (루틴 시작 시 최초 설정은 #56 `POST /routines`에서 처리)
 
 **Response** `200`
 ```json
@@ -1002,15 +1030,23 @@ public class ApiResponse<T> {
 ---
 
 #### `DELETE /api/v1/routines/{routineId}` — 루틴 중단
-- Auth: ✅
+- Auth: ✅ (소유자만)
+
+> 물리 삭제하지 않고 `is_active = false`로 전환한다(중단). 이미 중단된 루틴에 대해서도 멱등하게 동작한다.
 
 **Response** `200`
 ```json
 {
   "success": true,
-  "message": "루틴이 중단되었습니다."
+  "message": "루틴이 중단되었습니다.",
+  "data": null
 }
 ```
+
+**Error**
+- `404 ROUTINE_NOT_FOUND` — 없거나 본인 소유가 아닌 루틴
+
+> 구현 이슈: #56
 
 ---
 
