@@ -82,4 +82,11 @@ public class Routine extends BaseEntity {
     public void deactivate() {
         this.isActive = false;
     }
+
+    /**
+     * 선호 수행 시각(알림 발송 기준)을 설정/변경한다. NULL이면 설정을 해제해 리마인더를 끈다. (ADR-0035, #139)
+     */
+    public void changePreferredTime(LocalTime preferredTime) {
+        this.preferredTime = preferredTime;
+    }
 }

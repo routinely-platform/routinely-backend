@@ -1,6 +1,7 @@
 package com.routinely.routine_service.application.routine;
 
 import com.routinely.core.exception.BusinessException;
+import com.routinely.routine_service.application.routine.dto.PreferredTimeResult;
 import com.routinely.routine_service.application.routine.dto.RoutineResult;
 import com.routinely.routine_service.application.routine.dto.StartRoutineCommand;
 import com.routinely.routine_service.domain.routine.Routine;
@@ -10,6 +11,7 @@ import com.routinely.routine_service.domain.template.RoutineTemplateRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -73,6 +75,19 @@ public class RoutineService {
                 .orElseThrow(() -> new BusinessException(ROUTINE_NOT_FOUND));
 
         routine.deactivate();
+    }
+
+    /**
+     * 선호 수행 시각 설정/변경 — 본인 소유 루틴만 대상이며, 없거나 소유자가 아니면 ROUTINE_NOT_FOUND(404).
+     * preferredTime이 null이면 설정을 해제한다(리마인더 끄기). (ADR-0035)
+     */
+    @Transactional
+    public PreferredTimeResult updatePreferredTime(Long routineId, Long userId, LocalTime preferredTime) {
+        Routine routine = routineRepository.findByIdAndUserId(routineId, userId)
+                .orElseThrow(() -> new BusinessException(ROUTINE_NOT_FOUND));
+
+        routine.changePreferredTime(preferredTime);
+        return PreferredTimeResult.from(routine);
     }
 
     private RoutineTemplate getOwnedPersonalTemplateOrThrow(Long templateId, Long userId) {

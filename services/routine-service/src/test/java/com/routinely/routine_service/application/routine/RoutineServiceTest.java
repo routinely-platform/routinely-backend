@@ -2,6 +2,7 @@ package com.routinely.routine_service.application.routine;
 
 import com.routinely.core.exception.BusinessException;
 import com.routinely.core.exception.ErrorCode;
+import com.routinely.routine_service.application.routine.dto.PreferredTimeResult;
 import com.routinely.routine_service.application.routine.dto.RoutineResult;
 import com.routinely.routine_service.application.routine.dto.StartRoutineCommand;
 import com.routinely.routine_service.domain.routine.Routine;
@@ -235,6 +236,50 @@ class RoutineServiceTest {
                     .thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> service.stop(ROUTINE_ID, OTHER_USER_ID))
+                    .isInstanceOfSatisfying(BusinessException.class, exception ->
+                            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ROUTINE_NOT_FOUND));
+        }
+    }
+
+    @Nested
+    @DisplayName("updatePreferredTime")
+    class UpdatePreferredTime {
+
+        @Test
+        @DisplayName("본인루틴이면_선호시각을설정하고결과를반환한다")
+        void updatePreferredTime_whenOwned_setsTime() {
+            Routine routine = personalRoutine(TEMPLATE_ID, null);
+            when(routineRepository.findByIdAndUserId(ROUTINE_ID, OWNER_ID))
+                    .thenReturn(Optional.of(routine));
+
+            PreferredTimeResult result = service.updatePreferredTime(
+                    ROUTINE_ID, OWNER_ID, LocalTime.of(7, 0));
+
+            assertThat(routine.getPreferredTime()).isEqualTo(LocalTime.of(7, 0));
+            assertThat(result.routineId()).isEqualTo(ROUTINE_ID);
+            assertThat(result.preferredTime()).isEqualTo(LocalTime.of(7, 0));
+        }
+
+        @Test
+        @DisplayName("null을전달하면_선호시각을해제한다")
+        void updatePreferredTime_whenNull_clearsTime() {
+            Routine routine = personalRoutine(TEMPLATE_ID, LocalTime.of(7, 0));
+            when(routineRepository.findByIdAndUserId(ROUTINE_ID, OWNER_ID))
+                    .thenReturn(Optional.of(routine));
+
+            PreferredTimeResult result = service.updatePreferredTime(ROUTINE_ID, OWNER_ID, null);
+
+            assertThat(routine.getPreferredTime()).isNull();
+            assertThat(result.preferredTime()).isNull();
+        }
+
+        @Test
+        @DisplayName("본인루틴이없거나소유자가아니면_ROUTINE_NOT_FOUND예외를던진다")
+        void updatePreferredTime_whenNotFound_throwsNotFound() {
+            when(routineRepository.findByIdAndUserId(ROUTINE_ID, OTHER_USER_ID))
+                    .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.updatePreferredTime(ROUTINE_ID, OTHER_USER_ID, LocalTime.of(7, 0)))
                     .isInstanceOfSatisfying(BusinessException.class, exception ->
                             assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ROUTINE_NOT_FOUND));
         }
