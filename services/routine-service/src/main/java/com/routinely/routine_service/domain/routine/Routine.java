@@ -56,6 +56,10 @@ public class Routine extends BaseEntity {
     @Column(name = "preferred_time")
     private LocalTime preferredTime;
 
+    /** 선호 요일 비트마스크(bit0=월 … bit6=일). 빈도 유형 루틴의 알림/표시용 선호(soft), NULL 허용. (ADR-0039) */
+    @Column(name = "preferred_days")
+    private Short preferredDays;
+
     @Column(name = "is_active", nullable = false)
     private boolean isActive;
 
@@ -84,9 +88,11 @@ public class Routine extends BaseEntity {
     }
 
     /**
-     * 선호 수행 시각(알림 발송 기준)을 설정/변경한다. NULL이면 설정을 해제해 리마인더를 끈다. (ADR-0035, #139)
+     * 선호 수행 시각·선호 요일(알림/표시 기준)을 함께 설정/변경한다. 각 값이 NULL이면 해당 설정을 해제한다.
+     * 요일은 완료를 제약하지 않는 soft 선호다. (ADR-0035, ADR-0039, #139)
      */
-    public void changePreferredTime(LocalTime preferredTime) {
+    public void changePreferences(LocalTime preferredTime, Short preferredDays) {
         this.preferredTime = preferredTime;
+        this.preferredDays = preferredDays;
     }
 }

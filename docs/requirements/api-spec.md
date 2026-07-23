@@ -353,13 +353,13 @@ public class ApiResponse<T> {
   "startedAt": "2025-02-01",
   "endedAt": "2025-03-02",
   "routineTitle": "아침 운동 30분",
-  "repeatType": "DAILY",
-  "repeatValue": null
+  "scheduleType": "DAILY",
+  "targetCount": null
 }
 ```
 
-> 루틴 정보(`routineTitle`, `repeatType`, `repeatValue`)도 함께 입력한다. challenge-service는 저장하지 않고 `challenge.created` 이벤트로 전달한다 (#132).
-> `repeatType`: `DAILY`(매일) \| `DAILY_N`(일 N회) \| `WEEKLY`(매주 1회) \| `WEEKLY_N`(주 N회) \| `MONTHLY_N`(월 N회). `repeatValue`는 `DAILY_N`/`WEEKLY_N`/`MONTHLY_N`일 때만 1 이상으로 필수이며, 그 외 유형에서는 `null`이다.
+> 루틴 정보(`routineTitle`, `scheduleType`, `targetCount`)도 함께 입력한다. challenge-service는 저장하지 않고 `challenge.created` 이벤트로 전달한다 (#132).
+> **챌린지는 요일 지정형(`SPECIFIC_DAYS`)을 쓸 수 없다** — `scheduleType`: `DAILY`(매일) \| `WEEKLY_COUNT`(주 N회) \| `MONTHLY_COUNT`(월 N회). `targetCount`는 `WEEKLY_COUNT`/`MONTHLY_COUNT`일 때만 1 이상으로 필수이며, `DAILY`에서는 `null`이다. 멤버 생활 패턴이 달라 특정 요일 강제가 부적절하기 때문 (ADR-0035, ADR-0039).
 > 선호 수행 시각은 챌린지 생성 시 입력받지 않는다. 챌린지 루틴은 모든 멤버에게 동일하지만(ADR-0026), 알림 시각은 개인 일과에 종속되므로 멤버 각자가 본인 `routines` 인스턴스에서 설정한다 (ADR-0035).
 
 **Response** `201`
@@ -478,7 +478,7 @@ public class ApiResponse<T> {
 - `WAITING` 상태인 챌린지만 수정 가능하다.
   - **방장 혼자 (1명)**: 위 필드 모두 수정 가능.
   - **멤버 2명 이상**: `description`과 `maxMembers` 증가만 허용. 나머지 변경 시 `400` 반환.
-  - **항상 변경 불가**: `categoryCode`, `repeatType`, `repeatValue`, `creatorUserId`.
+  - **항상 변경 불가**: `categoryCode`, `scheduleType`, `targetCount`, `creatorUserId`.
 - 날짜 제약:
   - `startedAt`은 오늘 이후로만 변경 가능하며, 반드시 `endedAt`보다 빨라야 한다.
   - `endedAt`은 `startedAt` 이후로만 변경 가능하다.
@@ -742,14 +742,19 @@ public class ApiResponse<T> {
 {
   "title": "아침 달리기",
   "categoryCode": "EXERCISE",
-  "repeatType": "DAILY",
-  "repeatValue": null
+  "scheduleType": "SPECIFIC_DAYS",
+  "daysOfWeek": ["MON", "WED", "FRI"],
+  "targetCount": null
 }
 ```
 
 > 개인 루틴 생성 시 `challengeId` 없이 요청한다.  
 > 챌린지 루틴은 `challenge.created` 이벤트를 받은 routine-service가 내부적으로 생성한다 (클라이언트 직접 호출 아님).  
-> 선호 수행 시각(`preferredTime`)은 템플릿(정의)이 아니라 루틴 인스턴스 속성이다. `POST /api/v1/routines`에서 설정한다 (ADR-0035).
+> 선호 수행 시각(`preferredTime`)·선호 요일(`preferredDays`)은 템플릿(정의)이 아니라 루틴 인스턴스 속성이다. 시각은 `POST /api/v1/routines` 또는 `PATCH /api/v1/routines/{routineId}`에서, 선호 요일은 `PATCH`에서 설정한다 (ADR-0035, ADR-0039).  
+> **`scheduleType` (ADR-0039)**:  
+> - `DAILY`(매일) — `daysOfWeek`/`targetCount` 모두 생략  
+> - `SPECIFIC_DAYS`(요일 지정·강제) — `daysOfWeek`(MON~SUN 배열) 필수, `targetCount` 생략. 지정 요일에 수행하지 않으면 결석(MISSED)  
+> - `WEEKLY_COUNT`(주 N회) / `MONTHLY_COUNT`(월 N회) — `targetCount` 필수(≥1), `daysOfWeek` 생략. 아무 날이나 수행 가능(유연)
 
 **Response** `201`
 ```json
@@ -760,15 +765,16 @@ public class ApiResponse<T> {
     "templateId": 1,
     "title": "아침 달리기",
     "categoryCode": "EXERCISE",
-    "repeatType": "DAILY",
-    "repeatValue": null,
+    "scheduleType": "SPECIFIC_DAYS",
+    "daysOfWeek": ["MON", "WED", "FRI"],
+    "targetCount": null,
     "challengeId": null
   }
 }
 ```
 
 **Error**
-- `400 VALIDATION_FAILED` — 필수 필드 누락 / 유효하지 않은 카테고리 코드 / repeat 정합성 위반 (`repeatValue`는 DAILY_N/WEEKLY_N/MONTHLY_N에서 필수, DAILY/WEEKLY에서 생략)
+- `400 VALIDATION_FAILED` — 필수 필드 누락 / 유효하지 않은 카테고리 코드 / 스케줄 정합성 위반 (`SPECIFIC_DAYS`는 `daysOfWeek` 필수, `WEEKLY_COUNT`/`MONTHLY_COUNT`는 `targetCount` 필수, `DAILY`는 둘 다 생략) / 유효하지 않은 요일 코드
 
 ---
 
@@ -789,16 +795,18 @@ public class ApiResponse<T> {
       "templateId": 2,
       "title": "독서 30분",
       "categoryCode": "READING",
-      "repeatType": "WEEKLY_N",
-      "repeatValue": 3,
+      "scheduleType": "WEEKLY_COUNT",
+      "daysOfWeek": null,
+      "targetCount": 3,
       "challengeId": null
     },
     {
       "templateId": 1,
       "title": "아침 달리기",
       "categoryCode": "EXERCISE",
-      "repeatType": "DAILY",
-      "repeatValue": null,
+      "scheduleType": "DAILY",
+      "daysOfWeek": null,
+      "targetCount": null,
       "challengeId": null
     }
   ]
@@ -821,8 +829,9 @@ public class ApiResponse<T> {
     "templateId": 1,
     "title": "아침 달리기",
     "categoryCode": "EXERCISE",
-    "repeatType": "DAILY",
-    "repeatValue": null,
+    "scheduleType": "DAILY",
+    "daysOfWeek": null,
+    "targetCount": null,
     "challengeId": null
   }
 }
@@ -842,13 +851,13 @@ public class ApiResponse<T> {
 {
   "title": "저녁 달리기",
   "categoryCode": "EXERCISE",
-  "repeatType": "WEEKLY_N",
-  "repeatValue": 3
+  "scheduleType": "WEEKLY_COUNT",
+  "targetCount": 3
 }
 ```
 
-> 템플릿은 루틴의 정의(`title`, `categoryCode`, `repeatType`, `repeatValue`)만 수정한다. 선호 수행 시각은 `PATCH /api/v1/routines/{routineId}`에서 수정한다 (ADR-0035).  
-> 반복 설정은 항상 쌍으로 수정한다 — `repeatValue`는 `repeatType`과 함께만 보낼 수 있으며, DAILY_N/WEEKLY_N/MONTHLY_N이면 필수, DAILY/WEEKLY면 생략한다 (`ck_rt_repeat_value` 제약 미러링).  
+> 템플릿은 루틴의 정의(`title`, `categoryCode`, `scheduleType`, `daysOfWeek`, `targetCount`)만 수정한다. 선호 수행 시각·요일은 `PATCH /api/v1/routines/{routineId}`에서 수정한다 (ADR-0035, ADR-0039).  
+> 스케줄은 항상 한 묶음으로 수정한다 — `daysOfWeek`/`targetCount`는 `scheduleType`과 함께만 보낼 수 있고, 유형별 정합성(`SPECIFIC_DAYS`→`daysOfWeek`, `WEEKLY_COUNT`/`MONTHLY_COUNT`→`targetCount`, `DAILY`→둘 다 없음)을 지켜야 한다 (`ck_rt_schedule` 제약 미러링).  
 > 챌린지 연결 템플릿(`challengeId` NOT NULL)은 이 API로 수정할 수 없다.
 
 **Response** `200` — 수정 후 전체 템플릿 반환
@@ -860,15 +869,16 @@ public class ApiResponse<T> {
     "templateId": 1,
     "title": "저녁 달리기",
     "categoryCode": "EXERCISE",
-    "repeatType": "WEEKLY_N",
-    "repeatValue": 3,
+    "scheduleType": "WEEKLY_COUNT",
+    "daysOfWeek": null,
+    "targetCount": 3,
     "challengeId": null
   }
 }
 ```
 
 **Error**
-- `400 VALIDATION_FAILED` — 수정 필드 없음 / 유효하지 않은 카테고리 코드 / repeat 정합성 위반
+- `400 VALIDATION_FAILED` — 수정 필드 없음 / 유효하지 않은 카테고리 코드 / 스케줄 정합성 위반
 - `403 FORBIDDEN` — 소유자가 아님 / 챌린지 연결 템플릿
 - `404 ROUTINE_TEMPLATE_NOT_FOUND` — 없거나 삭제된 템플릿
 
@@ -914,6 +924,7 @@ public class ApiResponse<T> {
 > **개인 루틴만** 시작한다. 요청의 `routineTemplateId`는 요청자 본인 소유의 개인 템플릿이어야 한다.
 > 챌린지 루틴 인스턴스는 이 API로 만들지 않는다 — `challenge.started` 수신 시 `preferredTime = null`로 자동 생성되며, 멤버가 이후 `PATCH /api/v1/routines/{routineId}`(#139)로 설정한다 (ADR-0032, ADR-0035).
 > `preferredTime`(HH:mm:ss)은 알림 발송 기준 시각이며 선택값이다. 생략(`null`)하면 리마인더를 발송하지 않는다.
+> **선호 요일(`preferredDays`)은 이 API에서 받지 않는다** — 루틴 시작 후 `PATCH /api/v1/routines/{routineId}`에서 설정한다. 응답에는 현재 값(생성 직후 `null`)이 포함된다 (ADR-0039).
 
 **Response** `201`
 ```json
@@ -928,6 +939,7 @@ public class ApiResponse<T> {
     "startedAt": "2025-02-01",
     "endedAt": "2025-03-02",
     "preferredTime": "07:00:00",
+    "preferredDays": null,
     "isActive": true
   }
 }
@@ -962,6 +974,7 @@ public class ApiResponse<T> {
       "startedAt": "2025-02-01",
       "endedAt": "2025-03-02",
       "preferredTime": "07:00:00",
+      "preferredDays": ["MON", "WED", "FRI"],
       "isActive": true
     }
   ]
@@ -1000,37 +1013,38 @@ public class ApiResponse<T> {
 
 ---
 
-#### `PATCH /api/v1/routines/{routineId}` — 알림 시간 설정/수정
+#### `PATCH /api/v1/routines/{routineId}` — 선호 설정(시각·요일) 설정/수정
 - Auth: ✅
 
 **Request**
 ```json
 {
-  "preferredTime": "07:00:00"
+  "preferredTime": "07:00:00",
+  "preferredDays": ["MON", "WED", "FRI"]
 }
 ```
 
-> 본인 루틴 인스턴스의 선호 수행 시각(알림 발송 기준)을 설정·수정한다. `null`로 보내면 리마인더를 끈다.
+> 본인 루틴 인스턴스의 선호 수행 시각(알림 발송 기준)과 선호 요일을 설정·수정한다. 각 필드 값이 그대로 새 값이 되며, `null`(또는 필드 생략)이면 해당 설정을 해제한다(시각 `null` → 리마인더 끔).
+> **선호 요일은 soft다** — 알림/표시용일 뿐 완료를 제약하지 않는다. 빈도 유형(`WEEKLY_COUNT`/`MONTHLY_COUNT`) 루틴에서 "월화수 선호"여도 목·금·토에 수행해 목표 횟수를 채우면 달성이다 (ADR-0039).
 > 개인/챌린지 루틴 모두 인스턴스 단위로 멤버가 직접 설정한다 (ADR-0035).
 >
-> 구현 이슈: #139 (루틴 시작 시 최초 설정은 #56 `POST /routines`에서 처리)
-
-> 요청 본문의 `preferredTime` 값이 그대로 새 값이 된다 — `null`(또는 필드 생략) 이면 설정을 해제해 리마인더를 끈다.
+> 구현 이슈: #139 (선호 요일은 #149에서 추가). 루틴 시작 시 최초 시각 설정은 #56 `POST /routines`에서 처리.
 
 **Response** `200`
 ```json
 {
   "success": true,
-  "message": "알림 시간이 설정되었습니다.",
+  "message": "알림 설정이 저장되었습니다.",
   "data": {
     "routineId": 1,
-    "preferredTime": "07:00:00"
+    "preferredTime": "07:00:00",
+    "preferredDays": ["MON", "WED", "FRI"]
   }
 }
 ```
 
 **Error**
-- `400 VALIDATION_FAILED` — `preferredTime` 형식 오류(HH:mm:ss 아님)
+- `400 VALIDATION_FAILED` — `preferredTime` 형식 오류(HH:mm:ss 아님) / 유효하지 않은 요일 코드
 - `404 ROUTINE_NOT_FOUND` — 없거나 본인 소유가 아닌 루틴
 
 ---
@@ -1538,7 +1552,8 @@ data: {"notificationId":2,"type":"CHALLENGE_EVENT","title":"새 멤버가 참여
 | `challenges.status` | `WAITING`, `ACTIVE`, `ENDED` |
 | `challenge_members.role` | `LEADER`, `MEMBER` |
 | `challenge_members.status` | `ACTIVE`, `LEFT`, `EXPELLED` |
-| `routine_templates.repeat_type` | `DAILY`, `DAILY_N`, `WEEKLY`, `WEEKLY_N`, `MONTHLY_N` |
+| `routine_templates.schedule_type` | `DAILY`, `SPECIFIC_DAYS`, `WEEKLY_COUNT`, `MONTHLY_COUNT` (챌린지는 `SPECIFIC_DAYS` 불가) |
+| `routine_templates.days_of_week` / `routines.preferred_days` | 요일 비트마스크 (bit0=월 … bit6=일). API는 `["MON","TUE","WED","THU","FRI","SAT","SUN"]` 배열로 표현 |
 | `categories.code` / `routine_templates.category_code` / `challenges.category_code` | `EXERCISE`, `READING`, `STUDY`, `LANGUAGE`, `HEALTH`, `SLEEP`, `DIET`, `MEDITATION`, `SELF_IMPROVE`, `PRODUCTIVITY`, `HOBBY`, `QUIT_HABIT` |
 | `routine_executions.status` | `PENDING`, `COMPLETED`, `MISSED` |
 | `chat_rooms.room_type` | `CHALLENGE`, `DIRECT` |

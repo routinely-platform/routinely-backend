@@ -1,7 +1,7 @@
 package com.routinely.routine_service.application.routine;
 
 import com.routinely.core.exception.BusinessException;
-import com.routinely.routine_service.application.routine.dto.PreferredTimeResult;
+import com.routinely.routine_service.application.routine.dto.PreferencesResult;
 import com.routinely.routine_service.application.routine.dto.RoutineResult;
 import com.routinely.routine_service.application.routine.dto.StartRoutineCommand;
 import com.routinely.routine_service.domain.routine.Routine;
@@ -78,16 +78,32 @@ public class RoutineService {
     }
 
     /**
-     * 선호 수행 시각 설정/변경 — 본인 소유 루틴만 대상이며, 없거나 소유자가 아니면 ROUTINE_NOT_FOUND(404).
-     * preferredTime이 null이면 설정을 해제한다(리마인더 끄기). (ADR-0035)
+     * 선호 설정(선호 시각 + 선호 요일) 설정/변경 — 본인 소유 루틴만 대상이며, 없거나 소유자가 아니면
+     * ROUTINE_NOT_FOUND(404). 각 값이 null이면 해당 설정을 해제한다. 요일은 완료를 제약하지 않는 soft
+     * 선호다. (ADR-0035, ADR-0039)
      */
     @Transactional
-    public PreferredTimeResult updatePreferredTime(Long routineId, Long userId, LocalTime preferredTime) {
+    public PreferencesResult updatePreferences(Long routineId, Long userId,
+                                               LocalTime preferredTime, Short preferredDays) {
+        validatePreferredDays(preferredDays);
+
         Routine routine = routineRepository.findByIdAndUserId(routineId, userId)
                 .orElseThrow(() -> new BusinessException(ROUTINE_NOT_FOUND));
 
-        routine.changePreferredTime(preferredTime);
-        return PreferredTimeResult.from(routine);
+        routine.changePreferences(preferredTime, preferredDays);
+        return PreferencesResult.from(routine);
+    }
+
+    /**
+     * 선호 요일 비트마스크 정합성 검증({@code ck_routines_preferred_days} 미러링). null은 선호 요일 해제로
+     * 허용하고, 값이 있으면 월~일 7비트(1~127)만 유효하다. 요청 DTO에서 1차 검증되지만 직접/내부 호출을
+     * 방어한다(템플릿의 {@code validateSchedule}와 동일한 방어 레벨).
+     */
+    private void validatePreferredDays(Short preferredDays) {
+        if (preferredDays != null && (preferredDays < 1 || preferredDays > 127)) {
+            throw new BusinessException(VALIDATION_FAILED,
+                    "선호 요일은 월~일(비트마스크 1~127) 범위여야 합니다.");
+        }
     }
 
     private RoutineTemplate getOwnedPersonalTemplateOrThrow(Long templateId, Long userId) {

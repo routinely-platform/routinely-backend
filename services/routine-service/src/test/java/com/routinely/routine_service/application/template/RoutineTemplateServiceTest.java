@@ -6,9 +6,9 @@ import com.routinely.routine_service.application.template.dto.CreateRoutineTempl
 import com.routinely.routine_service.application.template.dto.RoutineTemplateResult;
 import com.routinely.routine_service.application.template.dto.UpdateRoutineTemplateCommand;
 import com.routinely.routine_service.domain.category.CategoryRepository;
-import com.routinely.routine_service.domain.template.RepeatType;
 import com.routinely.routine_service.domain.template.RoutineTemplate;
 import com.routinely.routine_service.domain.template.RoutineTemplateRepository;
+import com.routinely.routine_service.domain.template.ScheduleType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -41,6 +41,7 @@ class RoutineTemplateServiceTest {
     private static final Long OWNER_ID = 1L;
     private static final Long OTHER_USER_ID = 2L;
     private static final Long TEMPLATE_ID = 10L;
+    private static final short MON_WED_FRI = 0b0010101; // 월·수·금
 
     private RoutineTemplateRepository templateRepository;
     private CategoryRepository categoryRepository;
@@ -55,14 +56,14 @@ class RoutineTemplateServiceTest {
 
     private RoutineTemplate personalTemplate() {
         RoutineTemplate template = RoutineTemplate.forPersonal(
-                OWNER_ID, "아침 러닝 30분", "EXERCISE", RepeatType.DAILY, null);
+                OWNER_ID, "아침 러닝 30분", "EXERCISE", ScheduleType.DAILY, null, null);
         ReflectionTestUtils.setField(template, "id", TEMPLATE_ID);
         return template;
     }
 
     private RoutineTemplate challengeTemplate() {
         RoutineTemplate template = RoutineTemplate.forChallenge(
-                OWNER_ID, 42L, "아침 러닝 30분", "EXERCISE", RepeatType.WEEKLY_N, 3);
+                OWNER_ID, 42L, "아침 러닝 30분", "EXERCISE", ScheduleType.WEEKLY_COUNT, null, 3);
         ReflectionTestUtils.setField(template, "id", TEMPLATE_ID);
         return template;
     }
@@ -72,14 +73,14 @@ class RoutineTemplateServiceTest {
     class Create {
 
         @Test
-        @DisplayName("유효한커맨드면_개인템플릿을저장하고결과를반환한다")
-        void create_whenValid_savesPersonalTemplate() {
+        @DisplayName("빈도유형이유효하면_개인템플릿을저장하고결과를반환한다")
+        void create_whenValidCount_savesPersonalTemplate() {
             when(categoryRepository.existsByCodeAndIsActiveTrue("EXERCISE")).thenReturn(true);
             when(templateRepository.save(any(RoutineTemplate.class)))
                     .thenAnswer(invocation -> invocation.getArgument(0));
 
             RoutineTemplateResult result = service.create(new CreateRoutineTemplateCommand(
-                    OWNER_ID, "아침 러닝 30분", "EXERCISE", RepeatType.WEEKLY_N, 3));
+                    OWNER_ID, "아침 러닝 30분", "EXERCISE", ScheduleType.WEEKLY_COUNT, null, 3));
 
             ArgumentCaptor<RoutineTemplate> captor = ArgumentCaptor.forClass(RoutineTemplate.class);
             verify(templateRepository).save(captor.capture());
@@ -89,10 +90,25 @@ class RoutineTemplateServiceTest {
             assertThat(saved.isDeleted()).isFalse();
 
             assertThat(result.title()).isEqualTo("아침 러닝 30분");
-            assertThat(result.categoryCode()).isEqualTo("EXERCISE");
-            assertThat(result.repeatType()).isEqualTo(RepeatType.WEEKLY_N);
-            assertThat(result.repeatValue()).isEqualTo(3);
+            assertThat(result.scheduleType()).isEqualTo(ScheduleType.WEEKLY_COUNT);
+            assertThat(result.targetCount()).isEqualTo(3);
+            assertThat(result.daysOfWeek()).isNull();
             assertThat(result.challengeId()).isNull();
+        }
+
+        @Test
+        @DisplayName("요일지정유형이유효하면_요일비트마스크로저장한다")
+        void create_whenSpecificDays_savesWithBitmask() {
+            when(categoryRepository.existsByCodeAndIsActiveTrue("EXERCISE")).thenReturn(true);
+            when(templateRepository.save(any(RoutineTemplate.class)))
+                    .thenAnswer(invocation -> invocation.getArgument(0));
+
+            RoutineTemplateResult result = service.create(new CreateRoutineTemplateCommand(
+                    OWNER_ID, "아침 러닝 30분", "EXERCISE", ScheduleType.SPECIFIC_DAYS, MON_WED_FRI, null));
+
+            assertThat(result.scheduleType()).isEqualTo(ScheduleType.SPECIFIC_DAYS);
+            assertThat(result.daysOfWeek()).isEqualTo(MON_WED_FRI);
+            assertThat(result.targetCount()).isNull();
         }
 
         @Test
@@ -101,7 +117,7 @@ class RoutineTemplateServiceTest {
             when(categoryRepository.existsByCodeAndIsActiveTrue("UNKNOWN")).thenReturn(false);
 
             assertThatThrownBy(() -> service.create(new CreateRoutineTemplateCommand(
-                    OWNER_ID, "아침 러닝 30분", "UNKNOWN", RepeatType.DAILY, null)))
+                    OWNER_ID, "아침 러닝 30분", "UNKNOWN", ScheduleType.DAILY, null, null)))
                     .isInstanceOfSatisfying(BusinessException.class, exception -> {
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
                         assertThat(exception.getMessage()).isEqualTo("유효하지 않은 카테고리 코드입니다.");
@@ -111,12 +127,12 @@ class RoutineTemplateServiceTest {
         }
 
         @Test
-        @DisplayName("반복횟수필수유형인데_반복횟수가없으면_검증예외를던진다")
-        void create_whenRepeatValueMissingForNType_throwsValidationFailed() {
+        @DisplayName("빈도유형인데_목표횟수가없으면_검증예외를던진다")
+        void create_whenCountMissingForCountType_throwsValidationFailed() {
             when(categoryRepository.existsByCodeAndIsActiveTrue("EXERCISE")).thenReturn(true);
 
             assertThatThrownBy(() -> service.create(new CreateRoutineTemplateCommand(
-                    OWNER_ID, "아침 러닝 30분", "EXERCISE", RepeatType.DAILY_N, null)))
+                    OWNER_ID, "아침 러닝 30분", "EXERCISE", ScheduleType.WEEKLY_COUNT, null, null)))
                     .isInstanceOfSatisfying(BusinessException.class, exception ->
                             assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
 
@@ -124,12 +140,64 @@ class RoutineTemplateServiceTest {
         }
 
         @Test
-        @DisplayName("반복횟수없는유형인데_반복횟수가있으면_검증예외를던진다")
-        void create_whenRepeatValueGivenForDaily_throwsValidationFailed() {
+        @DisplayName("DAILY인데_목표횟수가있으면_검증예외를던진다")
+        void create_whenCountGivenForDaily_throwsValidationFailed() {
             when(categoryRepository.existsByCodeAndIsActiveTrue("EXERCISE")).thenReturn(true);
 
             assertThatThrownBy(() -> service.create(new CreateRoutineTemplateCommand(
-                    OWNER_ID, "아침 러닝 30분", "EXERCISE", RepeatType.DAILY, 3)))
+                    OWNER_ID, "아침 러닝 30분", "EXERCISE", ScheduleType.DAILY, null, 3)))
+                    .isInstanceOfSatisfying(BusinessException.class, exception ->
+                            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
+
+            verify(templateRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("요일지정인데_요일이없으면_검증예외를던진다")
+        void create_whenDaysMissingForSpecificDays_throwsValidationFailed() {
+            when(categoryRepository.existsByCodeAndIsActiveTrue("EXERCISE")).thenReturn(true);
+
+            assertThatThrownBy(() -> service.create(new CreateRoutineTemplateCommand(
+                    OWNER_ID, "아침 러닝 30분", "EXERCISE", ScheduleType.SPECIFIC_DAYS, null, null)))
+                    .isInstanceOfSatisfying(BusinessException.class, exception ->
+                            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
+
+            verify(templateRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("요일비트마스크가_범위(1~127)를벗어나면_검증예외를던진다")
+        void create_whenDaysOfWeekOutOfRange_throwsValidationFailed() {
+            when(categoryRepository.existsByCodeAndIsActiveTrue("EXERCISE")).thenReturn(true);
+
+            assertThatThrownBy(() -> service.create(new CreateRoutineTemplateCommand(
+                    OWNER_ID, "아침 러닝 30분", "EXERCISE", ScheduleType.SPECIFIC_DAYS, (short) 128, null)))
+                    .isInstanceOfSatisfying(BusinessException.class, exception ->
+                            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
+
+            verify(templateRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("DAILY인데_요일비트마스크가0이면_검증예외를던진다(ck_rt_schedule는0을NULL로보지않음)")
+        void create_whenDailyWithZeroDays_throwsValidationFailed() {
+            when(categoryRepository.existsByCodeAndIsActiveTrue("EXERCISE")).thenReturn(true);
+
+            assertThatThrownBy(() -> service.create(new CreateRoutineTemplateCommand(
+                    OWNER_ID, "아침 러닝 30분", "EXERCISE", ScheduleType.DAILY, (short) 0, null)))
+                    .isInstanceOfSatisfying(BusinessException.class, exception ->
+                            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
+
+            verify(templateRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("빈도유형인데_요일비트마스크가0이면_검증예외를던진다(ck_rt_schedule는0을NULL로보지않음)")
+        void create_whenCountTypeWithZeroDays_throwsValidationFailed() {
+            when(categoryRepository.existsByCodeAndIsActiveTrue("EXERCISE")).thenReturn(true);
+
+            assertThatThrownBy(() -> service.create(new CreateRoutineTemplateCommand(
+                    OWNER_ID, "아침 러닝 30분", "EXERCISE", ScheduleType.WEEKLY_COUNT, (short) 0, 3)))
                     .isInstanceOfSatisfying(BusinessException.class, exception ->
                             assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
 
@@ -237,12 +305,12 @@ class RoutineTemplateServiceTest {
             when(templateRepository.findByIdAndIsDeletedFalse(TEMPLATE_ID)).thenReturn(Optional.of(template));
 
             RoutineTemplateResult result = service.update(new UpdateRoutineTemplateCommand(
-                    TEMPLATE_ID, OWNER_ID, "저녁 러닝 30분", null, null, null));
+                    TEMPLATE_ID, OWNER_ID, "저녁 러닝 30분", null, null, null, null));
 
             assertThat(result.title()).isEqualTo("저녁 러닝 30분");
             assertThat(result.categoryCode()).isEqualTo("EXERCISE");
-            assertThat(result.repeatType()).isEqualTo(RepeatType.DAILY);
-            assertThat(result.repeatValue()).isNull();
+            assertThat(result.scheduleType()).isEqualTo(ScheduleType.DAILY);
+            assertThat(result.targetCount()).isNull();
             verify(categoryRepository, never()).existsByCodeAndIsActiveTrue(anyString());
         }
 
@@ -254,7 +322,7 @@ class RoutineTemplateServiceTest {
             when(categoryRepository.existsByCodeAndIsActiveTrue("READING")).thenReturn(true);
 
             RoutineTemplateResult result = service.update(new UpdateRoutineTemplateCommand(
-                    TEMPLATE_ID, OWNER_ID, null, "READING", null, null));
+                    TEMPLATE_ID, OWNER_ID, null, "READING", null, null, null));
 
             assertThat(result.categoryCode()).isEqualTo("READING");
             verify(categoryRepository).existsByCodeAndIsActiveTrue("READING");
@@ -268,7 +336,7 @@ class RoutineTemplateServiceTest {
             when(categoryRepository.existsByCodeAndIsActiveTrue("UNKNOWN")).thenReturn(false);
 
             assertThatThrownBy(() -> service.update(new UpdateRoutineTemplateCommand(
-                    TEMPLATE_ID, OWNER_ID, null, "UNKNOWN", null, null)))
+                    TEMPLATE_ID, OWNER_ID, null, "UNKNOWN", null, null, null)))
                     .isInstanceOfSatisfying(BusinessException.class, exception ->
                             assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
 
@@ -276,30 +344,31 @@ class RoutineTemplateServiceTest {
         }
 
         @Test
-        @DisplayName("반복설정을쌍으로수정하면_함께변경된다")
-        void update_whenRepeatPairChanged_updatesBoth() {
+        @DisplayName("스케줄을요일지정으로수정하면_유형과요일이함께변경된다")
+        void update_whenScheduleChangedToSpecificDays_updatesTogether() {
             RoutineTemplate template = personalTemplate();
             when(templateRepository.findByIdAndIsDeletedFalse(TEMPLATE_ID)).thenReturn(Optional.of(template));
 
             RoutineTemplateResult result = service.update(new UpdateRoutineTemplateCommand(
-                    TEMPLATE_ID, OWNER_ID, null, null, RepeatType.WEEKLY_N, 3));
+                    TEMPLATE_ID, OWNER_ID, null, null, ScheduleType.SPECIFIC_DAYS, MON_WED_FRI, null));
 
-            assertThat(result.repeatType()).isEqualTo(RepeatType.WEEKLY_N);
-            assertThat(result.repeatValue()).isEqualTo(3);
+            assertThat(result.scheduleType()).isEqualTo(ScheduleType.SPECIFIC_DAYS);
+            assertThat(result.daysOfWeek()).isEqualTo(MON_WED_FRI);
+            assertThat(result.targetCount()).isNull();
         }
 
         @Test
-        @DisplayName("반복횟수필수유형으로_반복횟수없이수정하면_검증예외를던진다")
-        void update_whenRepeatValueMissingForNType_throwsValidationFailed() {
+        @DisplayName("빈도유형으로_목표횟수없이수정하면_검증예외를던진다")
+        void update_whenCountMissingForCountType_throwsValidationFailed() {
             RoutineTemplate template = personalTemplate();
             when(templateRepository.findByIdAndIsDeletedFalse(TEMPLATE_ID)).thenReturn(Optional.of(template));
 
             assertThatThrownBy(() -> service.update(new UpdateRoutineTemplateCommand(
-                    TEMPLATE_ID, OWNER_ID, null, null, RepeatType.MONTHLY_N, null)))
+                    TEMPLATE_ID, OWNER_ID, null, null, ScheduleType.MONTHLY_COUNT, null, null)))
                     .isInstanceOfSatisfying(BusinessException.class, exception ->
                             assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
 
-            assertThat(template.getRepeatType()).isEqualTo(RepeatType.DAILY);
+            assertThat(template.getScheduleType()).isEqualTo(ScheduleType.DAILY);
         }
 
         @Test
@@ -309,7 +378,7 @@ class RoutineTemplateServiceTest {
                     .thenReturn(Optional.of(personalTemplate()));
 
             assertThatThrownBy(() -> service.update(new UpdateRoutineTemplateCommand(
-                    TEMPLATE_ID, OTHER_USER_ID, "저녁 러닝 30분", null, null, null)))
+                    TEMPLATE_ID, OTHER_USER_ID, "저녁 러닝 30분", null, null, null, null)))
                     .isInstanceOfSatisfying(BusinessException.class, exception ->
                             assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN));
         }
@@ -321,7 +390,7 @@ class RoutineTemplateServiceTest {
                     .thenReturn(Optional.of(challengeTemplate()));
 
             assertThatThrownBy(() -> service.update(new UpdateRoutineTemplateCommand(
-                    TEMPLATE_ID, OWNER_ID, "저녁 러닝 30분", null, null, null)))
+                    TEMPLATE_ID, OWNER_ID, "저녁 러닝 30분", null, null, null, null)))
                     .isInstanceOfSatisfying(BusinessException.class, exception -> {
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
                         assertThat(exception.getMessage())

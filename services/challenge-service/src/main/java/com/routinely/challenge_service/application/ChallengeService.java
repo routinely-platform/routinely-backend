@@ -251,8 +251,8 @@ public class ChallengeService {
 
     private void saveCreatedOutbox(Challenge challenge, Long creatorUserId, CreateChallengeCommand command, String occurredAt) {
         // routine-service가 추가 RPC 없이 루틴 템플릿을 생성할 수 있도록 self-contained payload를 구성한다.
-        // 루틴 필드(routineTitle/repeatType/repeatValue)는 challenge-service가 저장하지 않고 그대로 전달한다.
-        // 선호 시간은 챌린지 템플릿이 정하지 않으며, 멤버별 routine 인스턴스에서 개별 설정한다 (ADR-0035).
+        // 루틴 필드(routineTitle/scheduleType/targetCount)는 challenge-service가 저장하지 않고 그대로 전달한다.
+        // 선호 시각/요일은 챌린지 템플릿이 정하지 않으며, 멤버별 routine 인스턴스에서 개별 설정한다 (ADR-0035).
         ChallengeCreatedEvent event = new ChallengeCreatedEvent(
                 UUID.randomUUID().toString(),
                 occurredAt,
@@ -260,8 +260,8 @@ public class ChallengeService {
                 creatorUserId,
                 challenge.getCategoryCode(),
                 command.routineTitle(),
-                command.repeatType(),
-                command.repeatValue(),
+                command.scheduleType(),
+                command.targetCount(),
                 challenge.getStartedAt().toString(),
                 challenge.getEndedAt().toString()
         );
@@ -350,7 +350,7 @@ public class ChallengeService {
     }
 
     private void validateRoutineUpdateNotSupported(UpdateChallengeCommand command) {
-        if (command.routineTitle() != null || command.routinePreferredTime() != null) {
+        if (command.routineTitle() != null) {
             // TODO: routine-service 개발 이후 gRPC 통신으로 루틴 템플릿 수정 처리
             throw new BusinessException(VALIDATION_FAILED, "루틴 정보 수정은 아직 지원하지 않습니다.");
         }

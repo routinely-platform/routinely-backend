@@ -4,11 +4,11 @@ import com.routinely.core.constant.HeaderConstants;
 import com.routinely.core.exception.BusinessException;
 import com.routinely.core.response.ApiResponse;
 import com.routinely.routine_service.application.routine.RoutineService;
-import com.routinely.routine_service.application.routine.dto.PreferredTimeResult;
+import com.routinely.routine_service.application.routine.dto.PreferencesResult;
 import com.routinely.routine_service.application.routine.dto.RoutineResult;
 import com.routinely.routine_service.presentation.rest.routine.dto.request.StartRoutineRequest;
-import com.routinely.routine_service.presentation.rest.routine.dto.request.UpdateRoutinePreferredTimeRequest;
-import com.routinely.routine_service.presentation.rest.routine.dto.response.RoutinePreferredTimeResponse;
+import com.routinely.routine_service.presentation.rest.routine.dto.request.UpdateRoutinePreferencesRequest;
+import com.routinely.routine_service.presentation.rest.routine.dto.response.RoutinePreferencesResponse;
 import com.routinely.routine_service.presentation.rest.routine.dto.response.RoutineResponse;
 import jakarta.validation.Valid;
 import org.jspecify.annotations.Nullable;
@@ -65,15 +65,15 @@ public class RoutineController {
     }
 
     @PatchMapping("/{routineId}")
-    public ResponseEntity<ApiResponse<RoutinePreferredTimeResponse>> updatePreferredTime(
+    public ResponseEntity<ApiResponse<RoutinePreferencesResponse>> updatePreferences(
             @RequestHeader(HeaderConstants.USER_ID) Long userId,
             @PathVariable Long routineId,
-            @RequestBody @Valid UpdateRoutinePreferredTimeRequest request) {
+            @RequestBody @Valid UpdateRoutinePreferencesRequest request) {
 
-        PreferredTimeResult result = routineService.updatePreferredTime(
-                routineId, userId, request.toPreferredTime());
+        PreferencesResult result = routineService.updatePreferences(
+                routineId, userId, request.toPreferredTime(), request.toPreferredDays());
         return ResponseEntity.ok(
-                ApiResponse.ok("알림 시간이 설정되었습니다.", RoutinePreferredTimeResponse.from(result)));
+                ApiResponse.ok("알림 설정이 저장되었습니다.", RoutinePreferencesResponse.from(result)));
     }
 
     @DeleteMapping("/{routineId}")

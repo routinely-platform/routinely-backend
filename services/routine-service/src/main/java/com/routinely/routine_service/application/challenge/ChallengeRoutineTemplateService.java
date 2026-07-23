@@ -6,8 +6,8 @@ import com.routinely.core.exception.BusinessException;
 import com.routinely.routine_service.domain.inbox.InboxStatus;
 import com.routinely.routine_service.domain.inbox.RoutineInbox;
 import com.routinely.routine_service.domain.inbox.RoutineInboxRepository;
-import com.routinely.routine_service.domain.template.RepeatType;
 import com.routinely.routine_service.domain.template.RoutineTemplate;
+import com.routinely.routine_service.domain.template.ScheduleType;
 import com.routinely.routine_service.domain.template.RoutineTemplateRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -88,14 +88,46 @@ public class ChallengeRoutineTemplateService {
                     payload.challengeId());
             return;
         }
+        ScheduleType scheduleType = parseAndValidateSchedule(payload.scheduleType(), payload.targetCount());
         templateRepository.save(RoutineTemplate.forChallenge(
                 payload.creatorUserId(),
                 payload.challengeId(),
                 payload.routineTitle(),
                 payload.categoryCode(),
-                RepeatType.valueOf(payload.repeatType()),
-                payload.repeatValue()
+                scheduleType,
+                null, // 챌린지 루틴은 SPECIFIC_DAYS 불가 → days_of_week 없음
+                payload.targetCount()
         ));
+    }
+
+    /**
+     * 이벤트 경계(서비스 간 계약)에서 스케줄 정합성을 방어적으로 검증한다. 잘못된 이벤트가 DB CHECK 위반으로만
+     * 걸러지면 재시도 후 FAILED가 되므로, 여기서 명확한 오류로 조기 차단한다. (ADR-0039)
+     * 챌린지 루틴은 SPECIFIC_DAYS를 쓸 수 없고, WEEKLY_COUNT/MONTHLY_COUNT는 targetCount(≥1)가 필수,
+     * DAILY는 targetCount가 없어야 한다.
+     */
+    private ScheduleType parseAndValidateSchedule(String scheduleTypeName, Integer targetCount) {
+        ScheduleType scheduleType;
+        try {
+            scheduleType = ScheduleType.valueOf(scheduleTypeName);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new BusinessException(INTERNAL_SERVER_ERROR,
+                    "challenge.created의 알 수 없는 스케줄 유형입니다: " + scheduleTypeName);
+        }
+        if (!scheduleType.allowedForChallenge()) {
+            throw new BusinessException(INTERNAL_SERVER_ERROR,
+                    "챌린지 루틴은 요일 지정 유형(SPECIFIC_DAYS)을 사용할 수 없습니다.");
+        }
+        if (scheduleType.requiresTargetCount()) {
+            if (targetCount == null || targetCount < 1) {
+                throw new BusinessException(INTERNAL_SERVER_ERROR,
+                        scheduleType + "는 1 이상의 목표 횟수가 필요합니다. targetCount=" + targetCount);
+            }
+        } else if (targetCount != null) {
+            throw new BusinessException(INTERNAL_SERVER_ERROR,
+                    scheduleType + "는 목표 횟수를 가질 수 없습니다. targetCount=" + targetCount);
+        }
+        return scheduleType;
     }
 
     private ChallengeCreatedPayload deserialize(String payload) {

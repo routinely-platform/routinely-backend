@@ -1,7 +1,7 @@
 package com.routinely.routine_service.presentation.rest.template.dto.request;
 
 import com.routinely.routine_service.application.template.dto.CreateRoutineTemplateCommand;
-import com.routinely.routine_service.domain.template.RepeatType;
+import com.routinely.routine_service.domain.template.ScheduleType;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,10 +34,32 @@ class CreateRoutineTemplateRequestTest {
     }
 
     @Test
-    @DisplayName("모든필드가유효하면_검증에성공한다")
-    void validate_whenAllFieldsValid_succeeds() {
+    @DisplayName("빈도유형이유효하면_검증에성공한다")
+    void validate_whenCountValid_succeeds() {
         CreateRoutineTemplateRequest request =
-                new CreateRoutineTemplateRequest("아침 러닝 30분", "EXERCISE", "WEEKLY_N", 3);
+                new CreateRoutineTemplateRequest("아침 러닝 30분", "EXERCISE", "WEEKLY_COUNT", null, 3);
+
+        Set<ConstraintViolation<CreateRoutineTemplateRequest>> violations = validator.validate(request);
+
+        assertThat(violations).isEmpty();
+    }
+
+    @Test
+    @DisplayName("요일지정유형이유효하면_검증에성공한다")
+    void validate_whenSpecificDaysValid_succeeds() {
+        CreateRoutineTemplateRequest request = new CreateRoutineTemplateRequest(
+                "아침 러닝 30분", "EXERCISE", "SPECIFIC_DAYS", List.of("MON", "WED", "FRI"), null);
+
+        Set<ConstraintViolation<CreateRoutineTemplateRequest>> violations = validator.validate(request);
+
+        assertThat(violations).isEmpty();
+    }
+
+    @Test
+    @DisplayName("DAILY는_요일횟수없이_검증에성공한다")
+    void validate_whenDaily_succeeds() {
+        CreateRoutineTemplateRequest request =
+                new CreateRoutineTemplateRequest("아침 러닝 30분", "EXERCISE", "DAILY", null, null);
 
         Set<ConstraintViolation<CreateRoutineTemplateRequest>> violations = validator.validate(request);
 
@@ -47,7 +70,7 @@ class CreateRoutineTemplateRequestTest {
     @DisplayName("제목이공백이면_검증에실패한다")
     void validate_whenTitleBlank_fails() {
         CreateRoutineTemplateRequest request =
-                new CreateRoutineTemplateRequest("   ", "EXERCISE", "DAILY", null);
+                new CreateRoutineTemplateRequest("   ", "EXERCISE", "DAILY", null, null);
 
         Set<ConstraintViolation<CreateRoutineTemplateRequest>> violations = validator.validate(request);
 
@@ -59,68 +82,104 @@ class CreateRoutineTemplateRequestTest {
 
     @Test
     @DisplayName("반복유형이허용값이아니면_검증에실패한다")
-    void validate_whenRepeatTypeInvalid_fails() {
+    void validate_whenScheduleTypeInvalid_fails() {
         CreateRoutineTemplateRequest request =
-                new CreateRoutineTemplateRequest("아침 러닝 30분", "EXERCISE", "YEARLY", null);
+                new CreateRoutineTemplateRequest("아침 러닝 30분", "EXERCISE", "YEARLY", null, null);
 
         Set<ConstraintViolation<CreateRoutineTemplateRequest>> violations = validator.validate(request);
 
         assertThat(violations).anySatisfy(violation -> {
-            assertThat(violation.getPropertyPath()).hasToString("repeatType");
+            assertThat(violation.getPropertyPath()).hasToString("scheduleType");
             assertThat(violation.getMessage()).isEqualTo("올바르지 않은 반복 유형입니다.");
         });
     }
 
     @Test
-    @DisplayName("반복횟수필수유형인데_반복횟수가없으면_검증에실패한다")
-    void validate_whenRepeatValueMissingForNType_fails() {
+    @DisplayName("빈도유형인데_목표횟수가없으면_검증에실패한다")
+    void validate_whenCountMissingForCountType_fails() {
         CreateRoutineTemplateRequest request =
-                new CreateRoutineTemplateRequest("아침 러닝 30분", "EXERCISE", "DAILY_N", null);
+                new CreateRoutineTemplateRequest("아침 러닝 30분", "EXERCISE", "WEEKLY_COUNT", null, null);
 
         Set<ConstraintViolation<CreateRoutineTemplateRequest>> violations = validator.validate(request);
 
         assertThat(violations).anySatisfy(violation ->
-                assertThat(violation.getMessage())
-                        .isEqualTo("반복 횟수는 DAILY_N/WEEKLY_N/MONTHLY_N에서만 지정할 수 있으며, 해당 유형에서는 필수입니다."));
+                assertThat(violation.getMessage()).isEqualTo(ScheduleValidation.MESSAGE));
     }
 
     @Test
-    @DisplayName("반복횟수없는유형인데_반복횟수가있으면_검증에실패한다")
-    void validate_whenRepeatValueGivenForDaily_fails() {
+    @DisplayName("DAILY인데_목표횟수가있으면_검증에실패한다")
+    void validate_whenCountGivenForDaily_fails() {
         CreateRoutineTemplateRequest request =
-                new CreateRoutineTemplateRequest("아침 러닝 30분", "EXERCISE", "DAILY", 3);
+                new CreateRoutineTemplateRequest("아침 러닝 30분", "EXERCISE", "DAILY", null, 3);
 
         Set<ConstraintViolation<CreateRoutineTemplateRequest>> violations = validator.validate(request);
 
         assertThat(violations).anySatisfy(violation ->
-                assertThat(violation.getMessage())
-                        .isEqualTo("반복 횟수는 DAILY_N/WEEKLY_N/MONTHLY_N에서만 지정할 수 있으며, 해당 유형에서는 필수입니다."));
+                assertThat(violation.getMessage()).isEqualTo(ScheduleValidation.MESSAGE));
     }
 
     @Test
-    @DisplayName("반복횟수가1미만이면_검증에실패한다")
-    void validate_whenRepeatValueLessThanOne_fails() {
+    @DisplayName("요일지정인데_요일이없으면_검증에실패한다")
+    void validate_whenDaysMissingForSpecificDays_fails() {
         CreateRoutineTemplateRequest request =
-                new CreateRoutineTemplateRequest("아침 러닝 30분", "EXERCISE", "WEEKLY_N", 0);
+                new CreateRoutineTemplateRequest("아침 러닝 30분", "EXERCISE", "SPECIFIC_DAYS", null, null);
+
+        Set<ConstraintViolation<CreateRoutineTemplateRequest>> violations = validator.validate(request);
+
+        assertThat(violations).anySatisfy(violation ->
+                assertThat(violation.getMessage()).isEqualTo(ScheduleValidation.MESSAGE));
+    }
+
+    @Test
+    @DisplayName("요일코드가유효하지않으면_검증에실패한다")
+    void validate_whenInvalidDayCode_fails() {
+        CreateRoutineTemplateRequest request = new CreateRoutineTemplateRequest(
+                "아침 러닝 30분", "EXERCISE", "SPECIFIC_DAYS", List.of("MON", "FUNDAY"), null);
+
+        Set<ConstraintViolation<CreateRoutineTemplateRequest>> violations = validator.validate(request);
+
+        assertThat(violations).anySatisfy(violation ->
+                assertThat(violation.getMessage()).isEqualTo(ScheduleValidation.MESSAGE));
+    }
+
+    @Test
+    @DisplayName("목표횟수가1미만이면_검증에실패한다")
+    void validate_whenTargetCountLessThanOne_fails() {
+        CreateRoutineTemplateRequest request =
+                new CreateRoutineTemplateRequest("아침 러닝 30분", "EXERCISE", "WEEKLY_COUNT", null, 0);
 
         Set<ConstraintViolation<CreateRoutineTemplateRequest>> violations = validator.validate(request);
 
         assertThat(violations).anySatisfy(violation -> {
-            assertThat(violation.getPropertyPath()).hasToString("repeatValue");
-            assertThat(violation.getMessage()).isEqualTo("반복 횟수는 1 이상이어야 합니다.");
+            assertThat(violation.getPropertyPath()).hasToString("targetCount");
+            assertThat(violation.getMessage()).isEqualTo("목표 횟수는 1 이상이어야 합니다.");
         });
     }
 
     @Test
-    @DisplayName("toCommand는_반복유형을enum으로변환하고_userId를담는다")
-    void toCommand_convertsRepeatTypeAndCarriesUserId() {
+    @DisplayName("toCommand는_빈도유형을enum으로변환하고_userId를담는다")
+    void toCommand_convertsCountTypeAndCarriesUserId() {
         CreateRoutineTemplateRequest request =
-                new CreateRoutineTemplateRequest("아침 러닝 30분", "EXERCISE", "WEEKLY_N", 3);
+                new CreateRoutineTemplateRequest("아침 러닝 30분", "EXERCISE", "WEEKLY_COUNT", null, 3);
 
         CreateRoutineTemplateCommand command = request.toCommand(1L);
 
         assertThat(command.userId()).isEqualTo(1L);
-        assertThat(command.repeatType()).isEqualTo(RepeatType.WEEKLY_N);
-        assertThat(command.repeatValue()).isEqualTo(3);
+        assertThat(command.scheduleType()).isEqualTo(ScheduleType.WEEKLY_COUNT);
+        assertThat(command.targetCount()).isEqualTo(3);
+        assertThat(command.daysOfWeek()).isNull();
+    }
+
+    @Test
+    @DisplayName("toCommand는_요일리스트를비트마스크로변환한다")
+    void toCommand_convertsDaysToBitmask() {
+        CreateRoutineTemplateRequest request = new CreateRoutineTemplateRequest(
+                "아침 러닝 30분", "EXERCISE", "SPECIFIC_DAYS", List.of("MON", "WED", "FRI"), null);
+
+        CreateRoutineTemplateCommand command = request.toCommand(1L);
+
+        assertThat(command.scheduleType()).isEqualTo(ScheduleType.SPECIFIC_DAYS);
+        assertThat(command.daysOfWeek()).isEqualTo((short) 0b0010101); // 월·수·금
+        assertThat(command.targetCount()).isNull();
     }
 }

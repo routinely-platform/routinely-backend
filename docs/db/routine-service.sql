@@ -6,37 +6,45 @@
 -- 1. routine_templates
 CREATE TABLE routine_templates (
                                    id             BIGINT       GENERATED ALWAYS AS IDENTITY,
-                                   owner_id       BIGINT                                NOT NULL,
-                                   owner_type     VARCHAR(20)                           NOT NULL,
+                                   user_id        BIGINT                                NOT NULL,
+                                   challenge_id   BIGINT                                NULL,
                                    title          VARCHAR(100)                          NOT NULL,
-                                   category       VARCHAR(20)                           NOT NULL,
-                                   repeat_type    VARCHAR(20)                           NOT NULL,
-                                   repeat_value   INT                                   NULL,
+                                   category_code  VARCHAR(30)                           NOT NULL,
+                                   schedule_type  VARCHAR(20)                           NOT NULL,
+                                   days_of_week   SMALLINT                              NULL,
+                                   target_count   INT                                   NULL,
                                    is_deleted     BOOLEAN      DEFAULT false            NOT NULL,
                                    deleted_at     TIMESTAMPTZ                           NULL,
                                    created_at     TIMESTAMPTZ  DEFAULT now()            NOT NULL,
                                    updated_at     TIMESTAMPTZ  DEFAULT now()            NOT NULL,
 
                                    CONSTRAINT pk_routine_templates PRIMARY KEY (id),
-                                   CONSTRAINT ck_rt_repeat_value   CHECK (
-                                       (repeat_type IN ('DAILY_N', 'WEEKLY_N', 'MONTHLY_N') AND repeat_value IS NOT NULL)
+                                   CONSTRAINT uq_rt_challenge_id   UNIQUE (challenge_id),
+                                   CONSTRAINT ck_rt_schedule   CHECK (
+                                       (schedule_type = 'DAILY'          AND days_of_week IS NULL AND target_count IS NULL)
                                            OR
-                                       (repeat_type NOT IN ('DAILY_N', 'WEEKLY_N', 'MONTHLY_N') AND repeat_value IS NULL)
+                                       (schedule_type = 'SPECIFIC_DAYS'  AND days_of_week IS NOT NULL AND days_of_week BETWEEN 1 AND 127 AND target_count IS NULL)
+                                           OR
+                                       (schedule_type IN ('WEEKLY_COUNT', 'MONTHLY_COUNT') AND target_count IS NOT NULL AND target_count >= 1 AND days_of_week IS NULL)
                                        )
 );
 
 COMMENT ON TABLE  routine_templates                IS '루틴 설정 정보 템플릿 — 루틴의 틀을 정의';
 COMMENT ON COLUMN routine_templates.id             IS '루틴 템플릿 고유 식별자 (PK)';
-COMMENT ON COLUMN routine_templates.owner_id       IS '템플릿 소유자 ID — owner_type에 따라 user_id 또는 challenge_id';
-COMMENT ON COLUMN routine_templates.owner_type     IS '소유자 유형 — PERSONAL: 개인 루틴 / CHALLENGE: 챌린지 루틴 (참여자 전원 공유, 개인화 불가 — ADR-0026)';
+COMMENT ON COLUMN routine_templates.user_id        IS '템플릿 생성자 사용자 ID (개인/챌린지 모두 항상 존재)';
+COMMENT ON COLUMN routine_templates.challenge_id   IS '챌린지 템플릿인 경우 챌린지 ID (challenge-service 참조 — FK 불가). 개인 템플릿이면 NULL. UNIQUE 제약으로 챌린지당 1개 보장 (ADR-0037)';
 COMMENT ON COLUMN routine_templates.title          IS '루틴명 (예: 아침 러닝 30분)';
-COMMENT ON COLUMN routine_templates.category       IS '루틴 카테고리 — 서버 Enum으로 검증';
-COMMENT ON COLUMN routine_templates.repeat_type    IS '반복 유형 — DAILY/DAILY_N/WEEKLY/WEEKLY_N/MONTHLY_N, 서버 Enum으로 검증';
-COMMENT ON COLUMN routine_templates.repeat_value   IS '반복 횟수 — DAILY_N/WEEKLY_N/MONTHLY_N일 때 N값, 나머지는 NULL';
+COMMENT ON COLUMN routine_templates.category_code  IS '카테고리 코드 — categories.code 참조 (서버 검증)';
+COMMENT ON COLUMN routine_templates.schedule_type  IS '반복 유형 — DAILY(매일)/SPECIFIC_DAYS(요일 지정·강제)/WEEKLY_COUNT(주 N회)/MONTHLY_COUNT(월 N회). (ADR-0039)';
+COMMENT ON COLUMN routine_templates.days_of_week   IS '지정 요일 비트마스크(bit0=월 … bit6=일, 1~127) — SPECIFIC_DAYS 전용, 그 외 NULL. 예: 월수금 = 21';
+COMMENT ON COLUMN routine_templates.target_count   IS '기간당 목표 횟수 — WEEKLY_COUNT/MONTHLY_COUNT 전용, 그 외 NULL';
 COMMENT ON COLUMN routine_templates.is_deleted     IS '소프트 딜리트 여부 — 물리 삭제 없이 false→true 처리';
 COMMENT ON COLUMN routine_templates.deleted_at     IS '소프트 딜리트 처리 시각';
 COMMENT ON COLUMN routine_templates.created_at     IS '템플릿 생성일시';
 COMMENT ON COLUMN routine_templates.updated_at     IS '템플릿 최종 수정일시 — 애플리케이션 레벨에서 갱신';
+
+CREATE INDEX idx_rt_user_id      ON routine_templates (user_id) WHERE is_deleted = false;
+CREATE INDEX idx_rt_challenge_id ON routine_templates (challenge_id) WHERE challenge_id IS NOT NULL;
 
 
 -- 2. routines
@@ -48,12 +56,14 @@ CREATE TABLE routines (
                           started_at          DATE                                  NOT NULL,
                           ended_at            DATE                                  NOT NULL,
                           preferred_time      TIME                                  NULL,
+                          preferred_days      SMALLINT                              NULL,
                           is_active           BOOLEAN      DEFAULT true             NOT NULL,
                           created_at          TIMESTAMPTZ  DEFAULT now()            NOT NULL,
                           updated_at          TIMESTAMPTZ  DEFAULT now()            NOT NULL,
 
                           CONSTRAINT pk_routines            PRIMARY KEY (id),
                           CONSTRAINT ck_routines_date_range CHECK (ended_at >= started_at),
+                          CONSTRAINT ck_routines_preferred_days CHECK (preferred_days IS NULL OR preferred_days BETWEEN 1 AND 127),
                           CONSTRAINT fk_routines_template   FOREIGN KEY (routine_template_id)
                               REFERENCES routine_templates (id)
 );
@@ -66,6 +76,7 @@ COMMENT ON COLUMN routines.challenge_id        IS '챌린지 루틴인 경우 �
 COMMENT ON COLUMN routines.started_at          IS '루틴 시작일';
 COMMENT ON COLUMN routines.ended_at            IS '루틴 종료일';
 COMMENT ON COLUMN routines.preferred_time      IS '선호 수행 시간 — 멤버별 알림 발송 기준 시각 (선택). NULL이면 리마인더 미발송. 개인/챌린지 루틴 모두 인스턴스 단위로 개별 설정 (ADR-0035)';
+COMMENT ON COLUMN routines.preferred_days      IS '선호 요일 비트마스크(bit0=월 … bit6=일) — 빈도 유형 루틴의 알림/표시용 개인 선호(soft). 완료를 제약하지 않음. NULL 허용 (ADR-0039)';
 COMMENT ON COLUMN routines.is_active           IS '루틴 활성 여부 — 일시정지/삭제 시 false';
 COMMENT ON COLUMN routines.created_at          IS '루틴 생성일시';
 COMMENT ON COLUMN routines.updated_at          IS '루틴 최종 수정일시 — 애플리케이션 레벨에서 갱신';

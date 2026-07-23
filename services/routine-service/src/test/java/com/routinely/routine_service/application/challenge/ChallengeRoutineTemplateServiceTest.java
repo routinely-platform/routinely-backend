@@ -2,15 +2,18 @@ package com.routinely.routine_service.application.challenge;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.routinely.core.exception.BusinessException;
 import com.routinely.routine_service.domain.inbox.InboxStatus;
 import com.routinely.routine_service.domain.inbox.RoutineInbox;
 import com.routinely.routine_service.domain.inbox.RoutineInboxRepository;
-import com.routinely.routine_service.domain.template.RepeatType;
 import com.routinely.routine_service.domain.template.RoutineTemplate;
 import com.routinely.routine_service.domain.template.RoutineTemplateRepository;
+import com.routinely.routine_service.domain.template.ScheduleType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -21,6 +24,7 @@ import java.time.ZoneId;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
@@ -37,7 +41,7 @@ class ChallengeRoutineTemplateServiceTest {
     private static final String PAYLOAD = """
             {"eventId":"evt-1","occurredAt":"2026-06-22T00:00:00Z","challengeId":42,\
             "creatorUserId":7,"categoryCode":"EXERCISE","routineTitle":"아침 러닝 30분",\
-            "repeatType":"WEEKLY_N","repeatValue":3,"startedAt":"2026-06-25","endedAt":"2026-07-24"}""";
+            "scheduleType":"WEEKLY_COUNT","targetCount":3,"startedAt":"2026-06-25","endedAt":"2026-07-24"}""";
 
     private RoutineInboxRepository inboxRepository;
     private RoutineTemplateRepository templateRepository;
@@ -58,6 +62,17 @@ class ChallengeRoutineTemplateServiceTest {
         return inbox;
     }
 
+    private RoutineInbox receivedInbox(String scheduleType, String targetCountJson) {
+        String payload = """
+                {"eventId":"evt-1","occurredAt":"2026-06-22T00:00:00Z","challengeId":42,\
+                "creatorUserId":7,"categoryCode":"EXERCISE","routineTitle":"아침 러닝 30분",\
+                "scheduleType":"%s","targetCount":%s,"startedAt":"2026-06-25","endedAt":"2026-07-24"}"""
+                .formatted(scheduleType, targetCountJson);
+        RoutineInbox inbox = RoutineInbox.received("evt-1", "challenge.created", payload, "CHALLENGE", 42L);
+        ReflectionTestUtils.setField(inbox, "id", 1L);
+        return inbox;
+    }
+
     @Test
     @DisplayName("RECEIVED_메시지를_처리하면_챌린지_템플릿을_생성하고_PROCESSED로_전이한다")
     void processInbox_whenReceived_createsTemplateAndMarksProcessed() {
@@ -74,11 +89,30 @@ class ChallengeRoutineTemplateServiceTest {
         assertThat(template.getChallengeId()).isEqualTo(42L);
         assertThat(template.getTitle()).isEqualTo("아침 러닝 30분");
         assertThat(template.getCategoryCode()).isEqualTo("EXERCISE");
-        assertThat(template.getRepeatType()).isEqualTo(RepeatType.WEEKLY_N);
-        assertThat(template.getRepeatValue()).isEqualTo(3);
+        assertThat(template.getScheduleType()).isEqualTo(ScheduleType.WEEKLY_COUNT);
+        assertThat(template.getTargetCount()).isEqualTo(3);
+        assertThat(template.getDaysOfWeek()).isNull();
 
         assertThat(inbox.getStatus()).isEqualTo(InboxStatus.PROCESSED);
         assertThat(inbox.getProcessedAt()).isEqualTo(LocalDateTime.now(FIXED_CLOCK));
+    }
+
+    // 스케줄 정합성 위반 케이스 — 챌린지 SPECIFIC_DAYS 금지 / 빈도 유형 targetCount 누락 / DAILY targetCount 존재.
+    @ParameterizedTest(name = "scheduleType={0}, targetCount={1}이면 예외를 던지고 저장하지 않는다")
+    @CsvSource({
+            "SPECIFIC_DAYS, null",
+            "WEEKLY_COUNT, null",
+            "DAILY, 3"
+    })
+    @DisplayName("스케줄_정합성을_위반한_이벤트는_예외를_던지고_저장하지_않는다")
+    void processInbox_whenInvalidSchedule_throwsAndDoesNotSave(String scheduleType, String targetCountJson) {
+        RoutineInbox inbox = receivedInbox(scheduleType, targetCountJson);
+        when(inboxRepository.findById(1L)).thenReturn(Optional.of(inbox));
+        when(templateRepository.existsByChallengeId(42L)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.processInbox(1L)).isInstanceOf(BusinessException.class);
+
+        verify(templateRepository, never()).save(any(RoutineTemplate.class));
     }
 
     @Test

@@ -172,7 +172,7 @@ class ChallengeServiceTest {
                 LocalDate.of(2026, 5, 25),
                 LocalDate.of(2026, 6, 24),
                 "아침 러닝 30분",
-                "WEEKLY_N",
+                "WEEKLY_COUNT",
                 3
         );
 
@@ -191,8 +191,8 @@ class ChallengeServiceTest {
                 .contains("\"creatorUserId\":100")
                 .contains("\"categoryCode\":\"EXERCISE\"")
                 .contains("\"routineTitle\":\"아침 러닝 30분\"")
-                .contains("\"repeatType\":\"WEEKLY_N\"")
-                .contains("\"repeatValue\":3")
+                .contains("\"scheduleType\":\"WEEKLY_COUNT\"")
+                .contains("\"targetCount\":3")
                 .doesNotContain("preferredTime")
                 .contains("\"startedAt\":\"2026-05-25\"")
                 .contains("\"endedAt\":\"2026-06-24\"");
@@ -360,7 +360,7 @@ class ChallengeServiceTest {
     void updateChallenge_whenChallengeNotFound_throwsException() {
         when(challengeRepository.findById(1L)).thenReturn(Optional.empty());
 
-        UpdateChallengeCommand command = updateCommand("새 제목", null, null, null, null, null, null, null);
+        UpdateChallengeCommand command = updateCommand("새 제목", null, null, null, null, null, null);
 
         assertThatThrownBy(() -> challengeService.updateChallenge(1L, 100L, command))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
@@ -387,7 +387,6 @@ class ChallengeServiceTest {
                 5,
                 LocalDate.of(2026, 5, 26),
                 LocalDate.of(2026, 6, 25),
-                null,
                 null
         );
 
@@ -419,7 +418,7 @@ class ChallengeServiceTest {
         when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
                 .thenReturn(3);
 
-        UpdateChallengeCommand command = updateCommand(null, "새 설명", null, null, null, null, null, null);
+        UpdateChallengeCommand command = updateCommand(null, "새 설명", null, null, null, null, null);
 
         ChallengeResult result = challengeService.updateChallenge(1L, 100L, command);
 
@@ -441,7 +440,7 @@ class ChallengeServiceTest {
         when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
                 .thenReturn(3);
 
-        UpdateChallengeCommand command = updateCommand(null, null, null, 15, null, null, null, null);
+        UpdateChallengeCommand command = updateCommand(null, null, null, 15, null, null, null);
 
         ChallengeResult result = challengeService.updateChallenge(1L, 100L, command);
 
@@ -459,7 +458,7 @@ class ChallengeServiceTest {
         when(challengeMemberRepository.findByChallengeIdAndUserIdAndStatus(1L, 100L, MembershipStatus.ACTIVE))
                 .thenReturn(Optional.of(leader));
 
-        UpdateChallengeCommand command = updateCommand("새 제목", null, null, null, null, null, null, null);
+        UpdateChallengeCommand command = updateCommand("새 제목", null, null, null, null, null, null);
 
         assertThatThrownBy(() -> challengeService.updateChallenge(1L, 100L, command))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
@@ -479,7 +478,7 @@ class ChallengeServiceTest {
         when(challengeMemberRepository.findByChallengeIdAndUserIdAndStatus(1L, 100L, MembershipStatus.ACTIVE))
                 .thenReturn(Optional.of(leader));
 
-        UpdateChallengeCommand command = updateCommand("새 제목", null, null, null, null, null, null, null);
+        UpdateChallengeCommand command = updateCommand("새 제목", null, null, null, null, null, null);
 
         assertThatThrownBy(() -> challengeService.updateChallenge(1L, 100L, command))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
@@ -506,8 +505,7 @@ class ChallengeServiceTest {
                 null,
                 null,
                 null,
-                "아침 달리기",
-                null
+                "아침 달리기"
         );
 
         assertThatThrownBy(() -> challengeService.updateChallenge(1L, 100L, command))
@@ -528,7 +526,7 @@ class ChallengeServiceTest {
         when(challengeMemberRepository.findByChallengeIdAndUserIdAndStatus(1L, 100L, MembershipStatus.ACTIVE))
                 .thenReturn(Optional.of(member));
 
-        UpdateChallengeCommand command = updateCommand(null, null, null, null, null, null, "아침 달리기", null);
+        UpdateChallengeCommand command = updateCommand(null, null, null, null, null, null, "아침 달리기");
 
         assertThatThrownBy(() -> challengeService.updateChallenge(1L, 100L, command))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
@@ -553,7 +551,6 @@ class ChallengeServiceTest {
                 null,
                 null,
                 null,
-                null,
                 null
         );
 
@@ -572,7 +569,7 @@ class ChallengeServiceTest {
         when(challengeMemberRepository.findByChallengeIdAndUserIdAndStatus(1L, 100L, MembershipStatus.ACTIVE))
                 .thenReturn(Optional.empty());
 
-        UpdateChallengeCommand command = updateCommand("새 제목", null, null, null, null, null, null, null);
+        UpdateChallengeCommand command = updateCommand("새 제목", null, null, null, null, null, null);
 
         assertThatThrownBy(() -> challengeService.updateChallenge(1L, 100L, command))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
@@ -594,7 +591,7 @@ class ChallengeServiceTest {
         when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
                 .thenReturn(0);
 
-        UpdateChallengeCommand command = updateCommand(null, "새 설명", null, null, null, null, null, null);
+        UpdateChallengeCommand command = updateCommand(null, "새 설명", null, null, null, null, null);
 
         assertThatThrownBy(() -> challengeService.updateChallenge(1L, 100L, command))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
@@ -615,7 +612,7 @@ class ChallengeServiceTest {
         when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
                 .thenReturn(1);
 
-        UpdateChallengeCommand command = updateCommand(null, null, false, null, null, null, null, null);
+        UpdateChallengeCommand command = updateCommand(null, null, false, null, null, null, null);
 
         ChallengeResult result = challengeService.updateChallenge(1L, 100L, command);
 
@@ -637,7 +634,7 @@ class ChallengeServiceTest {
         when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
                 .thenReturn(4);
 
-        UpdateChallengeCommand command = updateCommand(null, null, null, 3, null, null, null, null);
+        UpdateChallengeCommand command = updateCommand(null, null, null, 3, null, null, null);
 
         assertThatThrownBy(() -> challengeService.updateChallenge(1L, 100L, command))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
@@ -664,7 +661,6 @@ class ChallengeServiceTest {
                 null,
                 null,
                 LocalDate.of(2026, 5, 23),
-                null,
                 null,
                 null
         );
@@ -694,7 +690,6 @@ class ChallengeServiceTest {
                 null,
                 LocalDate.of(2026, 5, 26),
                 LocalDate.of(2026, 5, 25),
-                null,
                 null
         );
 
@@ -722,7 +717,6 @@ class ChallengeServiceTest {
                 null,
                 null,
                 LocalDate.of(2026, 6, 25),
-                null,
                 null,
                 null
         );
@@ -752,7 +746,6 @@ class ChallengeServiceTest {
                 null,
                 null,
                 LocalDate.of(2026, 5, 24),
-                null,
                 null
         );
 
@@ -774,7 +767,7 @@ class ChallengeServiceTest {
         when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
                 .thenReturn(1);
 
-        UpdateChallengeCommand command = updateCommand(null, null, true, null, null, null, null, null);
+        UpdateChallengeCommand command = updateCommand(null, null, true, null, null, null, null);
 
         ChallengeResult result = challengeService.updateChallenge(1L, 100L, command);
 
@@ -796,7 +789,7 @@ class ChallengeServiceTest {
         when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
                 .thenReturn(3);
 
-        UpdateChallengeCommand command = updateCommand(null, null, true, null, null, null, null, null);
+        UpdateChallengeCommand command = updateCommand(null, null, true, null, null, null, null);
 
         ChallengeResult result = challengeService.updateChallenge(1L, 100L, command);
 
@@ -816,7 +809,7 @@ class ChallengeServiceTest {
         when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
                 .thenReturn(3);
 
-        UpdateChallengeCommand command = updateCommand(null, null, false, null, null, null, null, null);
+        UpdateChallengeCommand command = updateCommand(null, null, false, null, null, null, null);
 
         assertThatThrownBy(() -> challengeService.updateChallenge(1L, 100L, command))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
@@ -837,7 +830,7 @@ class ChallengeServiceTest {
         when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
                 .thenReturn(3);
 
-        UpdateChallengeCommand command = updateCommand(null, null, false, null, null, null, null, null);
+        UpdateChallengeCommand command = updateCommand(null, null, false, null, null, null, null);
 
         assertThatThrownBy(() -> challengeService.updateChallenge(1L, 100L, command))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
@@ -858,7 +851,7 @@ class ChallengeServiceTest {
         when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
                 .thenReturn(1);
 
-        UpdateChallengeCommand command = updateCommand(null, null, true, null, null, null, null, null);
+        UpdateChallengeCommand command = updateCommand(null, null, true, null, null, null, null);
 
         assertThatThrownBy(() -> challengeService.updateChallenge(1L, 100L, command))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
@@ -878,7 +871,7 @@ class ChallengeServiceTest {
         when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
                 .thenReturn(1);
 
-        UpdateChallengeCommand command = updateCommand(null, null, false, null, null, null, null, null);
+        UpdateChallengeCommand command = updateCommand(null, null, false, null, null, null, null);
 
         assertThatThrownBy(() -> challengeService.updateChallenge(1L, 100L, command))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
@@ -907,7 +900,6 @@ class ChallengeServiceTest {
                 null,
                 null,
                 null,
-                null,
                 null
         );
 
@@ -932,7 +924,7 @@ class ChallengeServiceTest {
         when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
                 .thenReturn(3);
 
-        UpdateChallengeCommand command = updateCommand("새 제목", null, null, null, null, null, null, null);
+        UpdateChallengeCommand command = updateCommand("새 제목", null, null, null, null, null, null);
 
         assertThatThrownBy(() -> challengeService.updateChallenge(1L, 100L, command))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
@@ -953,7 +945,7 @@ class ChallengeServiceTest {
         when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
                 .thenReturn(3);
 
-        UpdateChallengeCommand command = updateCommand(null, null, true, null, null, null, null, null);
+        UpdateChallengeCommand command = updateCommand(null, null, true, null, null, null, null);
 
         ChallengeResult result = challengeService.updateChallenge(1L, 100L, command);
 
@@ -976,7 +968,7 @@ class ChallengeServiceTest {
         when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
                 .thenReturn(3);
 
-        UpdateChallengeCommand command = updateCommand(null, null, null, null, LocalDate.of(2026, 5, 26), null, null, null);
+        UpdateChallengeCommand command = updateCommand(null, null, null, null, LocalDate.of(2026, 5, 26), null, null);
 
         assertThatThrownBy(() -> challengeService.updateChallenge(1L, 100L, command))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
@@ -997,7 +989,7 @@ class ChallengeServiceTest {
         when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
                 .thenReturn(3);
 
-        UpdateChallengeCommand command = updateCommand(null, null, null, null, null, LocalDate.of(2026, 7, 1), null, null);
+        UpdateChallengeCommand command = updateCommand(null, null, null, null, null, LocalDate.of(2026, 7, 1), null);
 
         assertThatThrownBy(() -> challengeService.updateChallenge(1L, 100L, command))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
@@ -1268,8 +1260,7 @@ class ChallengeServiceTest {
                                                  Integer maxMembers,
                                                  LocalDate startedAt,
                                                  LocalDate endedAt,
-                                                 String routineTitle,
-                                                 String routinePreferredTime) {
+                                                 String routineTitle) {
         return new UpdateChallengeCommand(
                 title,
                 description,
@@ -1277,8 +1268,7 @@ class ChallengeServiceTest {
                 maxMembers,
                 startedAt,
                 endedAt,
-                routineTitle,
-                routinePreferredTime
+                routineTitle
         );
     }
 }
