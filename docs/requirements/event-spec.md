@@ -153,8 +153,8 @@
   "creatorUserId": 100,
   "categoryCode": "EXERCISE",
   "routineTitle": "아침 러닝 30분",
-  "repeatType": "WEEKLY_N",
-  "repeatValue": 3,
+  "scheduleType": "WEEKLY_COUNT",
+  "targetCount": 3,
   "startedAt": "2026-05-25",
   "endedAt": "2026-06-24"
 }
@@ -168,8 +168,8 @@
 | `creatorUserId` | long | ✅ | `user_id` | 템플릿 생성자 |
 | `categoryCode` | string | ✅ | `category_code` | 카테고리 코드 |
 | `routineTitle` | string | ✅ | `title` | 루틴명 |
-| `repeatType` | string | ✅ | `repeat_type` | `DAILY` \| `DAILY_N` \| `WEEKLY` \| `WEEKLY_N` \| `MONTHLY_N` |
-| `repeatValue` | int | ❌ | `repeat_value` | `DAILY_N`/`WEEKLY_N`/`MONTHLY_N`일 때만 존재(≥1) |
+| `scheduleType` | string | ✅ | `schedule_type` | `DAILY` \| `WEEKLY_COUNT` \| `MONTHLY_COUNT` (챌린지는 `SPECIFIC_DAYS` 불가 — ADR-0039) |
+| `targetCount` | int | ❌ | `target_count` | `WEEKLY_COUNT`/`MONTHLY_COUNT`일 때만 존재(≥1) |
 | `startedAt` | string (yyyy-MM-dd) | ✅ | — | 챌린지 시작일 |
 | `endedAt` | string (yyyy-MM-dd) | ✅ | — | 챌린지 종료일 |
 

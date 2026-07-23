@@ -10,7 +10,7 @@
 
 챌린지 생성 시 routine-service에 챌린지 연결 루틴 템플릿(`routine_templates`)이 생성되어야 한다. 챌린지 연결은 별도 `owner_type` 컬럼이 아니라 `routine_templates.challenge_id`(UNIQUE)로 표현한다 (ADR-0037 routine_templates FK 방향 결정).
 
-- 템플릿의 `repeat_type`, `repeat_value` 등은 챌린지 생성 시 결정·고정된다 (ADR-0036)
+- 템플릿의 `schedule_type`, `target_count` 등은 챌린지 생성 시 결정·고정된다 (ADR-0036, ADR-0039)
 - 챌린지 시작 시 발행되는 `challenge.started` 이벤트 페이로드가 `routineTemplateId`를 포함하므로, **시작 전에 템플릿이 반드시 존재해야 한다** (ADR-0032)
 - ADR-0032는 챌린지 **시작** 시점의 `routines` / `routine_executions` 생성 방식을 결정했으나, **생성** 시점의 템플릿 생성 방식은 미결정 상태였다
 
@@ -91,7 +91,7 @@
 
 - `docs/requirements/event-spec.md`에 `challenge.created` 토픽 명세 추가 필요 (현재 미정의)
 - 페이로드에는 routine-service가 추가 RPC 없이 자기 완결적으로 템플릿을 생성할 수 있도록
-  `challengeId`, `routineTitle`, `repeatType`, `repeatValue`, `startedAt`, `endedAt` 등을 포함한다
+  `challengeId`, `routineTitle`, `scheduleType`, `targetCount`, `startedAt`, `endedAt` 등을 포함한다
   (선호 수행 시각은 멤버별 `routines` 인스턴스에서 설정하므로 페이로드에 포함하지 않는다 — ADR-0035)
 - `ChallengeService.createChallenge()`의 `TODO: #48` 주석은 이슈 번호가 낡았다
   (실제 #48은 Redis ZSET 랭킹 이슈) — 구현 이슈 생성 시 번호 정정 필요
