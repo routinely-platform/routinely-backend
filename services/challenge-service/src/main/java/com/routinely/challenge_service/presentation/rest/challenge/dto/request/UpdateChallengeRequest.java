@@ -27,13 +27,7 @@ public record UpdateChallengeRequest(
 
         @Pattern(regexp = ".*\\S.*", message = "루틴 이름은 공백만 입력할 수 없습니다.")
         @Size(max = 100, message = "루틴 이름은 100자 이하여야 합니다.")
-        String routineTitle,
-
-        @Pattern(
-                regexp = "^([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d$",
-                message = "루틴 선호 시간은 HH:mm:ss 형식이어야 합니다."
-        )
-        String routinePreferredTime) {
+        String routineTitle) {
 
     @JsonIgnore
     @AssertTrue(message = "수정할 챌린지 정보가 하나 이상 필요합니다.")
@@ -44,8 +38,7 @@ public record UpdateChallengeRequest(
                 || maxMembers != null
                 || startedAt != null
                 || endedAt != null
-                || routineTitle != null
-                || routinePreferredTime != null;
+                || routineTitle != null;
     }
 
     @JsonIgnore
@@ -62,8 +55,7 @@ public record UpdateChallengeRequest(
                 maxMembers,
                 startedAt,
                 endedAt,
-                routineTitle,
-                routinePreferredTime
+                routineTitle
         );
     }
 }

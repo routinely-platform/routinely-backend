@@ -41,7 +41,6 @@ class UpdateChallengeRequestTest {
                 10,
                 LocalDate.now().plusDays(1),
                 LocalDate.now().plusDays(30),
-                null,
                 null
         );
 
@@ -59,7 +58,6 @@ class UpdateChallengeRequestTest {
                 null,
                 null,
                 LocalDate.now().plusDays(10),
-                null,
                 null,
                 null
         );
@@ -79,7 +77,6 @@ class UpdateChallengeRequestTest {
                 null,
                 null,
                 LocalDate.now().plusDays(10),
-                null,
                 null
         );
 
@@ -92,7 +89,6 @@ class UpdateChallengeRequestTest {
     @DisplayName("수정필드가하나도없으면_검증에실패한다")
     void validate_whenNoFieldProvided_fails() {
         UpdateChallengeRequest request = new UpdateChallengeRequest(
-                null,
                 null,
                 null,
                 null,
@@ -119,7 +115,6 @@ class UpdateChallengeRequestTest {
                 null,
                 startedAt,
                 startedAt.minusDays(1),
-                null,
                 null
         );
 
@@ -134,7 +129,6 @@ class UpdateChallengeRequestTest {
     void validate_whenTitleBlank_fails() {
         UpdateChallengeRequest request = new UpdateChallengeRequest(
                 "   ",
-                null,
                 null,
                 null,
                 null,
@@ -162,7 +156,6 @@ class UpdateChallengeRequestTest {
                 1,
                 null,
                 null,
-                null,
                 null
         );
 
@@ -172,29 +165,6 @@ class UpdateChallengeRequestTest {
                 .anySatisfy(violation -> {
                     assertThat(violation.getPropertyPath()).hasToString("maxMembers");
                     assertThat(violation.getMessage()).isEqualTo("최대 참여 인원은 2명 이상이어야 합니다.");
-                });
-    }
-
-    @Test
-    @DisplayName("루틴선호시간형식이잘못되면_검증에실패한다")
-    void validate_whenRoutinePreferredTimeInvalid_fails() {
-        UpdateChallengeRequest request = new UpdateChallengeRequest(
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                "24:00:00"
-        );
-
-        Set<ConstraintViolation<UpdateChallengeRequest>> violations = validator.validate(request);
-
-        assertThat(violations)
-                .anySatisfy(violation -> {
-                    assertThat(violation.getPropertyPath()).hasToString("routinePreferredTime");
-                    assertThat(violation.getMessage()).isEqualTo("루틴 선호 시간은 HH:mm:ss 형식이어야 합니다.");
                 });
     }
 }

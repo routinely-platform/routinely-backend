@@ -216,7 +216,7 @@ class CreateChallengeRequestTest {
 
     @Test
     @DisplayName("반복유형이공백이면_검증에실패한다")
-    void validate_whenRepeatTypeBlank_fails() {
+    void validate_whenScheduleTypeBlank_fails() {
         CreateChallengeRequest request = new CreateChallengeRequest(
                 "30일 러닝 챌린지",
                 "매일 달리기",
@@ -234,14 +234,14 @@ class CreateChallengeRequestTest {
 
         assertThat(violations)
                 .anySatisfy(violation -> {
-                    assertThat(violation.getPropertyPath()).hasToString("repeatType");
+                    assertThat(violation.getPropertyPath()).hasToString("scheduleType");
                     assertThat(violation.getMessage()).isEqualTo("반복 유형은 필수입니다.");
                 });
     }
 
     @Test
     @DisplayName("반복유형이유효하지않으면_검증에실패한다")
-    void validate_whenRepeatTypeInvalid_fails() {
+    void validate_whenScheduleTypeInvalid_fails() {
         CreateChallengeRequest request = new CreateChallengeRequest(
                 "30일 러닝 챌린지",
                 "매일 달리기",
@@ -259,14 +259,14 @@ class CreateChallengeRequestTest {
 
         assertThat(violations)
                 .anySatisfy(violation -> {
-                    assertThat(violation.getPropertyPath()).hasToString("repeatType");
+                    assertThat(violation.getPropertyPath()).hasToString("scheduleType");
                     assertThat(violation.getMessage()).isEqualTo("올바르지 않은 반복 유형입니다.");
                 });
     }
 
     @Test
-    @DisplayName("WEEKLY_N인데반복횟수가없으면_검증에실패한다")
-    void validate_whenWeeklyNWithoutRepeatValue_fails() {
+    @DisplayName("챌린지는_요일지정유형(SPECIFIC_DAYS)을_사용할수없다")
+    void validate_whenSpecificDays_fails() {
         CreateChallengeRequest request = new CreateChallengeRequest(
                 "30일 러닝 챌린지",
                 "매일 달리기",
@@ -276,7 +276,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(1),
                 LocalDate.now().plusDays(30),
                 "아침 러닝 30분",
-                "WEEKLY_N",
+                "SPECIFIC_DAYS",
                 null
         );
 
@@ -284,15 +284,14 @@ class CreateChallengeRequestTest {
 
         assertThat(violations)
                 .anySatisfy(violation -> {
-                    assertThat(violation.getPropertyPath()).hasToString("repeatValueValid");
-                    assertThat(violation.getMessage())
-                            .isEqualTo("반복 횟수는 DAILY_N/WEEKLY_N/MONTHLY_N에서만 지정할 수 있으며, 해당 유형에서는 필수입니다.");
+                    assertThat(violation.getPropertyPath()).hasToString("scheduleType");
+                    assertThat(violation.getMessage()).isEqualTo("올바르지 않은 반복 유형입니다.");
                 });
     }
 
     @Test
-    @DisplayName("DAILY_N인데반복횟수가없으면_검증에실패한다")
-    void validate_whenDailyNWithoutRepeatValue_fails() {
+    @DisplayName("WEEKLY_COUNT인데목표횟수가없으면_검증에실패한다")
+    void validate_whenWeeklyCountWithoutTargetCount_fails() {
         CreateChallengeRequest request = new CreateChallengeRequest(
                 "30일 러닝 챌린지",
                 "매일 달리기",
@@ -302,7 +301,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(1),
                 LocalDate.now().plusDays(30),
                 "아침 러닝 30분",
-                "DAILY_N",
+                "WEEKLY_COUNT",
                 null
         );
 
@@ -310,15 +309,15 @@ class CreateChallengeRequestTest {
 
         assertThat(violations)
                 .anySatisfy(violation -> {
-                    assertThat(violation.getPropertyPath()).hasToString("repeatValueValid");
+                    assertThat(violation.getPropertyPath()).hasToString("targetCountValid");
                     assertThat(violation.getMessage())
-                            .isEqualTo("반복 횟수는 DAILY_N/WEEKLY_N/MONTHLY_N에서만 지정할 수 있으며, 해당 유형에서는 필수입니다.");
+                            .isEqualTo("목표 횟수는 WEEKLY_COUNT/MONTHLY_COUNT에서만 지정할 수 있으며, 해당 유형에서는 필수입니다.");
                 });
     }
 
     @Test
-    @DisplayName("DAILY_N에반복횟수가있으면_검증에성공한다")
-    void validate_whenDailyNWithRepeatValue_succeeds() {
+    @DisplayName("MONTHLY_COUNT에목표횟수가있으면_검증에성공한다")
+    void validate_whenMonthlyCountWithTargetCount_succeeds() {
         CreateChallengeRequest request = new CreateChallengeRequest(
                 "30일 러닝 챌린지",
                 "매일 달리기",
@@ -328,7 +327,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(1),
                 LocalDate.now().plusDays(30),
                 "아침 러닝 30분",
-                "DAILY_N",
+                "MONTHLY_COUNT",
                 3
         );
 
@@ -338,8 +337,8 @@ class CreateChallengeRequestTest {
     }
 
     @Test
-    @DisplayName("WEEKLY_N인데반복횟수가0이면_검증에실패한다")
-    void validate_whenWeeklyNWithNonPositiveRepeatValue_fails() {
+    @DisplayName("WEEKLY_COUNT인데목표횟수가0이면_검증에실패한다")
+    void validate_whenWeeklyCountWithNonPositiveTargetCount_fails() {
         CreateChallengeRequest request = new CreateChallengeRequest(
                 "30일 러닝 챌린지",
                 "매일 달리기",
@@ -349,7 +348,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(1),
                 LocalDate.now().plusDays(30),
                 "아침 러닝 30분",
-                "WEEKLY_N",
+                "WEEKLY_COUNT",
                 0
         );
 
@@ -357,14 +356,14 @@ class CreateChallengeRequestTest {
 
         assertThat(violations)
                 .anySatisfy(violation -> {
-                    assertThat(violation.getPropertyPath()).hasToString("repeatValue");
-                    assertThat(violation.getMessage()).isEqualTo("반복 횟수는 1 이상이어야 합니다.");
+                    assertThat(violation.getPropertyPath()).hasToString("targetCount");
+                    assertThat(violation.getMessage()).isEqualTo("목표 횟수는 1 이상이어야 합니다.");
                 });
     }
 
     @Test
-    @DisplayName("DAILY인데반복횟수가있으면_검증에실패한다")
-    void validate_whenDailyWithRepeatValue_fails() {
+    @DisplayName("DAILY인데목표횟수가있으면_검증에실패한다")
+    void validate_whenDailyWithTargetCount_fails() {
         CreateChallengeRequest request = new CreateChallengeRequest(
                 "30일 러닝 챌린지",
                 "매일 달리기",
@@ -381,7 +380,7 @@ class CreateChallengeRequestTest {
         Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
 
         assertThat(violations)
-                .anySatisfy(violation -> assertThat(violation.getPropertyPath()).hasToString("repeatValueValid"));
+                .anySatisfy(violation -> assertThat(violation.getPropertyPath()).hasToString("targetCountValid"));
     }
 
     private CreateChallengeRequest validRequest() {

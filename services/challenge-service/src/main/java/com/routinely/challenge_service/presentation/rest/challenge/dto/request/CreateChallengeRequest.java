@@ -43,15 +43,16 @@ public record CreateChallengeRequest(
         @Size(max = 100, message = "루틴 이름은 100자 이하여야 합니다.")
         String routineTitle,
 
+        // 챌린지 루틴은 특정 요일 지정(SPECIFIC_DAYS)이 불가하다 — 빈도 유형만 허용 (ADR-0039, ADR-0035).
         @NotBlank(message = "반복 유형은 필수입니다.")
-        @Pattern(regexp = "^(DAILY|DAILY_N|WEEKLY|WEEKLY_N|MONTHLY_N)$", message = "올바르지 않은 반복 유형입니다.")
-        String repeatType,
+        @Pattern(regexp = "^(DAILY|WEEKLY_COUNT|MONTHLY_COUNT)$", message = "올바르지 않은 반복 유형입니다.")
+        String scheduleType,
 
-        @Min(value = 1, message = "반복 횟수는 1 이상이어야 합니다.")
-        Integer repeatValue) {
+        @Min(value = 1, message = "목표 횟수는 1 이상이어야 합니다.")
+        Integer targetCount) {
 
-    // repeat_value는 DAILY_N/WEEKLY_N/MONTHLY_N에서만 의미가 있다 (routine_templates.ck_rt_repeat_value 미러링).
-    private static final Set<String> REPEAT_VALUE_REQUIRED_TYPES = Set.of("DAILY_N", "WEEKLY_N", "MONTHLY_N");
+    // target_count는 WEEKLY_COUNT/MONTHLY_COUNT에서만 의미가 있다 (routine_templates.ck_rt_schedule 미러링).
+    private static final Set<String> COUNT_REQUIRED_TYPES = Set.of("WEEKLY_COUNT", "MONTHLY_COUNT");
 
     @JsonIgnore
     @AssertTrue(message = "종료일은 시작일보다 빠를 수 없습니다.")
@@ -60,18 +61,18 @@ public record CreateChallengeRequest(
     }
 
     @JsonIgnore
-    @AssertTrue(message = "반복 횟수는 DAILY_N/WEEKLY_N/MONTHLY_N에서만 지정할 수 있으며, 해당 유형에서는 필수입니다.")
-    public boolean isRepeatValueValid() {
-        if (repeatType == null) {
-            return true; // repeatType 누락은 @NotBlank가 처리한다.
+    @AssertTrue(message = "목표 횟수는 WEEKLY_COUNT/MONTHLY_COUNT에서만 지정할 수 있으며, 해당 유형에서는 필수입니다.")
+    public boolean isTargetCountValid() {
+        if (scheduleType == null) {
+            return true; // scheduleType 누락은 @NotBlank가 처리한다.
         }
-        boolean valueRequired = REPEAT_VALUE_REQUIRED_TYPES.contains(repeatType);
-        return valueRequired ? repeatValue != null : repeatValue == null;
+        boolean countRequired = COUNT_REQUIRED_TYPES.contains(scheduleType);
+        return countRequired ? targetCount != null : targetCount == null;
     }
 
     public CreateChallengeCommand toCommand() {
         return new CreateChallengeCommand(
                 title, description, isPublic, maxMembers, categoryCode, startedAt, endedAt,
-                routineTitle, repeatType, repeatValue);
+                routineTitle, scheduleType, targetCount);
     }
 }

@@ -8,6 +8,5 @@ public record UpdateChallengeCommand(String title,
                                      Integer maxMembers,
                                      LocalDate startedAt,
                                      LocalDate endedAt,
-                                     String routineTitle,
-                                     String routinePreferredTime) {
+                                     String routineTitle) {
 }
