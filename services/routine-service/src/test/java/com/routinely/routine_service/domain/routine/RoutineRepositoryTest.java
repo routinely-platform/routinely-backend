@@ -1,8 +1,8 @@
 package com.routinely.routine_service.domain.routine;
 
-import com.routinely.routine_service.domain.template.RepeatType;
 import com.routinely.routine_service.domain.template.RoutineTemplate;
 import com.routinely.routine_service.domain.template.RoutineTemplateRepository;
+import com.routinely.routine_service.domain.template.ScheduleType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,7 +35,7 @@ class RoutineRepositoryTest {
 
     private Long savePersonalTemplate(Long userId) {
         RoutineTemplate template = templateRepository.saveAndFlush(
-                RoutineTemplate.forPersonal(userId, "아침 러닝 30분", "EXERCISE", RepeatType.DAILY, null));
+                RoutineTemplate.forPersonal(userId, "아침 러닝 30분", "EXERCISE", ScheduleType.DAILY, null, null));
         return template.getId();
     }
 

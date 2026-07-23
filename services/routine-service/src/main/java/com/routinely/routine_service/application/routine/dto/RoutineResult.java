@@ -13,6 +13,7 @@ public record RoutineResult(
         LocalDate startedAt,
         LocalDate endedAt,
         LocalTime preferredTime,
+        Short preferredDays,
         boolean isActive) {
 
     /**
@@ -27,6 +28,7 @@ public record RoutineResult(
                 routine.getStartedAt(),
                 routine.getEndedAt(),
                 routine.getPreferredTime(),
+                routine.getPreferredDays(),
                 routine.isActive()
         );
     }

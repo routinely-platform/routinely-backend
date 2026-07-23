@@ -25,7 +25,7 @@ class ChallengeCreatedConsumerTest {
     private static final String MESSAGE = """
             {"eventId":"evt-1","occurredAt":"2026-06-22T00:00:00Z","challengeId":42,\
             "creatorUserId":7,"categoryCode":"EXERCISE","routineTitle":"아침 러닝 30분",\
-            "repeatType":"DAILY","repeatValue":null,"startedAt":"2026-06-25","endedAt":"2026-07-24"}""";
+            "scheduleType":"DAILY","targetCount":null,"startedAt":"2026-06-25","endedAt":"2026-07-24"}""";
 
     private RoutineInboxRepository inboxRepository;
     private ChallengeCreatedConsumer consumer;

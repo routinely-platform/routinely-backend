@@ -1,11 +1,12 @@
 package com.routinely.routine_service.application.template.dto;
 
-import com.routinely.routine_service.domain.template.RepeatType;
+import com.routinely.routine_service.domain.template.ScheduleType;
 
 public record CreateRoutineTemplateCommand(
         Long userId,
         String title,
         String categoryCode,
-        RepeatType repeatType,
-        Integer repeatValue) {
+        ScheduleType scheduleType,
+        Short daysOfWeek,
+        Integer targetCount) {
 }

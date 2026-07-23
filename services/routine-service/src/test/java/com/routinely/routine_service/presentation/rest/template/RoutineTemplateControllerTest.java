@@ -3,7 +3,7 @@ package com.routinely.routine_service.presentation.rest.template;
 import com.routinely.core.response.ApiResponse;
 import com.routinely.routine_service.application.template.RoutineTemplateService;
 import com.routinely.routine_service.application.template.dto.RoutineTemplateResult;
-import com.routinely.routine_service.domain.template.RepeatType;
+import com.routinely.routine_service.domain.template.ScheduleType;
 import com.routinely.routine_service.presentation.rest.template.dto.request.CreateRoutineTemplateRequest;
 import com.routinely.routine_service.presentation.rest.template.dto.response.RoutineTemplateResponse;
 import org.junit.jupiter.api.DisplayName;
@@ -26,7 +26,7 @@ class RoutineTemplateControllerTest {
     private final RoutineTemplateController controller = new RoutineTemplateController(routineTemplateService);
 
     private static final RoutineTemplateResult RESULT =
-            new RoutineTemplateResult(10L, "아침 러닝 30분", "EXERCISE", RepeatType.WEEKLY_N, 3, null);
+            new RoutineTemplateResult(10L, "아침 러닝 30분", "EXERCISE", ScheduleType.WEEKLY_COUNT, null, 3, null);
 
     @Test
     @DisplayName("생성하면_201과생성메시지를반환한다")
@@ -34,12 +34,13 @@ class RoutineTemplateControllerTest {
         when(routineTemplateService.create(any())).thenReturn(RESULT);
 
         ResponseEntity<ApiResponse<RoutineTemplateResponse>> response = controller.createTemplate(
-                1L, new CreateRoutineTemplateRequest("아침 러닝 30분", "EXERCISE", "WEEKLY_N", 3));
+                1L, new CreateRoutineTemplateRequest("아침 러닝 30분", "EXERCISE", "WEEKLY_COUNT", null, 3));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(response.getBody().getMessage()).isEqualTo("루틴 템플릿이 생성되었습니다.");
         assertThat(response.getBody().getData().templateId()).isEqualTo(10L);
-        assertThat(response.getBody().getData().repeatType()).isEqualTo("WEEKLY_N");
+        assertThat(response.getBody().getData().scheduleType()).isEqualTo("WEEKLY_COUNT");
+        assertThat(response.getBody().getData().targetCount()).isEqualTo(3);
     }
 
     @Test

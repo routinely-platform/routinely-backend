@@ -2,14 +2,14 @@ package com.routinely.routine_service.application.routine;
 
 import com.routinely.core.exception.BusinessException;
 import com.routinely.core.exception.ErrorCode;
-import com.routinely.routine_service.application.routine.dto.PreferredTimeResult;
+import com.routinely.routine_service.application.routine.dto.PreferencesResult;
 import com.routinely.routine_service.application.routine.dto.RoutineResult;
 import com.routinely.routine_service.application.routine.dto.StartRoutineCommand;
 import com.routinely.routine_service.domain.routine.Routine;
 import com.routinely.routine_service.domain.routine.RoutineRepository;
-import com.routinely.routine_service.domain.template.RepeatType;
 import com.routinely.routine_service.domain.template.RoutineTemplate;
 import com.routinely.routine_service.domain.template.RoutineTemplateRepository;
+import com.routinely.routine_service.domain.template.ScheduleType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -53,14 +53,14 @@ class RoutineServiceTest {
 
     private RoutineTemplate personalTemplate() {
         RoutineTemplate template = RoutineTemplate.forPersonal(
-                OWNER_ID, "아침 러닝 30분", "EXERCISE", RepeatType.DAILY, null);
+                OWNER_ID, "아침 러닝 30분", "EXERCISE", ScheduleType.DAILY, null, null);
         ReflectionTestUtils.setField(template, "id", TEMPLATE_ID);
         return template;
     }
 
     private RoutineTemplate challengeTemplate() {
         RoutineTemplate template = RoutineTemplate.forChallenge(
-                OWNER_ID, 42L, "아침 러닝 30분", "EXERCISE", RepeatType.WEEKLY_N, 3);
+                OWNER_ID, 42L, "아침 러닝 30분", "EXERCISE", ScheduleType.WEEKLY_COUNT, null, 3);
         ReflectionTestUtils.setField(template, "id", TEMPLATE_ID);
         return template;
     }
@@ -242,46 +242,68 @@ class RoutineServiceTest {
     }
 
     @Nested
-    @DisplayName("updatePreferredTime")
-    class UpdatePreferredTime {
+    @DisplayName("updatePreferences")
+    class UpdatePreferences {
+
+        private static final short MON_WED_FRI = 0b0010101;
 
         @Test
-        @DisplayName("본인루틴이면_선호시각을설정하고결과를반환한다")
-        void updatePreferredTime_whenOwned_setsTime() {
+        @DisplayName("본인루틴이면_선호시각과선호요일을설정하고결과를반환한다")
+        void updatePreferences_whenOwned_setsTimeAndDays() {
             Routine routine = personalRoutine(TEMPLATE_ID, null);
             when(routineRepository.findByIdAndUserId(ROUTINE_ID, OWNER_ID))
                     .thenReturn(Optional.of(routine));
 
-            PreferredTimeResult result = service.updatePreferredTime(
-                    ROUTINE_ID, OWNER_ID, LocalTime.of(7, 0));
+            PreferencesResult result = service.updatePreferences(
+                    ROUTINE_ID, OWNER_ID, LocalTime.of(7, 0), MON_WED_FRI);
 
             assertThat(routine.getPreferredTime()).isEqualTo(LocalTime.of(7, 0));
+            assertThat(routine.getPreferredDays()).isEqualTo(MON_WED_FRI);
             assertThat(result.routineId()).isEqualTo(ROUTINE_ID);
             assertThat(result.preferredTime()).isEqualTo(LocalTime.of(7, 0));
+            assertThat(result.preferredDays()).isEqualTo(MON_WED_FRI);
         }
 
         @Test
-        @DisplayName("null을전달하면_선호시각을해제한다")
-        void updatePreferredTime_whenNull_clearsTime() {
+        @DisplayName("null을전달하면_선호시각과요일을해제한다")
+        void updatePreferences_whenNull_clears() {
             Routine routine = personalRoutine(TEMPLATE_ID, LocalTime.of(7, 0));
             when(routineRepository.findByIdAndUserId(ROUTINE_ID, OWNER_ID))
                     .thenReturn(Optional.of(routine));
 
-            PreferredTimeResult result = service.updatePreferredTime(ROUTINE_ID, OWNER_ID, null);
+            PreferencesResult result = service.updatePreferences(ROUTINE_ID, OWNER_ID, null, null);
 
             assertThat(routine.getPreferredTime()).isNull();
+            assertThat(routine.getPreferredDays()).isNull();
             assertThat(result.preferredTime()).isNull();
+            assertThat(result.preferredDays()).isNull();
         }
 
         @Test
         @DisplayName("본인루틴이없거나소유자가아니면_ROUTINE_NOT_FOUND예외를던진다")
-        void updatePreferredTime_whenNotFound_throwsNotFound() {
+        void updatePreferences_whenNotFound_throwsNotFound() {
             when(routineRepository.findByIdAndUserId(ROUTINE_ID, OTHER_USER_ID))
                     .thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> service.updatePreferredTime(ROUTINE_ID, OTHER_USER_ID, LocalTime.of(7, 0)))
+            assertThatThrownBy(() -> service.updatePreferences(
+                    ROUTINE_ID, OTHER_USER_ID, LocalTime.of(7, 0), MON_WED_FRI))
                     .isInstanceOfSatisfying(BusinessException.class, exception ->
                             assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ROUTINE_NOT_FOUND));
+        }
+
+        @Test
+        @DisplayName("선호요일비트마스크가_범위(1~127)를벗어나면_조회전에_검증예외를던진다")
+        void updatePreferences_whenPreferredDaysOutOfRange_throwsValidationFailed() {
+            assertThatThrownBy(() -> service.updatePreferences(
+                    ROUTINE_ID, OWNER_ID, null, (short) 0))
+                    .isInstanceOfSatisfying(BusinessException.class, exception ->
+                            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
+            assertThatThrownBy(() -> service.updatePreferences(
+                    ROUTINE_ID, OWNER_ID, null, (short) 128))
+                    .isInstanceOfSatisfying(BusinessException.class, exception ->
+                            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
+
+            verify(routineRepository, never()).findByIdAndUserId(any(), any());
         }
     }
 }

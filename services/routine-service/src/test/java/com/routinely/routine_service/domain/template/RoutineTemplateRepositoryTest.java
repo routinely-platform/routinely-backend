@@ -24,7 +24,7 @@ class RoutineTemplateRepositoryTest {
 
     private RoutineTemplate savePersonal(Long userId, String categoryCode) {
         return routineTemplateRepository.saveAndFlush(
-                RoutineTemplate.forPersonal(userId, "아침 러닝 30분", categoryCode, RepeatType.DAILY, null));
+                RoutineTemplate.forPersonal(userId, "아침 러닝 30분", categoryCode, ScheduleType.DAILY, null, null));
     }
 
     @Test
@@ -59,7 +59,7 @@ class RoutineTemplateRepositoryTest {
         RoutineTemplate second = savePersonal(1L, "READING");
         savePersonal(2L, "EXERCISE"); // 다른 사용자
         routineTemplateRepository.saveAndFlush(RoutineTemplate.forChallenge(
-                1L, 42L, "아침 러닝 30분", "EXERCISE", RepeatType.WEEKLY_N, 3)); // 챌린지 연결
+                1L, 42L, "아침 러닝 30분", "EXERCISE", ScheduleType.WEEKLY_COUNT, null, 3)); // 챌린지 연결
         RoutineTemplate deleted = savePersonal(1L, "EXERCISE");
         deleted.softDelete(LocalDateTime.of(2026, 7, 16, 0, 0));
         routineTemplateRepository.saveAndFlush(deleted);
