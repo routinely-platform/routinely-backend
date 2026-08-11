@@ -1,282 +1,189 @@
-# Routinely Backend — CLAUDE.md
+# Routinely Backend
 
-## 1. 기술 스택
+Java 21 / Spring Boot 4.0.5 / Gradle 멀티모듈 MSA. Group ID `com.routinely`.
+워크스페이스 전체 규칙(시스템 전경, 통신 전략, 워크트리·커밋 규칙)은 상위 `../AGENTS.md`에 있다.
 
-| 항목 | 선택 | 비고 |
-|---|---|---|
-| Language | Java 21 | Virtual Threads 활용 가능 |
-| Framework | Spring Boot 4.0.5 | |
-| Build Tool | Gradle (Groovy DSL) | 멀티모듈 |
-| Group ID | `com.routinely` | |
-| ORM | Spring Data JPA + QueryDSL | 복잡한 조회는 QueryDSL |
-| Security | Spring Security + JWT | Gateway에서 중앙 검증 (ADR-0006) |
-| Service Discovery | Eureka (registry-service) | Config Server 미사용 (ADR-0020) |
-| gRPC | grpc-spring-boot-starter | libs/proto 중앙 관리 |
-| Messaging | Apache Kafka | Outbox 패턴으로 발행 (ADR-0012) |
-| Job Queue | PGMQ | PostgreSQL 확장, 알림 예약 전용 (ADR-0009) |
-| DB | PostgreSQL × 5 | 서비스별 독립 DB |
-| Cache | Redis | Rate Limiting, ZSET 랭킹, 캐시 |
-| File Storage | AWS S3 | `FileStorage` 인터페이스로 추상화 |
-| Resilience | Resilience4j | timeout / retry / circuit breaker |
-| API 문서 | Swagger (springdoc openapi) | `local`, `local,observability` 프로파일에서만 활성화 |
-| 분산 추적 | Micrometer Tracing + Zipkin | traceId/spanId 자동 주입 |
-| 로그 수집 | Grafana Alloy → Loki | JSON 구조 로그 stdout 출력 |
-| 메트릭 | Prometheus + Grafana | |
-| CI/CD | GitHub Actions | PR: build/test / merge: docker build/push |
+## 1. 빌드 · 실행 · 테스트
 
----
+```bash
+./scripts/local-up.sh              # 인프라 기동 (PostgreSQL, Redis, Kafka)
+./scripts/local-up.sh --obs        # + Observability 스택
+./scripts/local-down.sh
 
-## 2. 스프링 프로파일 정책
+./gradlew :services:user-service:bootRun --args='--spring.profiles.active=local'
+./gradlew :services:user-service:test    # 서비스 단위 테스트
+./gradlew build                          # 전체 빌드
+```
 
-| 프로파일 | 역할 |
-|---|---|
-| `local` | 로컬 개발 환경 설정 (GatewayAuthFilter 비활성화 등) |
-| `prod` | 배포 환경 설정 |
-| `observability` | Observability 스택 활성화 — 단독 사용 불가, 반드시 `local` 또는 `prod`와 조합 |
+### 프로파일 정책
 
-`observability`는 독립적인 애드온 프로파일이다. 환경 프로파일(`local` / `prod`)과 조합해서 사용한다.
+`local` / `prod`는 환경 프로파일, `observability`는 **애드온이라 단독 사용 불가** — 반드시 조합한다.
 
 | 조합 | 사용 시점 |
 |---|---|
 | `local` | 평소 로컬 개발 (기본값) |
-| `local,observability` | 로컬에서 Observability 스택까지 함께 확인할 때 |
-| `prod` | 배포 |
-| `prod,observability` | 배포 환경에서 Observability 스택 활성화 |
+| `local,observability` | 로컬에서 Observability까지 확인 (`local-up.sh --obs`와 함께) |
+| `prod` / `prod,observability` | 배포 |
 
-```bash
-# 평소 개발
-./gradlew :services:user-service:bootRun --args='--spring.profiles.active=local'
+Swagger UI, DEBUG 로그 등 개발 전용 기능은 `local` 계열에서만 활성화한다.
 
-# 로컬에서 Observability 스택 확인 (./scripts/local-up.sh --obs 와 함께)
-./gradlew :services:user-service:bootRun --args='--spring.profiles.active=local,observability'
-```
+## 2. 기술 선택과 배경
 
-> Swagger UI, DEBUG 로그 등 개발 전용 기능은 `local` 계열 프로파일(`local`, `local,observability`)에서만 활성화한다.
+| 항목 | 선택 | 알아둘 것 |
+|---|---|---|
+| ORM | Spring Data JPA + QueryDSL | 복잡한 조회는 QueryDSL |
+| Security | Spring Security + JWT | **Gateway에서 중앙 검증** (ADR-0006) |
+| Service Discovery | Eureka | Config Server 미사용 (ADR-0020) |
+| gRPC | grpc-spring-boot-starter | proto는 `libs/proto`에서 중앙 관리 |
+| Messaging | Kafka | **Outbox 패턴으로만 발행** (ADR-0012) |
+| Job Queue | PGMQ | PostgreSQL 확장, 알림 예약 전용 (ADR-0009) |
+| File Storage | AWS S3 | `FileStorage` 인터페이스로 추상화 (`libs/common-storage`) |
+| Resilience | Resilience4j | timeout / retry / circuit breaker |
+| 관측 | Micrometer Tracing + Zipkin, Alloy → Loki, Prometheus | traceId/spanId 자동 주입 |
+| CI/CD | GitHub Actions | PR: build·test / merge: docker build·push |
 
----
+## 3. 모듈 구조 규칙
 
-## 3. 멀티모듈 구조
+`libs/`(공통 라이브러리) + `services/`(서비스) 멀티모듈. 정확한 목록은 `settings.gradle`을 본다.
 
-```
-routinely-backend/
-├── libs/
-│   ├── common-core/          # 공통 유틸, 에러, ApiResponse (JPA/Web 의존 없는 순수 도메인)
-│   ├── common-jpa/           # JPA 공통 설정 (BaseEntity, JpaAuditingConfig)
-│   ├── common-web/           # Web 필터, MDC, 공통 ExceptionHandler
-│   ├── common-observability/ # 로깅/트레이싱 Bean 설정
-│   └── proto/                # gRPC Proto 정의 + 생성 스텁
-├── services/
-│   ├── registry-service/     # Eureka Server :8761
-│   ├── gateway/              # Spring Cloud Gateway :8080
-│   ├── user-service/         # :8081 / gRPC :9081
-│   ├── routine-service/      # :8082 / gRPC :9082
-│   ├── challenge-service/    # :8083 / gRPC :9083
-│   ├── chat-service/         # :8084 / gRPC :9084
-│   └── notification-service/ # :8085 / gRPC :9085
-├── infra/
-│   └── docker-compose.yml
-├── scripts/
-│   ├── local-up.sh / local-down.sh / db-migrate.sh
-└── docs/
-    ├── decisions/            # ADR-0001 ~ ADR-0025
-    ├── conventions/          # 구현 패턴 참고 문서
-    └── ...
-```
+- `common-core` — JPA·Web 의존이 없는 순수 도메인. **여기에 JPA/Web 의존을 추가하지 않는다.**
+- `common-jpa` — `BaseEntity`, JPA Auditing 설정
+- `common-web` — 필터, MDC, `GlobalExceptionHandler` (`common-core`를 전이 포함)
+- `common-observability` / `common-storage` / `proto`
 
-### libs 의존성
+의존 규칙: gateway-service는 JPA가 불필요하므로 `common-jpa`를 넣지 않는다.
+gRPC를 쓰는 서비스(routine·challenge·chat)만 `proto`에 의존한다.
 
-| 서비스 | 의존하는 libs |
-|---|---|
-| registry-service | 없음 |
-| gateway-service | common-core, common-observability |
-| user-service | common-web, common-jpa, common-observability |
-| routine-service, challenge-service, chat-service | common-web, common-jpa, common-observability, proto |
-| notification-service | common-web, common-jpa, common-observability |
+### 서비스 포트 / DB
 
-> gateway-service는 JPA 불필요 → common-jpa 미사용. common-web은 common-core를 전이 포함.
-
----
-
-## 4. 서비스별 DB 및 포트
-
-| 서비스 | HTTP 포트 | gRPC 포트 | PostgreSQL DB |
+| 서비스 | HTTP | gRPC | DB |
 |---|:---:|:---:|---|
 | registry-service | 8761 | — | — |
-| user-service | 8081 | 9081 | routinely_user |
-| routine-service | 8082 | 9082 | routinely_routine |
-| challenge-service | 8083 | 9083 | routinely_challenge |
-| chat-service | 8084 | 9084 | routinely_chat |
-| notification-service | 8085 | 9085 | routinely_notification |
+| gateway-service | 8080 | — | — |
+| user-service | 8081 | 9081 | `routinely_user` |
+| routine-service | 8082 | 9082 | `routinely_routine` |
+| challenge-service | 8083 | 9083 | `routinely_challenge` |
+| chat-service | 8084 | 9084 | `routinely_chat` |
+| notification-service | 8085 | 9085 | `routinely_notification` |
 
----
+> gRPC 포트 = HTTP 포트 + 1000. **서비스 간 직접 DB 접근 금지.**
 
-## 5. 서비스 내부 패키지 구조
+### 서비스 내부 패키지
 
-```
-com.routinely.{service}/
-├── domain/          # Entity, VO, Domain Service, Repository Interface
-├── application/     # Use Case / Service (비즈니스 로직 조합)
-├── infrastructure/
-│   ├── persistence/ # JPA Repository 구현, QueryDSL
-│   ├── kafka/       # Producer(Outbox Worker), Consumer(@RetryableTopic)
-│   ├── grpc/        # gRPC Server / Client Stub
-│   └── pgmq/        # PGMQ Worker (notification-service 전용)
-├── presentation/
-│   ├── rest/        # REST Controller, Request/Response DTO
-│   └── grpc/        # gRPC Service 구현
-└── {Service}Application.java
-```
+`com.routinely.{service}.{layer}` — `domain` / `application` / `infrastructure` / `presentation`.
+새 코드는 이 4계층 중 하나에 넣는다. `infrastructure`는 `persistence` · `kafka` · `grpc` · `pgmq`로,
+`presentation`은 `rest` · `grpc`로 나눈다. 계층 원칙은 `docs/conventions/clean-architecture.md`.
 
----
+## 4. 코딩 컨벤션
 
-## 6. 코딩 컨벤션
+### 응답 / 상태코드
 
-### 공통 응답 포맷
-
-모든 REST 응답은 `ApiResponse<T>` (common-core)로 통일.
+모든 REST 응답은 `ApiResponse<T>`(common-core)로 통일한다.
 
 ```java
-ApiResponse.ok("챌린지 생성에 성공했습니다.", data)   // { success: true, message: "...", data: {...} }
-ApiResponse.ok("탈퇴가 완료되었습니다.")              // { success: true, message: "..." }
-ApiResponse.fail("CHALLENGE_NOT_FOUND", "...")        // { success: false, message: "...", errorCode: "..." }
+ApiResponse.ok("챌린지 생성에 성공했습니다.", data)
+ApiResponse.ok("탈퇴가 완료되었습니다.")
+ApiResponse.fail("CHALLENGE_NOT_FOUND", "...")
 ```
 
-### HTTP 상태코드 규칙
+200 조회·수정·삭제 / 201 생성 / 400 유효성 / 401 인증 / 403 권한 / 404 없음 / 409 중복·충돌
 
-| 코드 | 사용 시점 |
-|:---:|---|
-| 200 | 조회 / 수정 / 삭제 성공 |
-| 201 | 생성 성공 |
-| 400 | 유효성 검사 실패 |
-| 401 | 인증 실패 (토큰 없음 / 만료) |
-| 403 | 권한 없음 |
-| 404 | 리소스 없음 |
-| 409 | 중복 / 충돌 |
+### 네이밍
 
-### 네이밍 컨벤션
+- 클래스 PascalCase, 메서드·변수 camelCase, 상수 UPPER_SNAKE_CASE, DB 컬럼 snake_case
+- Kafka 토픽 `{도메인}.{집합체}.{과거형동사}` — `routine.execution.completed`
+- 에러 코드 도메인 접두사 + UPPER_SNAKE_CASE — `CHALLENGE_NOT_FOUND`
 
-- **패키지**: `com.routinely.{service}.{layer}` (소문자)
-- **클래스**: PascalCase — `RoutineExecutionService`, `ChallengeController`
-- **메서드/변수**: camelCase — `findActiveMembers()`, `routineTemplateId`
-- **상수**: UPPER_SNAKE_CASE — `MAX_RETRY_COUNT`
-- **DB 컬럼**: snake_case — `created_at`, `user_id`
-- **Kafka 토픽**: `{도메인}.{집합체}.{과거형동사}` — `routine.execution.completed`
-- **에러 코드**: UPPER_SNAKE_CASE + 도메인 접두사 — `CHALLENGE_NOT_FOUND`
+### 예외 처리
 
-### 예외 처리 전략
+- **`ErrorCode` enum + `BusinessException` 단일 클래스로 통일 — 도메인별 예외 클래스를 새로 만들지 않는다.**
+- 유효성 검사는 **Controller 레이어에서만** 한다. Service에서 중복 검사하지 않는다.
+- 전역 처리는 `common-web`의 `GlobalExceptionHandler`가 담당한다. → `docs/conventions/exception-handling.md`
 
-- `ErrorCode` enum + `BusinessException` 단일 클래스로 통일 — 도메인별 예외 클래스 다수 생성 금지
-- 유효성 검사는 Controller 레이어에서만 수행 — `GlobalExceptionHandler`가 `MethodArgumentNotValidException` 자동 처리
-- 전역 예외 처리는 `GlobalExceptionHandler` (common-web)에서 담당
+### Entity
 
-> 구현 예시 → `docs/conventions/exception-handling.md`
+- **`@Setter` 금지.** 상태 변경은 의미 있는 메서드(`end()`, `activate()`)로 표현한다.
+- `@Builder` + `@NoArgsConstructor(PROTECTED)` 조합, `extends BaseEntity`로 `createdAt`/`updatedAt` 자동 관리.
+  → `docs/conventions/entity-repository.md`
 
-### Entity 작성 규칙
+### Service
 
-- `@Setter` 사용 금지 — 상태 변경은 의미 있는 메서드(`end()`, `activate()`)로 표현
-- `@Builder` + `@NoArgsConstructor(PROTECTED)` 조합
-- `extends BaseEntity` — `createdAt`, `updatedAt` 자동 관리
+- 인터페이스와 `ServiceImpl`을 항상 분리한다.
+- 클래스 레벨에 `@Transactional(readOnly = true)`를 기본으로 걸고,
+  **쓰기 메서드마다 `@Transactional`을 오버라이드한다** — 빠뜨리면 readOnly 트랜잭션으로 INSERT를 시도한다.
+- `orElseThrow` 중복은 `findXxxByIdOrThrow()` private 헬퍼로 묶는다. → `docs/conventions/service-dto.md`
 
-> 구현 예시 → `docs/conventions/entity-repository.md`
+### DTO / 유효성 검사
 
-### Service 계층 규칙
+- 도메인별 중첩 static class로 묶는다 — `ChallengeDto.CreateRequest`, `ChallengeDto.CreateResponse`
+- Request는 `@Getter` + `@NoArgsConstructor(PROTECTED)` (Jackson 역직렬화용 기본 생성자 필수), Response는 `@Getter` + `@Builder`
+- String은 `@NotBlank`, 숫자·Boolean·날짜는 `@NotNull`
+- **`message` 속성을 항상 한국어로 직접 지정한다.** 기본 메시지(`must not be blank`)를 그대로 두지 않는다.
 
-- Service 인터페이스 + `ServiceImpl` 항상 분리
-- 클래스 레벨 `@Transactional(readOnly = true)` 기본 적용
-- 쓰기 메서드에 `@Transactional` 오버라이드 필수 (빠뜨리면 readOnly 트랜잭션으로 INSERT 시도)
-- `findXxxByIdOrThrow()` private 헬퍼로 `orElseThrow` 중복 제거
+### Controller
 
-> 구현 예시 → `docs/conventions/service-dto.md`
-
-### DTO 작성 규칙
-
-- 도메인별 중첩 static class로 묶어 관리 — `ChallengeDto.CreateRequest`, `ChallengeDto.CreateResponse`
-- Request DTO: `@Getter` + `@NoArgsConstructor(PROTECTED)` (Jackson 역직렬화용 기본 생성자 필수)
-- Response DTO: `@Getter` + `@Builder`
-
-> 구현 예시 → `docs/conventions/service-dto.md`
-
-### Request DTO 유효성 검사
-
-유효성 검사는 **Controller 레이어에서만** — Service에서 중복 검사 금지.
-
-| 어노테이션 | 대상 타입 | 용도 |
-|---|---|---|
-| `@NotNull` | 모든 타입 | null 거부 |
-| `@NotBlank` | String | null / 빈 문자열 / 공백 거부 |
-| `@NotEmpty` | String, Collection | null / 빈 값 거부 (공백 허용) |
-| `@Size(min, max)` | String, Collection | 길이 범위 |
-| `@Min` / `@Max` | 숫자 | 범위 제한 |
-| `@Email` | String | 이메일 형식 |
-| `@Future` / `@FutureOrPresent` | 날짜 | 미래 / 오늘 이후 |
-
-> String 필드는 `@NotBlank`, 숫자·Boolean·날짜는 `@NotNull` 사용  
-> `message` 속성 항상 한국어로 직접 지정 — 기본 메시지(`must not be blank`) 사용 금지
-
-> 구현 예시 → `docs/conventions/controller.md`
-
-### Controller 작성 규칙
-
-- `userId`: 항상 `@RequestHeader("X-User-Id")`로 수신 — JWT 재파싱 금지
-- `BindingResult` 파라미터 선언 금지 — 없어야 Spring이 `MethodArgumentNotValidException`을 자동으로 던짐
-- 반환 타입: `ResponseEntity<ApiResponse<T>>`
-
-> 구현 예시 → `docs/conventions/controller.md`
-
-### 상수 관리
-
-Kafka 토픽명, 헤더 키 등은 common-core의 interface(`KafkaTopics`, `HeaderConstants`)로 관리.
-
-> 구현 예시 → `docs/conventions/service-dto.md`
+- `userId`는 항상 `@RequestHeader("X-User-Id")`로 받는다. **JWT를 재파싱하지 않는다** (Gateway가 이미 검증).
+- **`BindingResult` 파라미터를 선언하지 않는다** — 없어야 Spring이 `MethodArgumentNotValidException`을 던진다.
+- 반환 타입은 `ResponseEntity<ApiResponse<T>>`. → `docs/conventions/controller.md`
 
 ### Lombok 레이어별 조합
 
-| 레이어 | 조합 |
-|---|---|
-| Entity | `@Getter` + `@NoArgsConstructor(PROTECTED)` + `@Builder` |
-| Request DTO | `@Getter` + `@NoArgsConstructor(PROTECTED)` |
-| Response DTO | `@Getter` + `@Builder` |
-| Service / Component | `@RequiredArgsConstructor` + `@Slf4j` |
-| Controller | `@RequiredArgsConstructor` |
-| Config | `@RequiredArgsConstructor` |
+Entity `@Getter`+`@NoArgsConstructor(PROTECTED)`+`@Builder` / Request DTO `@Getter`+`@NoArgsConstructor(PROTECTED)` /
+Response DTO `@Getter`+`@Builder` / Service·Component `@RequiredArgsConstructor`+`@Slf4j` /
+Controller·Config `@RequiredArgsConstructor`
 
-### Repository 규칙
+### Repository
 
-- 단순 조회 → JPA 메서드명
-- JOIN / 집계 → `@Query`
-- 동적 조건 / 페이지네이션 → QueryDSL
+단순 조회는 JPA 메서드명, JOIN·집계는 `@Query`, 동적 조건·페이지네이션은 QueryDSL.
+락 전략은 `docs/conventions/locking-strategy.md`.
 
-> 구현 예시 → `docs/conventions/entity-repository.md`
+### Kafka / Outbox
 
-### Outbox 패턴
+- **`kafkaTemplate.send()`를 직접 호출하지 않는다.** 반드시 Outbox 테이블을 경유한다.
+- 도메인 저장과 Outbox INSERT는 **같은 `@Transactional` 안에서** 수행한다.
+- 토픽명·헤더 키는 `common-core`의 `KafkaTopics`, `HeaderConstants` 인터페이스로 관리한다.
+  → `docs/conventions/outbox-pattern.md`
 
-- `kafkaTemplate.send()` 직접 호출 금지 — 반드시 Outbox 테이블 경유
-- 도메인 저장 + Outbox INSERT는 같은 `@Transactional` 내에서 수행
+### 로그
 
-> 구현 예시 → `docs/conventions/outbox-pattern.md`
+`ERROR` 예상치 못한 예외·외부 시스템 장애 / `WARN` 비즈니스 예외·재시도 /
+`INFO` 주요 비즈니스 이벤트 / `DEBUG` 개발 디버깅(`local` 계열 전용)
 
-### 로그 작성 규칙
+- 파라미터는 플레이스홀더로 넘긴다 — `log.info("...", value)`. 문자열 연결 금지.
+- **비밀번호·토큰 등 민감 정보를 로그에 남기지 않는다.** traceId/userId는 MDC 필터가 자동 주입한다.
 
-| 레벨 | 사용 시점 |
-|---|---|
-| `ERROR` | 예상치 못한 예외, 외부 시스템 장애 (gRPC 실패, Outbox 발행 실패) |
-| `WARN` | 비즈니스 예외, 재시도 (BusinessException, 유효성 검사 실패) |
-| `INFO` | 주요 비즈니스 이벤트 (챌린지 생성, 루틴 완료) |
-| `DEBUG` | 개발 디버깅용 (`local`, `local,observability` 프로파일에서만) |
+### 테스트
 
-- 파라미터는 로그 메시지에 포함 — 문자열 연결 금지 (`log.info("...", value)`)
-- 민감 정보(비밀번호, 토큰) 로그 출력 금지
-- traceId / userId는 MDC 필터가 자동 주입
-
-### 테스트 작성 규칙
-
-| 테스트 종류 | 어노테이션 | 대상 |
+| 종류 | 어노테이션 | 대상 |
 |---|---|---|
-| 단위 테스트 | `@ExtendWith(MockitoExtension.class)` | Service, 도메인 로직 |
-| 슬라이스 — Repository | `@DataJpaTest` | JPA 쿼리 |
-| 슬라이스 — Controller | `@WebMvcTest` | HTTP 형식, 유효성 검사 |
+| 단위 | `@ExtendWith(MockitoExtension.class)` | Service, 도메인 로직 |
+| 슬라이스 | `@DataJpaTest` | JPA 쿼리 |
+| 슬라이스 | `@WebMvcTest` | HTTP 형식, 유효성 검사 |
 
-- 테스트 메서드명: `{동작}_{시나리오}` — `join_success`, `join_alreadyJoined_throwsException`
-- `@DisplayName` 한글 필수
+메서드명 `{동작}_{시나리오}` — `join_success`, `join_alreadyJoined_throwsException`.
+`@DisplayName`은 한글로 필수. → `docs/conventions/testing.md`
 
-> 구현 예시 → `docs/conventions/testing.md`
+## 5. 학습 모드
+
+이 프로젝트는 학습 목적을 포함한다. **코드를 전부 작성하지 말고 핵심 로직은 `TODO(human)`으로 남긴다.**
+
+```java
+// TODO(human): {구현할 내용 설명}
+// HINT: {힌트}
+// REFERENCE: {참고 문서 경로}
+```
+
+| 빈칸으로 남길 것 | 에이전트가 작성할 것 |
+|---|---|
+| 비즈니스 로직의 핵심 (알고리즘, 조건 분기, 데이터 변환) | 보일러플레이트 (설정, DTO, Entity 구조) |
+| 새로 배우는 기술의 핵심 (gRPC 서비스 정의, Kafka 컨슈머 핸들링) | 패키지·프로젝트 구조, 의존성 설정 |
+| 테스트의 assertion | 인터페이스·추상 클래스 정의 |
+| 복잡한 SQL (JOIN, 집계) | 구현 가이드 및 힌트 주석 |
+
+강도 조절: `"학습 모드 하드"` 모든 비즈니스 로직 / `"학습 모드 라이트"` 핵심 1개만 / `"전부 구현"` TODO 없이.
+**기본값은 라이트.**
+
+## 6. 참고 문서
+
+`docs/decisions/` ADR · `docs/conventions/` 구현 패턴 · `docs/requirements/` API·이벤트·gRPC 명세 ·
+`docs/architecture/` · `docs/db/`
