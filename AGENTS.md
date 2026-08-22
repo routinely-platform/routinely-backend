@@ -1,22 +1,41 @@
 # Routinely Backend
 
 Java 21 / Spring Boot 4.0.5 / Gradle 멀티모듈 MSA. Group ID `com.routinely`.
-시스템 전경과 서비스 간 통신 전략은 상위 `../AGENTS.md`에 있다.
+**이 파일 하나로 백엔드 작업에 필요한 규칙이 모두 담긴다.** 상위 디렉토리 파일에 의존하지 않는다 —
+Codex는 git 저장소 루트 위로 올라가지 못하기 때문이다.
 
 ## 0. 작업 규칙
 
-> 워크스페이스 루트 `AGENTS.md`와 **의도적으로 중복**된 내용이다.
-> Codex는 git 저장소 루트 위로 올라가지 않아 상위 파일을 읽지 못하므로 여기에도 둔다.
-> 고칠 때는 워크스페이스 루트 `AGENTS.md`의 "4. 작업 규칙"도 함께 고친다.
+### 시작하기 전에
+
+**저장소 루트에 `WORKPLAN.md`가 있으면 먼저 읽는다.** 지금 브랜치의 목표·설계 결정·실행 계획이
+거기 있다. `.gitignore` 대상이라 워크트리 안에만 존재하고 커밋에 실리지 않는다.
+작업하며 설계가 바뀌면 `WORKPLAN.md`를 갱신한다. 이 파일(`AGENTS.md`)은 건드리지 않는다.
+
+### 워크트리 / 브랜치
 
 - 이슈 하나당 워크트리 하나. `origin/main` 기준으로 생성한다.
 - 브랜치명 `{타입}/#{번호}-{한글설명}`, 워크트리 폴더명 `{타입}-{번호}-{영문설명}`.
+- 워크트리끼리 파일을 복사해 옮기지 않는다. 공통 변경은 `main`에 넣고 rebase로 전파한다.
+- 규칙 파일을 고쳤으면 `main`에 머지된 뒤에 새 워크트리를 만든다. 워크트리는 `origin/main`
+  기준으로 생기므로 로컬에만 있으면 반영되지 않는다.
+
+### 커밋 / PR
+
 - 커밋 메시지 `{타입}: #{번호} {이슈 제목}`, PR 본문에 `Closes #{번호}` 필수.
 - force push 금지.
-- 워크트리끼리 파일을 복사해 옮기지 않는다. 공통 변경은 `main`에 넣고 rebase로 전파한다.
-- 이 파일은 저장소 루트에만 둔다. 브랜치별로 만들지 않는다 — 워크트리 루트가 곧 저장소
-  루트라 경로가 겹치고, 커밋하면 PR에 실려 `main`으로 넘어간다. 모듈별로 나눌 때만
-  `services/{서비스}/AGENTS.md`처럼 하위 디렉토리에 둔다.
+
+### 규칙을 어디에 쓰나
+
+| 내용 | 위치 |
+|---|---|
+| 백엔드 전반 규칙 | **이 파일** |
+| 특정 서비스만의 규칙 | `services/{서비스}/AGENTS.md` (루트와 병합되어 로드된다) |
+| 이번 브랜치의 설계·계획 | `WORKPLAN.md` |
+| 아키텍처 배경·ADR | `docs/` — 규칙이 아니라 문서다. 여기엔 경로만 적는다 |
+
+이 파일을 브랜치별로 만들지 않는다. 워크트리 루트가 곧 저장소 루트라 경로가 겹치고,
+커밋하면 PR에 실려 `main`으로 넘어간다. 브랜치 단위 내용은 `WORKPLAN.md`에 둔다.
 
 ## 1. 빌드 · 실행 · 테스트
 
@@ -57,7 +76,40 @@ Swagger UI, DEBUG 로그 등 개발 전용 기능은 `local` 계열에서만 활
 | 관측 | Micrometer Tracing + Zipkin, Alloy → Loki, Prometheus | traceId/spanId 자동 주입 |
 | CI/CD | GitHub Actions | PR: build·test / merge: docker build·push |
 
-## 3. 모듈 구조 규칙
+## 3. 시스템 전경
+
+### 서비스 · 포트 · DB
+
+| 서비스 | 역할 | HTTP | gRPC | DB |
+|---|---|:---:|:---:|---|
+| `registry-service` | Eureka 서버 | 8761 | — | — |
+| `gateway-service` | 라우팅, JWT 검증, Rate Limiting | 8080 | — | — |
+| `user-service` | 회원가입 / 로그인 / 프로필 | 8081 | 9081 | `routinely_user` |
+| `routine-service` | 루틴 생성 / 수행 기록 / 피드 / 통계 | 8082 | 9082 | `routinely_routine` |
+| `challenge-service` | 챌린지 생성 / 참여 / 랭킹 | 8083 | 9083 | `routinely_challenge` |
+| `chat-service` | WebSocket·STOMP 채팅 | 8084 | 9084 | `routinely_chat` |
+| `notification-service` | 알림 스케줄러·워커 (PGMQ) | 8085 | 9085 | `routinely_notification` |
+
+> gRPC 포트 = HTTP 포트 + 1000. DB는 서비스별 독립 PostgreSQL — **서비스 간 직접 DB 접근 금지.**
+
+인프라: Redis(Rate Limiting·ZSET 랭킹·캐시) / Kafka(도메인 이벤트) / PGMQ(서비스 내부 Job 큐) /
+Zipkin·Loki·Prometheus·Grafana(추적·로그·메트릭)
+
+### 통신 전략
+
+**원칙: Command → gRPC / Event → Kafka / Job → PGMQ / Client 요청 → HTTP**
+
+| 구간 | 방식 | 사용 시점 |
+|---|---|---|
+| 클라이언트 ↔ 서버 | HTTP REST | 일반 API |
+| 실시간 채팅 | WebSocket / STOMP | 채팅 송수신 |
+| 실시간 알림 | SSE | 서버 → 클라이언트 단방향 |
+| 서비스 간 동기 | gRPC | 즉시 응답이 필요한 Command |
+| 서비스 간 비동기 | Kafka + Outbox | 도메인 이벤트 |
+| 서비스 내부 비동기 | PGMQ | 알림 예약 Job |
+| Gateway 홈 집계 | WebClient + `Mono.zip()` | `/api/v1/home` 병렬 집계 |
+
+## 4. 모듈 구조 규칙
 
 `libs/`(공통 라이브러리) + `services/`(서비스) 멀티모듈. 정확한 목록은 `settings.gradle`을 본다.
 
@@ -69,27 +121,13 @@ Swagger UI, DEBUG 로그 등 개발 전용 기능은 `local` 계열에서만 활
 의존 규칙: gateway-service는 JPA가 불필요하므로 `common-jpa`를 넣지 않는다.
 gRPC를 쓰는 서비스(routine·challenge·chat)만 `proto`에 의존한다.
 
-### 서비스 포트 / DB
-
-| 서비스 | HTTP | gRPC | DB |
-|---|:---:|:---:|---|
-| registry-service | 8761 | — | — |
-| gateway-service | 8080 | — | — |
-| user-service | 8081 | 9081 | `routinely_user` |
-| routine-service | 8082 | 9082 | `routinely_routine` |
-| challenge-service | 8083 | 9083 | `routinely_challenge` |
-| chat-service | 8084 | 9084 | `routinely_chat` |
-| notification-service | 8085 | 9085 | `routinely_notification` |
-
-> gRPC 포트 = HTTP 포트 + 1000. **서비스 간 직접 DB 접근 금지.**
-
 ### 서비스 내부 패키지
 
 `com.routinely.{service}.{layer}` — `domain` / `application` / `infrastructure` / `presentation`.
 새 코드는 이 4계층 중 하나에 넣는다. `infrastructure`는 `persistence` · `kafka` · `grpc` · `pgmq`로,
 `presentation`은 `rest` · `grpc`로 나눈다. 계층 원칙은 `docs/conventions/clean-architecture.md`.
 
-## 4. 코딩 컨벤션
+## 5. 코딩 컨벤션
 
 ### 응답 / 상태코드
 
@@ -178,7 +216,7 @@ Controller·Config `@RequiredArgsConstructor`
 메서드명 `{동작}_{시나리오}` — `join_success`, `join_alreadyJoined_throwsException`.
 `@DisplayName`은 한글로 필수. → `docs/conventions/testing.md`
 
-## 5. 학습 모드
+## 6. 학습 모드
 
 이 프로젝트는 학습 목적을 포함한다. **코드를 전부 작성하지 말고 핵심 로직은 `TODO(human)`으로 남긴다.**
 
@@ -198,7 +236,12 @@ Controller·Config `@RequiredArgsConstructor`
 강도 조절: `"학습 모드 하드"` 모든 비즈니스 로직 / `"학습 모드 라이트"` 핵심 1개만 / `"전부 구현"` TODO 없이.
 **기본값은 라이트.**
 
-## 6. 참고 문서
+## 7. 참고 문서
 
-`docs/decisions/` ADR · `docs/conventions/` 구현 패턴 · `docs/requirements/` API·이벤트·gRPC 명세 ·
-`docs/architecture/` · `docs/db/`
+규칙이 아니라 배경·결정·명세다. 필요할 때 읽는다.
+
+**이 저장소** — `docs/decisions/` ADR · `docs/conventions/` 구현 패턴 ·
+`docs/requirements/` API·이벤트·gRPC 명세 · `docs/architecture/` · `docs/db/`
+
+**워크스페이스 공유** (`../../docs/`, 워크트리에서는 두 단계 위) — `architecture.md` 전체 아키텍처 ·
+`services/` 서비스별 상세 · `patterns/outbox-inbox.md` · `patterns/pgmq-chaining.md`
