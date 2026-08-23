@@ -12,6 +12,7 @@ import com.routinely.challenge_service.application.event.ChallengeMemberJoinedEv
 import com.routinely.challenge_service.application.event.ChallengeMemberLeftEvent;
 import com.routinely.challenge_service.domain.challenge.Challenge;
 import com.routinely.challenge_service.domain.challenge.ChallengeLifecycleStatus;
+import com.routinely.challenge_service.domain.challenge.ChallengePolicy;
 import com.routinely.challenge_service.domain.challenge.ChallengeQueryRepository;
 import com.routinely.challenge_service.domain.challenge.ChallengeRepository;
 import com.routinely.challenge_service.domain.challenge.ChallengeSearchCondition;
@@ -442,6 +443,9 @@ public class ChallengeService {
     private void validateScheduleChange(LocalDate targetStartedAt, LocalDate targetEndedAt) {
         if (targetEndedAt.isBefore(targetStartedAt)) {
             throw new BusinessException(VALIDATION_FAILED, "종료일은 시작일보다 빠를 수 없습니다.");
+        }
+        if (!ChallengePolicy.isPeriodWithinLimit(targetStartedAt, targetEndedAt)) {
+            throw new BusinessException(VALIDATION_FAILED, ChallengePolicy.MAX_PERIOD_MESSAGE);
         }
     }
 

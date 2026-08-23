@@ -2,8 +2,10 @@ package com.routinely.challenge_service.presentation.rest.challenge.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.routinely.challenge_service.application.dto.CreateChallengeCommand;
+import com.routinely.challenge_service.domain.challenge.ChallengePolicy;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.FutureOrPresent;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -26,6 +28,7 @@ public record CreateChallengeRequest(
 
         @NotNull(message = "최대 참여 인원은 필수입니다.")
         @Min(value = 2, message = "최대 참여 인원은 2명 이상이어야 합니다.")
+        @Max(value = ChallengePolicy.MAX_MEMBERS, message = ChallengePolicy.MAX_MEMBERS_MESSAGE)
         Integer maxMembers,
 
         @NotBlank(message = "카테고리 코드는 필수입니다.")
@@ -55,9 +58,23 @@ public record CreateChallengeRequest(
     private static final Set<String> COUNT_REQUIRED_TYPES = Set.of("WEEKLY_COUNT", "MONTHLY_COUNT");
 
     @JsonIgnore
+    @AssertTrue(message = "MVP에서는 공개 챌린지만 만들 수 있습니다.")
+    public boolean isPublicChallenge() {
+        return isPublic == null || isPublic;
+    }
+
+    @JsonIgnore
     @AssertTrue(message = "종료일은 시작일보다 빠를 수 없습니다.")
     public boolean isDateRangeValid() {
         return startedAt == null || endedAt == null || !endedAt.isBefore(startedAt);
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = ChallengePolicy.MAX_PERIOD_MESSAGE)
+    public boolean isPeriodWithinLimit() {
+        return startedAt == null
+                || endedAt == null
+                || ChallengePolicy.isPeriodWithinLimit(startedAt, endedAt);
     }
 
     @JsonIgnore
