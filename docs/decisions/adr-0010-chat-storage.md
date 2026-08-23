@@ -2,7 +2,19 @@
 
 ## Status
 
-Accepted
+Accepted (2026-08-23 보완)
+
+> **2026-08-23 보완 (`docs/product/policies.md` §7에서 확정)**
+>
+> - **채팅방은 챌린지 시작 시 생성한다**(`challenge.started`). 생성 시에 만들면 대기 중 유령 방이 쌓이고,
+>   `WAITING`에서 방장이 혼자 탈퇴할 때 챌린지를 하드 삭제하므로(ADR-0042) 방도 함께 지워야 한다.
+> - **1:1 채팅(`DIRECT`)은 두지 않는다.** `ck_cr_room_type` CHECK을 `CHALLENGE`만으로 좁힌다.
+>   컬럼은 확장 여지로 남긴다.
+> - **나가면 지난 대화를 볼 수 없다.** 메시지 조회를 `created_at >= chat_room_members.joined_at`으로
+>   제한하고, **재참여 시 `joined_at`을 갱신**해 탈퇴 이전 대화까지 차단한다.
+> - **방장 승계 시 `OWNER`도 따라 바뀐다.** `challenge.member.left`의 `newLeaderUserId`를 읽어 처리한다.
+> - **MVP는 텍스트와 SYSTEM 메시지만.** 이미지는 v2 — 사진 공유는 피드가 담당하므로 중복 투자다.
+>   **루틴 완료 SYSTEM 메시지는 남기지 않는다**(하루 수십 건이 대화를 밀어낸다).
 
 > `(deleted)`, `(deleted)`를 대체하는 파일.
 > 초기 MongoDB 채택 결정을 번복하고 PostgreSQL로 확정.

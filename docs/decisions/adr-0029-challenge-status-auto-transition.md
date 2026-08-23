@@ -4,6 +4,17 @@
 Superseded by ADR-0033
 
 > ADR-0033으로 통합됨. 상태 전이 전략(Outbox + Kafka), 분산 락(ShedLock), 이벤트 명세가 ADR-0033에 모두 포함됨.
+>
+> ⚠️ **본문의 후속 처리 목록은 더 이상 유효하지 않다 (2026-08-23 경고 추가).**
+> 아래 Context가 전제하는 두 가지가 이후 결정으로 폐기됐다.
+>
+> | 본문 표현 | 현재 |
+> |---|---|
+> | "RoutineService: 챌린지 기간 내 `routine_executions` **사전 생성**" | **폐기.** ADR-0038의 sparse 저장으로 실행 기록을 미리 만들지 않는다 |
+> | "RoutineService: 미수행 `routine_executions` **SKIPPED 처리** 및 통계 마감" | **폐기.** 저장된 행이 없으므로 마감할 대상이 없다. 미완료는 조회 시 파생한다 |
+>
+> 현재 유효한 후속 처리는 `challenge.started` 수신 시 **멤버별 루틴 인스턴스 생성**(ADR-0032)이며,
+> 그때 챌린지 템플릿의 정의를 인스턴스에 복사한다(ADR-0040).
 
 ## Context
 
