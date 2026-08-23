@@ -1,6 +1,10 @@
 # ADR-0027: 달성률 계산 — repeat_type별 주별/월별 캡 적용
 
-- **Status**: Accepted
+- **Status**: **Superseded by ADR-0043**
+
+> ADR-0039(반복 스케줄 이원화)로 `WEEKLY_N`/`MONTHLY_N` 명칭이 바뀌고 `SPECIFIC_DAYS`가 추가되면서
+> 본 문서의 표에 요일 지정형 분모 정의가 없다. ADR-0041(무기한 루틴)로 "전체 기간" 분모도 성립하지 않는다.
+> **ADR-0043이 대체한다.** 기간별 캡 규칙 자체는 ADR-0043이 계승한다.
 - **Date**: 2026-05-21
 - **Author**: Routinely Project
 

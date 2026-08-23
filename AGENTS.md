@@ -236,12 +236,54 @@ Controller·Config `@RequiredArgsConstructor`
 강도 조절: `"학습 모드 하드"` 모든 비즈니스 로직 / `"학습 모드 라이트"` 핵심 1개만 / `"전부 구현"` TODO 없이.
 **기본값은 라이트.**
 
-## 7. 참고 문서
+## 7. 문서 갱신 규칙
+
+**코드를 바꾸면 같은 커밋에서 문서도 바꾼다.** 아래 셋은 특히 놓치기 쉽다.
+
+### 7-1. 제품 규약이 바뀌면 — `docs/product/policies.md`
+
+이슈를 구현하다 **규약이 정해지거나 뒤집히면** 워크스페이스 루트
+`../../docs/product/policies.md`(워크트리에서는 두 단계 위)의 해당 항목과 **상태를 함께 갱신한다.**
+🟡(미정)가 🟢(확정)이 되는 순간을 놓치지 않는다.
+
+새 결정이 ADR급이면 `docs/decisions/`에 ADR을 쓰고 policies.md에서 링크한다.
+
+### 7-2. 이벤트·gRPC가 바뀌면 — `docs/architecture/service-interaction-map.md`
+
+REST는 Swagger가 담당하지만 **이벤트와 gRPC는 코드를 다 열어보기 전에는 전경이 보이지 않는다.**
+Mermaid 관계도로 유지하는 문서가 있으니 **같은 커밋에서 고친다.**
+
+| 상황 | 고칠 곳 |
+|---|---|
+| 토픽 신설·폐기, 구독자 추가·제거 | `service-interaction-map.md` §1 그래프 · §2 매트릭스 |
+| 페이로드 필드 변경 | `docs/requirements/event-spec.md`(상세) + 지도 §2 변경 표 |
+| RPC 추가·시그니처 변경 | 지도 §3 + `docs/requirements/grpc-spec.md` |
+| **양단 배선 완료** | **지도의 상태 배지를 🟡·⬜ → ✅ 로** |
+| 흐름이 바뀌는 결정 | 지도 §4 시퀀스 |
+
+> **상태 배지 갱신을 빠뜨리지 않는다.** 이 문서의 값은 "무엇이 아직 안 이어졌는지"가 한눈에 보이는
+> 데 있다. 그림만 맞고 배지가 낡으면 오히려 해롭다.
+
+### 7-3. 포트폴리오 — `../../portfolio/`
+
+- **기능 구현을 마치면** `portfolio.md`에 기여 항목을 추가한다
+- **새 기술·패턴을 도입하면** `interview-qa.md`에 예상 질문과 꼬리 질문을 함께 적는다
+- **기술을 선택했으면** `tech-story.md`에 배경과 트레이드오프를 적는다 (기각한 대안 포함)
+
+단순 디버깅·설정 수정은 건너뛴다.
+
+## 8. 참고 문서
 
 규칙이 아니라 배경·결정·명세다. 필요할 때 읽는다.
 
 **이 저장소** — `docs/decisions/` ADR · `docs/conventions/` 구현 패턴 ·
 `docs/requirements/` API·이벤트·gRPC 명세 · `docs/architecture/` · `docs/db/`
 
+> `docs/architecture/service-interaction-map.md` — **이벤트·gRPC 관계도(Mermaid).** 누가 무엇을 발행하고
+> 누가 받는지, 어디가 아직 안 이어졌는지를 한 장으로 본다. 갱신 규칙은 §7-2.
+
 **워크스페이스 공유** (`../../docs/`, 워크트리에서는 두 단계 위) — `architecture.md` 전체 아키텍처 ·
 `services/` 서비스별 상세 · `patterns/outbox-inbox.md` · `patterns/pgmq-chaining.md`
+
+> **`docs/product/`** — 제품 규약. `policies.md`가 "무엇을 할 수 있고 없는가"의 **단일 출처**다.
+> `overview.md`(용어·핵심 흐름) · `screens.md`(화면 명세)와 함께 본다. 갱신 규칙은 §7-1.
