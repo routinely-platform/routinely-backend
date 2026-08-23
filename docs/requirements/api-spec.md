@@ -1053,6 +1053,11 @@ public class ApiResponse<T> {
 - Auth: ✅ (소유자만)
 
 > 물리 삭제하지 않고 `is_active = false`로 전환한다(중단). 이미 중단된 루틴에 대해서도 멱등하게 동작한다.
+> 중단한 루틴은 "오늘 할 일" 파생과 달성률 집계에서 빠지고 완료 이력만 남는다 (ADR-0038).
+>
+> **개인 루틴만 중단할 수 있다.** 챌린지 루틴은 `403 FORBIDDEN` — 모든 참여자에게 고정으로 적용되고
+> (ADR-0036) 인스턴스가 멤버 수만큼 존재해 한 사람이 내려도 챌린지가 끝나지 않는다. 중단을 허용하면
+> 랭킹에서 조용히 이탈하는 통로가 되므로, 챌린지에서 빠지는 수단은 챌린지 탈퇴 하나로 둔다.
 
 **Response** `200`
 ```json
@@ -1070,11 +1075,22 @@ public class ApiResponse<T> {
 
 ---
 
-### 3-3. 루틴 실행 기록
+### 3-3. 루틴 실행 기록 (sparse 저장, ADR-0038)
 
-#### `GET /api/v1/routine-executions` — 실행 기록 조회
+> 사용자가 명시적으로 남긴 행동(현재는 완료)만 저장하고, PENDING/MISSED는 저장하지 않고 스케줄 due
+> 판정(ADR-0039)으로 조회 시 파생한다. 행이 사전에 없으므로 완료 대상은 `executionId`가 아니라
+> `routineId + date`로 지정한다.
+>
+> **백필 허용** — 완료·완료 취소는 아직 오지 않은 날만 아니면 수행 기간 내 어느 날짜든 가능하다.
+> 깜빡한 하루를 나중에 채우면 그 자리의 MISSED는 자동으로 사라진다.
+>
+> **중단(비활성) 루틴** — 완료 이력만 조회되고 PENDING/MISSED는 파생되지 않는다. 완료는 거부, 취소는 허용.
+
+#### `GET /api/v1/routine-executions` — 실행 기록 조회 (완료 + 파생 병합)
 - Auth: ✅
-- Query: `date` (YYYY-MM-DD), `startDate`, `endDate`, `routineId`, `status`
+- Query: `date` (YYYY-MM-DD) **또는** `startDate`+`endDate` (둘 중 하나 필수, 함께 사용 불가, 최대 366일),
+  `routineId`(선택), `status`(선택: `PENDING`/`COMPLETED`/`MISSED`)
+- `executionId`/`completedAt`/`photoUrl`/`memo`는 저장된 완료 기록에만 있고, 파생 PENDING/MISSED에서는 `null`
 
 **Response** `200`
 ```json
@@ -1086,11 +1102,21 @@ public class ApiResponse<T> {
       "executionId": 101,
       "routineId": 1,
       "title": "아침 달리기",
-      "scheduledDate": "2025-02-15",
+      "scheduledDate": "2026-07-24",
       "status": "COMPLETED",
-      "completedAt": "2025-02-15T07:30:00Z",
+      "completedAt": "2026-07-24T07:30:00Z",
       "photoUrl": "https://s3.../photo.jpg",
       "memo": "오늘도 완료!"
+    },
+    {
+      "executionId": null,
+      "routineId": 2,
+      "title": "주 3회 헬스",
+      "scheduledDate": "2026-07-24",
+      "status": "PENDING",
+      "completedAt": null,
+      "photoUrl": null,
+      "memo": null
     }
   ]
 }
@@ -1098,16 +1124,13 @@ public class ApiResponse<T> {
 
 ---
 
-#### `POST /api/v1/routine-executions/{executionId}/complete` — 루틴 완료 처리
+#### `POST /api/v1/routines/{routineId}/executions/{date}/complete` — 루틴 완료 처리
 - Auth: ✅
-
-**Request**
-```json
-{
-  "photoUrl": "https://s3.../photo.jpg",
-  "memo": "오늘도 완료!"
-}
-```
+- Content-Type: `multipart/form-data` — `photo`(파일, 선택), `memo`(텍스트, 선택)
+- `{date}`는 **미래가 아니어야** 하고(지난 날짜 허용 — 백필), 루틴 수행 기간 내·수행 가능 요일이어야 하며,
+  이미 완료면 `409 EXECUTION_ALREADY_COMPLETED`
+- 중단한 루틴은 완료할 수 없다 (`400 VALIDATION_FAILED`)
+- 사진: `image/jpeg`·`image/png`·`image/webp`, 5MB 이하, 매직넘버 검증
 
 **Response** `200`
 ```json
@@ -1116,17 +1139,21 @@ public class ApiResponse<T> {
   "message": "루틴이 완료 처리되었습니다.",
   "data": {
     "executionId": 101,
+    "routineId": 1,
+    "scheduledDate": "2026-07-24",
     "status": "COMPLETED",
-    "completedAt": "2025-02-15T07:30:00Z",
-    "feedCardId": 55
+    "completedAt": "2026-07-24T07:30:00Z",
+    "photoUrl": "https://s3.../photo.jpg"
   }
 }
 ```
 
 ---
 
-#### `DELETE /api/v1/routine-executions/{executionId}/complete` — 완료 취소
+#### `DELETE /api/v1/routines/{routineId}/executions/{date}/complete` — 완료 취소
 - Auth: ✅
+- 날짜 제한 없이 취소 가능하며, 중단한 루틴이어도 허용한다. 완료 행을 삭제해 PENDING(파생)으로 되돌린다.
+  인증 사진은 커밋 후 삭제.
 
 **Response** `200`
 ```json
@@ -1134,8 +1161,12 @@ public class ApiResponse<T> {
   "success": true,
   "message": "루틴 완료가 취소되었습니다.",
   "data": {
-    "executionId": 101,
-    "status": "PENDING"
+    "executionId": null,
+    "routineId": 1,
+    "scheduledDate": "2026-07-24",
+    "status": "PENDING",
+    "completedAt": null,
+    "photoUrl": null
   }
 }
 ```

@@ -20,3 +20,13 @@ eureka:
   client:
     service-url:
       defaultZone: http://localhost:8761/eureka/
+
+# 로컬은 LocalStack(S3 호환)로 붙는다. docker compose 로 localstack 기동 필요.
+routinely:
+  storage:
+    s3:
+      endpoint: http://localhost:4566
+      public-base-url: http://localhost:4566/routinely-dev
+      path-style-access: true
+      access-key: test
+      secret-key: test

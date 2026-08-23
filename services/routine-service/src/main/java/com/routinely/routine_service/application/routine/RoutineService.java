@@ -25,7 +25,7 @@ import static com.routinely.core.exception.ErrorCode.VALIDATION_FAILED;
  * 루틴 인스턴스(활성 루틴) 라이프사이클 — 개인 루틴 시작 / 목록 조회 / 중단.
  *
  * <p>이 API는 개인 루틴만 다룬다. 챌린지 루틴 인스턴스는 {@code challenge.started} 이벤트 소비로
- * 자동 생성되므로(ADR-0032, 별도 구현) 이 경로로 시작할 수 없다.
+ * 자동 생성되므로(ADR-0032, 별도 구현) 이 경로로 시작할 수 없고, 중단도 할 수 없다(ADR-0036).
  *
  * <p>선호 수행 시각 설정/수정은 {@code PATCH /api/v1/routines/{routineId}}(#139)가, 실행 기록은
  * routine_executions(#57)가 담당한다.
@@ -69,10 +69,22 @@ public class RoutineService {
                 .toList();
     }
 
+    /**
+     * 개인 루틴 중단 — 물리 삭제 대신 활성 플래그를 내린다. 중단한 루틴은 "오늘 할 일" 파생과 달성률
+     * 집계에서 빠지고 완료 이력만 남는다. (ADR-0038)
+     *
+     * <p><b>챌린지 루틴은 중단할 수 없다.</b> 챌린지 루틴은 모든 참여자에게 고정으로 적용되며(ADR-0036),
+     * 인스턴스는 멤버 수만큼 존재하므로 한 사람이 자기 인스턴스를 내려도 챌린지가 끝나지 않는다. 중단을
+     * 허용하면 랭킹에서 조용히 이탈하는 통로가 되므로, 챌린지에서 빠지는 수단은 챌린지 탈퇴 하나로 둔다.
+     */
     @Transactional
     public void stop(Long routineId, Long userId) {
         Routine routine = routineRepository.findByIdAndUserId(routineId, userId)
                 .orElseThrow(() -> new BusinessException(ROUTINE_NOT_FOUND));
+        if (routine.getChallengeId() != null) {
+            throw new BusinessException(FORBIDDEN,
+                    "챌린지 루틴은 중단할 수 없습니다. 챌린지에서 탈퇴해 주세요.");
+        }
 
         routine.deactivate();
     }

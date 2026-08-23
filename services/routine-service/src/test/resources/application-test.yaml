@@ -22,3 +22,11 @@ spring:
 eureka:
   client:
     enabled: false
+
+# 테스트에서는 S3에 실제로 붙지 않는다 — S3Client 는 기동 시 자격증명을 지연 해석하므로 빈 생성만 검증된다.
+routinely:
+  storage:
+    s3:
+      enabled: true
+      bucket: test-bucket
+      region: ap-northeast-2

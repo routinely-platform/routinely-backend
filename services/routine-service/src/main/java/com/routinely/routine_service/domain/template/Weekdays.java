@@ -1,5 +1,6 @@
 package com.routinely.routine_service.domain.template;
 
+import java.time.DayOfWeek;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -23,6 +24,17 @@ public final class Weekdays {
 
     public static boolean isValidCode(String code) {
         return CODES.contains(code);
+    }
+
+    /**
+     * 비트마스크가 주어진 요일을 포함하는지 검사한다. bit 위치는 MON=0 … SUN=6이며 {@link DayOfWeek}의
+     * 1(월)~7(일)에 대응한다. 마스크가 NULL이면 어떤 요일도 포함하지 않는 것으로 본다.
+     */
+    public static boolean contains(Short bitmask, DayOfWeek day) {
+        if (bitmask == null) {
+            return false;
+        }
+        return (bitmask & (1 << (day.getValue() - 1))) != 0;
     }
 
     /**

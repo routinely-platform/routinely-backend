@@ -71,6 +71,13 @@ class RoutineServiceTest {
         return routine;
     }
 
+    private Routine challengeRoutine(Long challengeId) {
+        Routine routine = personalRoutine(TEMPLATE_ID, null);
+        // 챌린지 루틴 인스턴스는 challenge.started 소비로 생성되며(ADR-0032, 별도 구현) 아직 팩토리가 없다.
+        ReflectionTestUtils.setField(routine, "challengeId", challengeId);
+        return routine;
+    }
+
     @Nested
     @DisplayName("start")
     class Start {
@@ -227,6 +234,19 @@ class RoutineServiceTest {
             service.stop(ROUTINE_ID, OWNER_ID);
 
             assertThat(routine.isActive()).isFalse();
+        }
+
+        @Test
+        @DisplayName("챌린지루틴이면_중단할수없다")
+        void stop_whenChallengeRoutine_throwsForbidden() {
+            Routine routine = challengeRoutine(42L);
+            when(routineRepository.findByIdAndUserId(ROUTINE_ID, OWNER_ID))
+                    .thenReturn(Optional.of(routine));
+
+            assertThatThrownBy(() -> service.stop(ROUTINE_ID, OWNER_ID))
+                    .isInstanceOfSatisfying(BusinessException.class, exception ->
+                            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN));
+            assertThat(routine.isActive()).isTrue();
         }
 
         @Test

@@ -4,6 +4,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -26,4 +27,23 @@ public interface RoutineRepository extends JpaRepository<Routine, Long> {
     List<Routine> findMyRoutines(@Param("userId") Long userId,
                                  @Param("isActive") Boolean isActive,
                                  @Param("challengeId") Long challengeId);
+
+    /**
+     * 실행 기록 조회 대상 루틴 — 수행 기간([started_at, ended_at])이 조회 기간과 겹치는 본인 루틴을 모은다.
+     * routineId가 NULL이면 사용자 전체를 대상으로 한다. 중단(비활성) 루틴도 <b>완료 이력</b>을 보여주기 위해
+     * 포함하되, PENDING/MISSED 파생 대상에서는 서비스 계층이 제외한다. (기간 겹침: started_at ≤ endDate
+     * AND ended_at ≥ startDate)
+     */
+    @Query("""
+            SELECT r FROM Routine r
+            WHERE r.userId = :userId
+              AND (:routineId IS NULL OR r.id = :routineId)
+              AND r.startedAt <= :endDate
+              AND r.endedAt >= :startDate
+            ORDER BY r.id DESC
+            """)
+    List<Routine> findForExecutionDerivation(@Param("userId") Long userId,
+                                             @Param("routineId") Long routineId,
+                                             @Param("startDate") LocalDate startDate,
+                                             @Param("endDate") LocalDate endDate);
 }

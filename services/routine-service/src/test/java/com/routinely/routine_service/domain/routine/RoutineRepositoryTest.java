@@ -1,5 +1,8 @@
 package com.routinely.routine_service.domain.routine;
 
+import com.routinely.jpa.config.JpaAuditingConfig;
+import org.springframework.context.annotation.Import;
+
 import com.routinely.routine_service.domain.template.RoutineTemplate;
 import com.routinely.routine_service.domain.template.RoutineTemplateRepository;
 import com.routinely.routine_service.domain.template.ScheduleType;
@@ -18,6 +21,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@Import(JpaAuditingConfig.class)
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
