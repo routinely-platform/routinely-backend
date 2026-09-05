@@ -1,8 +1,22 @@
 # ADR-0034: 챌린지 생성 시 루틴 템플릿 생성 — 비동기 이벤트 처리
 
-- **Status**: Accepted
+- **Status**: ⛔ Superseded by ADR-0044 (2026-08-24)
 - **Date**: 2026-06-12
 - **Author**: Routinely Project
+
+---
+
+> ⛔ **Superseded by [ADR-0044](adr-0044-challenge-routine-definition-ownership.md)** (2026-08-24)
+>
+> **챌린지 루틴 템플릿을 만들지 않기로 했다.** 정의는 challenge-service가 `challenges`에 직접 소유하고
+> `challenge.started` 페이로드로 routine-service에 전달한다. `challenge.created` → 템플릿 생성 흐름 자체가 사라진다.
+>
+> **아래 §1의 전제는 코드와 달랐다** — *"`challenge.started` 페이로드가 `routineTemplateId`를 포함하므로
+> 시작 전에 템플릿이 반드시 존재해야 한다"* 고 적었으나 실제 `ChallengeStartedEvent`에 그 필드는 없다.
+> **이 ADR의 핵심 논거가 성립하지 않았다.**
+>
+> 다만 **§3.1(동기 gRPC도 원자성을 보장하지 못한다)의 분석은 여전히 유효하다** —
+> 서비스 간 쓰기는 Outbox로 간다는 판단은 다른 경로에 계속 적용된다.
 
 ---
 

@@ -840,6 +840,96 @@ class ChallengeServiceTest {
         assertThat(challenge.isPublic()).isTrue();
     }
 
+    // 기간 상한은 시작일·종료일을 모두 포함해 센다 (ChallengePolicy.MAX_PERIOD_DAYS).
+    // 수정 요청은 한쪽 날짜만 올 수 있어 DTO만으로는 최종 기간을 알 수 없다 — 기존 엔티티 값과 병합해 판정한다.
+    @Test
+    @DisplayName("챌린지수정_종료일만수정해_기간이101일이되면_예외를던진다")
+    void updateChallenge_whenOnlyEndedAtMakesPeriodTooLong_throwsException() {
+        // 기존 시작일 2026-05-25 + 종료일 2026-09-02 = 시작일 포함 101일
+        Challenge challenge = createChallenge(1L, "대기 챌린지", true, null, ChallengeLifecycleStatus.WAITING);
+        ChallengeMember leader = createMember(challenge, 100L, ChallengeMemberRole.LEADER);
+        when(challengeRepository.findById(1L)).thenReturn(Optional.of(challenge));
+        when(challengeMemberRepository.findByChallengeIdAndUserIdAndStatus(1L, 100L, MembershipStatus.ACTIVE))
+                .thenReturn(Optional.of(leader));
+        when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
+                .thenReturn(1);
+
+        UpdateChallengeCommand command = updateCommand(
+                null,
+                null,
+                null,
+                null,
+                null,
+                LocalDate.of(2026, 9, 2),
+                null
+        );
+
+        assertThatThrownBy(() -> challengeService.updateChallenge(1L, 100L, command))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
+                    assertThat(exception.getMessage()).isEqualTo("챌린지 기간은 100일 이하여야 합니다.");
+                });
+        assertThat(challenge.getEndedAt()).isEqualTo(LocalDate.of(2026, 6, 24));
+    }
+
+    @Test
+    @DisplayName("챌린지수정_종료일만수정해_기간이100일이되면_성공한다")
+    void updateChallenge_whenOnlyEndedAtMakesPeriodExactlyLimit_succeeds() {
+        // 기존 시작일 2026-05-25 + 종료일 2026-09-01 = 시작일 포함 100일
+        Challenge challenge = createChallenge(1L, "대기 챌린지", true, null, ChallengeLifecycleStatus.WAITING);
+        ChallengeMember leader = createMember(challenge, 100L, ChallengeMemberRole.LEADER);
+        when(challengeRepository.findById(1L)).thenReturn(Optional.of(challenge));
+        when(challengeMemberRepository.findByChallengeIdAndUserIdAndStatus(1L, 100L, MembershipStatus.ACTIVE))
+                .thenReturn(Optional.of(leader));
+        when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
+                .thenReturn(1);
+
+        UpdateChallengeCommand command = updateCommand(
+                null,
+                null,
+                null,
+                null,
+                null,
+                LocalDate.of(2026, 9, 1),
+                null
+        );
+
+        challengeService.updateChallenge(1L, 100L, command);
+
+        assertThat(challenge.getEndedAt()).isEqualTo(LocalDate.of(2026, 9, 1));
+    }
+
+    @Test
+    @DisplayName("챌린지수정_시작일만수정해_기간이101일이되면_예외를던진다")
+    void updateChallenge_whenOnlyStartedAtMakesPeriodTooLong_throwsException() {
+        // 기존 종료일을 2026-09-03으로 두고 시작일을 2026-05-26으로 당기면 시작일 포함 101일
+        Challenge challenge = createChallenge(1L, "대기 챌린지", true, null, ChallengeLifecycleStatus.WAITING);
+        ReflectionTestUtils.setField(challenge, "endedAt", LocalDate.of(2026, 9, 3));
+        ChallengeMember leader = createMember(challenge, 100L, ChallengeMemberRole.LEADER);
+        when(challengeRepository.findById(1L)).thenReturn(Optional.of(challenge));
+        when(challengeMemberRepository.findByChallengeIdAndUserIdAndStatus(1L, 100L, MembershipStatus.ACTIVE))
+                .thenReturn(Optional.of(leader));
+        when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
+                .thenReturn(1);
+
+        UpdateChallengeCommand command = updateCommand(
+                null,
+                null,
+                null,
+                null,
+                LocalDate.of(2026, 5, 26),
+                null,
+                null
+        );
+
+        assertThatThrownBy(() -> challengeService.updateChallenge(1L, 100L, command))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
+                    assertThat(exception.getMessage()).isEqualTo("챌린지 기간은 100일 이하여야 합니다.");
+                });
+        assertThat(challenge.getStartedAt()).isEqualTo(LocalDate.of(2026, 5, 25));
+    }
+
     @Test
     @DisplayName("챌린지수정_ENDED상태이면_공개여부를수정할수없다")
     void updateChallenge_whenEnded_privateToPublic_throwsException() {

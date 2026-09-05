@@ -122,6 +122,11 @@ Routine 서비스는 이벤트 수신 즉시 비즈니스 로직을 처리하지
 
 ## 7. ChallengeStarted 이벤트 페이로드
 
+> 🔄 **개정 (2026-08-24, [ADR-0044](adr-0044-challenge-routine-definition-ownership.md))**
+> `routineTemplateId`를 **루틴 정의 필드로 교체**한다. 챌린지 템플릿이 없어지기 때문이다.
+> 아래 원칙("추가 RPC 없이 자기 완결적")은 그대로이며, 오히려 문자 그대로 지켜진다 —
+> 템플릿 ID를 담으면 결국 조회를 해야 자기완결이 됐다.
+
 Routine 서비스가 추가 RPC 없이 자기 완결적으로 처리할 수 있도록 필요한 모든 정보를 담는다.
 
 ```json
@@ -131,13 +136,27 @@ Routine 서비스가 추가 RPC 없이 자기 완결적으로 처리할 수 있�
   "challengeId": 10,
   "startedAt": "2026-03-01",
   "endedAt": "2026-03-31",
-  "routineTemplateId": 5,
+  "routineTitle": "아침 러닝 3km",
+  "categoryCode": "EXERCISE",
+  "scheduleType": "DAILY",
+  "targetCount": null,
   "members": [
     { "userId": 1, "joinedAt": "2026-02-25" },
     { "userId": 2, "joinedAt": "2026-02-26" }
   ]
 }
 ```
+
+routine-service는 이 페이로드만으로 멤버별 `routines`를 만든다.
+`routine_template_id`는 **NULL**이다 — ADR-0040이 nullable로 만들었다.
+
+<details><summary>개정 전 (routineTemplateId 방식)</summary>
+
+```json
+{ "challengeId": 10, "startedAt": "...", "endedAt": "...",
+  "routineTemplateId": 5, "members": [ ... ] }
+```
+</details>
 
 > `eventType` 필드는 포함하지 않는다. Kafka 토픽 이름이 이벤트 타입을 식별하므로 페이로드 중복이다.
 

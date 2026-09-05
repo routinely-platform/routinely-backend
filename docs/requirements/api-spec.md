@@ -341,6 +341,16 @@ public class ApiResponse<T> {
 
 #### `POST /api/v1/challenges` — 챌린지 생성
 - Auth: ✅
+- MVP 값 제약 (#160)
+
+| 필드 | 제약 |
+|---|---|
+| `isPublic` | **`false`면 `400`.** MVP는 공개 챌린지만 만들 수 있다 (필드는 v2를 위해 남겨 둔다) |
+| `maxMembers` | **2 ~ 20** |
+| `startedAt` · `endedAt` | 시작일은 오늘 이후, 종료일 ≥ 시작일, **기간 최대 100일** |
+
+> 기간은 **시작일과 종료일을 모두 포함해** 센다 — `2025-02-01 ~ 2025-05-11`이 정확히 100일이다.
+> `challenge_member_summary.total_scheduled = ended_at - started_at + 1`과 같은 기준이다.
 
 **Request**
 ```json
@@ -465,12 +475,17 @@ public class ApiResponse<T> {
 - 상세 정책: `docs/requirements/challenge-update-policy.md`
 
 **isPublic 수정 정책**
+
+**MVP에서는 `isPublic: false` 요청 자체를 `400`으로 거부한다 (#160).** 생성만 막으면 "공개로 만든 뒤
+비공개로 전환"으로 우회되기 때문에 `PATCH`도 함께 막는다. 아래 표는 **v2에서 비공개를 열었을 때** 적용된다.
+
 | 상태 | 멤버 수 | 비공개→공개 | 공개→비공개 |
 |---|---|:---:|:---:|
-| WAITING / ACTIVE | 1명 (방장만) | ✅ | ✅ 초대코드 자동생성 |
+| WAITING / ACTIVE | 1명 (방장만) | ✅ | ⛔ MVP 차단 (v2: ✅ 초대코드 자동생성) |
 | WAITING / ACTIVE | 2명 이상 | ✅ | ❌ |
 | ENDED | 무관 | ❌ | ❌ |
 
+- 비공개→공개 전환은 MVP에서도 허용한다 (이미 만들어진 비공개 챌린지를 여는 방향).
 - 비공개→공개 전환 시 기존 `inviteCode` 유지 (다시 비공개 전환 시 재사용).
 - 공개→비공개 전환 시 `inviteCode`가 없으면 자동 생성.
 
@@ -482,6 +497,9 @@ public class ApiResponse<T> {
 - 날짜 제약:
   - `startedAt`은 오늘 이후로만 변경 가능하며, 반드시 `endedAt`보다 빨라야 한다.
   - `endedAt`은 `startedAt` 이후로만 변경 가능하다.
+  - **최종 기간은 시작일 포함 100일 이하여야 한다.** 한쪽 날짜만 보내면 나머지는 저장된 값을 쓰므로,
+    `endedAt`만 보낸 연장 요청도 병합 후 기간으로 판정한다 (#160).
+- `maxMembers`는 **20 이하**여야 한다 (#160).
 
 **Request**
 ```json
@@ -617,7 +635,7 @@ public class ApiResponse<T> {
 #### `POST /api/v1/challenges/join` — 초대 코드로 참여 (V2 예정)
 - Auth: ✅
 
-> MVP 범위에서는 구현하지 않는다. `invite_code`는 비공개 챌린지 생성 시 자동 발급되나 MVP에서 참여 경로가 없다. V2에서 링크 공유 기반 초대(`https://routinely.app/challenges/join/{invite_code}`)로 활용한다 (ADR-0031).
+> MVP 범위에서는 구현하지 않는다. **MVP는 비공개 챌린지 생성 자체를 막으므로(#160) `invite_code`가 발급되는 경로가 없다.** V2에서 비공개 생성을 열 때 링크 공유 기반 초대(`https://routinely.app/challenges/join/{invite_code}`)로 활용한다 (ADR-0031).
 
 **Request**
 ```json

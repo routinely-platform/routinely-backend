@@ -38,8 +38,7 @@ graph LR
     H1[" "]
   end
 
-  C -- "challenge.created ✅" --> R
-  C -- "challenge.started 🟡" --> R
+  C -- "challenge.started(정의 포함) ⬜🆕" --> R
   C -- "challenge.started 🟡" --> N
   C -- "challenge.started 🟡" --> H
   C -- "challenge.ended 🟡" --> R
@@ -75,8 +74,8 @@ graph LR
 
 | 토픽 | Publisher | Subscriber | 파티션 키 | 상태 |
 |---|---|---|---|:---:|
-| `challenge.created` | Challenge | Routine | `challengeId` | ✅ |
-| `challenge.started` | Challenge | Routine · Notification · Chat | `challengeId` | 🟡 발행만 |
+| ~~`challenge.created`~~ | ~~Challenge~~ | ~~Routine~~ | — | ⛔ **폐지** (ADR-0044) |
+| `challenge.started` | Challenge | Routine · Notification · Chat | `challengeId` | 🟡 발행만 · **정의 필드 추가 예정** 🆕 |
 | `challenge.ended` | Challenge | Routine · Notification · Chat | `challengeId` | 🟡 발행만 |
 | `challenge.member.joined` | Challenge | **Challenge**(랭킹) · Chat · Notification · **Routine** 🆕 | `challengeId` | 🟡 부분 |
 | `challenge.member.left` | Challenge | Chat · **Routine** 🆕 · **Challenge**(랭킹 제외) 🆕 | `challengeId` | 🟡 부분 |
@@ -141,12 +140,11 @@ sequenceDiagram
   C->>R: gRPC ListCategories ✅
   R-->>C: 카테고리 코드 목록
   Note over C: 트랜잭션 — challenges INSERT + Outbox
-  C-->>R: challenge.created ✅
-  Note over R: 챌린지 루틴 템플릿 생성<br/>(challenge_id 연결, 수정 불가)
+  Note over C: 루틴 정의도 challenges에 저장 (ADR-0044)<br/>챌린지 템플릿을 만들지 않는다
 
   Note over C: 매일 00:00 KST 스케줄러 (ShedLock)
-  C-->>R: challenge.started 🟡
-  Note over R: 멤버별 routines 인스턴스 생성<br/>+ 템플릿 정의 복사 (ADR-0040)
+  C-->>R: challenge.started(루틴 정의 포함) ⬜🆕
+  Note over R: 멤버별 routines 인스턴스 생성<br/>페이로드 정의를 복사 · routine_template_id = NULL
 
   actor M as 멤버
   M->>R: POST /routines/{id}/executions/{date}/complete

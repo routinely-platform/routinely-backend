@@ -1,7 +1,18 @@
 # ADR-0037: routine_templates FK 방향 결정 (challenge_id in routine_templates)
 
-- **Status**: Accepted
+- **Status**: ⛔ Superseded by ADR-0044 (2026-08-24)
 - **Date**: 2026-05-19
+
+---
+
+> ⛔ **Superseded by [ADR-0044](adr-0044-challenge-routine-definition-ownership.md)** (2026-08-24)
+>
+> **`routine_templates.challenge_id` 컬럼과 `uq_rt_challenge_id` 제약을 제거한다.**
+> 챌린지 루틴 정의를 challenge-service가 소유하게 되어 챌린지 템플릿이 존재하지 않는다.
+> `routine_templates`는 **사용자가 저장한 틀 전용** 테이블이 된다.
+>
+> 이 ADR이 검토한 "FK를 어느 쪽에 두나"는 **두 종류의 템플릿이 한 테이블에 공존한다**는 전제 위에 있었다.
+> 그 전제가 사라지면서 질문 자체가 없어졌다.
 
 ---
 

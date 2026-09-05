@@ -92,6 +92,31 @@ class CreateChallengeRequestTest {
     }
 
     @Test
+    @DisplayName("비공개챌린지이면_검증에실패한다")
+    void validate_whenPrivateChallenge_fails() {
+        CreateChallengeRequest request = new CreateChallengeRequest(
+                "30일 러닝 챌린지",
+                "매일 달리기",
+                false,
+                10,
+                "EXERCISE",
+                LocalDate.now().plusDays(1),
+                LocalDate.now().plusDays(30),
+                "아침 러닝 30분",
+                "DAILY",
+                null
+        );
+
+        Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
+
+        assertThat(violations)
+                .anySatisfy(violation -> {
+                    assertThat(violation.getPropertyPath()).hasToString("publicChallenge");
+                    assertThat(violation.getMessage()).isEqualTo("MVP에서는 공개 챌린지만 만들 수 있습니다.");
+                });
+    }
+
+    @Test
     @DisplayName("최대참여인원이1이면_검증에실패한다")
     void validate_whenMaxMembersIsOne_fails() {
         CreateChallengeRequest request = new CreateChallengeRequest(
@@ -113,6 +138,52 @@ class CreateChallengeRequestTest {
                 .anySatisfy(violation -> {
                     assertThat(violation.getPropertyPath()).hasToString("maxMembers");
                     assertThat(violation.getMessage()).isEqualTo("최대 참여 인원은 2명 이상이어야 합니다.");
+                });
+    }
+
+    @Test
+    @DisplayName("최대참여인원이20명이면_검증에성공한다")
+    void validate_whenMaxMembersIsTwenty_succeeds() {
+        CreateChallengeRequest request = new CreateChallengeRequest(
+                "30일 러닝 챌린지",
+                "매일 달리기",
+                true,
+                20,
+                "EXERCISE",
+                LocalDate.now().plusDays(1),
+                LocalDate.now().plusDays(30),
+                "아침 러닝 30분",
+                "DAILY",
+                null
+        );
+
+        Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
+
+        assertThat(violations).isEmpty();
+    }
+
+    @Test
+    @DisplayName("최대참여인원이21명이면_검증에실패한다")
+    void validate_whenMaxMembersExceedsTwenty_fails() {
+        CreateChallengeRequest request = new CreateChallengeRequest(
+                "30일 러닝 챌린지",
+                "매일 달리기",
+                true,
+                21,
+                "EXERCISE",
+                LocalDate.now().plusDays(1),
+                LocalDate.now().plusDays(30),
+                "아침 러닝 30분",
+                "DAILY",
+                null
+        );
+
+        Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
+
+        assertThat(violations)
+                .anySatisfy(violation -> {
+                    assertThat(violation.getPropertyPath()).hasToString("maxMembers");
+                    assertThat(violation.getMessage()).isEqualTo("최대 참여 인원은 20명 이하여야 합니다.");
                 });
     }
 
@@ -187,6 +258,54 @@ class CreateChallengeRequestTest {
 
         assertThat(violations)
                 .anySatisfy(violation -> assertThat(violation.getMessage()).isEqualTo("종료일은 시작일보다 빠를 수 없습니다."));
+    }
+
+    @Test
+    @DisplayName("기간이100일이면_검증에성공한다")
+    void validate_whenPeriodIsOneHundredDays_succeeds() {
+        LocalDate startedAt = LocalDate.now().plusDays(1);
+        CreateChallengeRequest request = new CreateChallengeRequest(
+                "100일 챌린지",
+                "매일 달리기",
+                true,
+                10,
+                "EXERCISE",
+                startedAt,
+                startedAt.plusDays(99),  // 시작일 포함 100일
+                "아침 러닝 30분",
+                "DAILY",
+                null
+        );
+
+        Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
+
+        assertThat(violations).isEmpty();
+    }
+
+    @Test
+    @DisplayName("기간이101일이면_검증에실패한다")
+    void validate_whenPeriodExceedsOneHundredDays_fails() {
+        LocalDate startedAt = LocalDate.now().plusDays(1);
+        CreateChallengeRequest request = new CreateChallengeRequest(
+                "101일 챌린지",
+                "매일 달리기",
+                true,
+                10,
+                "EXERCISE",
+                startedAt,
+                startedAt.plusDays(100),  // 시작일 포함 101일
+                "아침 러닝 30분",
+                "DAILY",
+                null
+        );
+
+        Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
+
+        assertThat(violations)
+                .anySatisfy(violation -> {
+                    assertThat(violation.getPropertyPath()).hasToString("periodWithinLimit");
+                    assertThat(violation.getMessage()).isEqualTo("챌린지 기간은 100일 이하여야 합니다.");
+                });
     }
 
     @Test
