@@ -39,7 +39,7 @@
 
 | 토픽 | Publisher | Subscriber(s) | Partition Key |
 |------|-----------|---------------|---------------|
-| `routine.execution.completed` | RoutineService | ChallengeService, NotificationService(용도 미정 — `policies.md` §8) | `userId` |
+| `routine.execution.completed` | RoutineService | ChallengeService | `userId` |
 | `routine.execution.cancelled` 🆕 | RoutineService | ChallengeService | `userId` |
 | `routine.notification.scheduled` | RoutineService | NotificationService | `userId` |
 | ~~`challenge.created`~~ | ~~ChallengeService~~ | ~~RoutineService~~ | ⛔ 폐지 (ADR-0044) |
@@ -63,7 +63,7 @@
 |------|------|
 | Publisher | RoutineService |
 | Partition Key | `userId` |
-| Consumer Group | `challenge-service.ranking.routine.execution.completed` / `notification-service.routine.execution.completed` |
+| Consumer Group | `challenge-service.ranking.routine.execution.completed` |
 
 **Payload**
 
@@ -92,9 +92,9 @@
 - **ChallengeService** (`challenge-service.ranking.routine.execution.completed`): `challenge_member_summary` UPSERT → Redis ZSET(`ranking:{challengeId}`) 동기화 (ADR-0028). 점수는 **누적 인정 횟수** — 페이로드 계약 변경은 #61(S33)
 
 > **RoutineService는 이 토픽을 구독하지 않는다.** 달성률·스트릭은 저장하지 않고 조회할 때 계산한다(ADR-0043) — `routine_daily_summary` 갱신은 폐기됐다
-- **NotificationService** (`notification-service.routine.execution.completed`): **용도 미정** — 빈도형 목표 달성·마감 알림 판정에 완료 상태가 필요한데 방식이 정해지지 않았다(`policies.md` §8 🟡). 구독 자체가 없어질 수 있다
-
-> 전에 적혀 있던 "스트릭 달성 · 루틴 완료 후속 알림"은 **알림 유형 3종에 없다**(`policies.md` §8, 2026-09-13 정정)
+> **NotificationService는 구독하지 않는다 (ADR-0045).** "이번 기간 목표를 채웠나 · 오늘 안 한 의무 루틴이 있나"는
+> **발송 직전에 routine-service gRPC `CheckNotificationDue`로 묻는다** — 완료 상태를 알림 쪽에 복제하지 않는다.
+> 전에 적혀 있던 "스트릭 달성 · 루틴 완료 후속 알림"은 알림 유형 3종에 없다(`policies.md` §8)
 
 ---
 
