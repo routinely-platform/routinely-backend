@@ -1,7 +1,7 @@
 # ADR-0042: 챌린지 멤버십 생애주기 — 리더 승계, 빈 챌린지 삭제, 탈퇴 멤버 기록
 
 - **Status**: Accepted
-- **Date**: 2026-08-23
+- **Date**: 2026-08-23 (2026-09-13 개정 — `challenge.deleted` 철회. ADR-0044로 정리할 챌린지 템플릿이 사라졌다)
 - **Author**: Routinely Project
 
 ---
@@ -57,11 +57,14 @@ ChallengeMemberLeftEvent(eventId, occurredAt, challengeId, userId, reason,
 
 ```
 DELETE challenge_member_summary  →  challenge_members  →  challenges   (한 트랜잭션)
-+ challenge.deleted 이벤트 발행 (Outbox)
 ```
 
-`challenge.deleted` 구독자는 RoutineService이며, 해당 챌린지의 루틴 템플릿을 정리한다.
-파티션 키는 `challengeId`로 `challenge.created`와 동일하게 둔다.
+**다른 서비스에 알리지 않는다.**
+
+> **2026-09-13 개정** — 원래는 `challenge.deleted`를 Outbox로 발행해 routine-service가 챌린지 템플릿을
+> 정리하게 했다. [ADR-0044](adr-0044-challenge-routine-definition-ownership.md)가 챌린지 템플릿 자체를
+> 없애 **유일한 소비자가 사라졌고**, `WAITING` 챌린지는 루틴 인스턴스·채팅방·피드 카드가 모두
+> `challenge.started` 이후에 생기므로 **다른 소비자도 없다.** 받을 서비스가 없는 이벤트는 만들지 않는다.
 
 ### 2.5 탈퇴·강퇴 멤버의 기록
 
@@ -128,9 +131,8 @@ notification-service가 껍데기라 승계 알림 자체는 지금 만들 수 �
 않는다 — 목록은 `challenge_id IS NULL`만 반환하고 상세·수정·삭제는 모두 403이며, 인스턴스도 없다
 (`challenge.started`가 오지 않았으므로).
 
-그래도 고아를 방치하지 않기 위해 `challenge.deleted`로 정리한다. **`challenge.created`와 파티션 키가
-같아 순서가 보장되므로**, 생성 이벤트가 아직 소비되지 않은 상태에서 삭제 이벤트가 먼저 처리되어
-템플릿이 되살아나는 경합은 발생하지 않는다.
+> **2026-09-13 개정** — 여기서는 원래 "그래도 고아를 방치하지 않기 위해 `challenge.deleted`로 정리한다"고 했다.
+> ADR-0044가 챌린지 템플릿을 없애 **정리할 고아 자체가 생기지 않으므로** 이 이벤트를 철회한다(§2.4).
 
 `ACTIVE`를 하드 삭제하지 않는 이유는 명확하다 — 시작했으면 멤버별 루틴 인스턴스가 생성됐고 인증 기록이
 쌓였을 수 있다. 다른 서비스에 흩어진 데이터를 동기적으로 정리할 수 없다.
@@ -168,8 +170,7 @@ notification-service가 껍데기라 승계 알림 자체는 지금 만들 수 �
 - 지목을 선택으로 둬 방장의 의사를 반영하면서도 탈퇴 교착이 생기지 않는다.
 
 ### 부정적
-- **하드 삭제가 서비스 경계를 넘는 정리를 동반한다.** `challenge.deleted` 소비자가 유실되면 고아 템플릿이
-  남는다(정합성은 안 깨지지만 데이터가 지저분해진다).
+- ~~하드 삭제가 서비스 경계를 넘는 정리를 동반한다.~~ **2026-09-13 해소** — ADR-0044 이후 삭제가 challenge-service 안에서 끝난다.
 - 탈퇴 멤버에 "나간 멤버" 배지를 붙이려면 **피드·채팅 조회 시 멤버십 상태를 함께 봐야 한다.**
 - 승계 거부 수단이 없어, 원치 않는 사용자가 방장이 되는 경우가 생긴다. 본인이 탈퇴하면 그다음 사람에게
   다시 넘어가므로 교착은 없다.
@@ -182,8 +183,8 @@ notification-service가 껍데기라 승계 알림 자체는 지금 만들 수 �
 | `POST /challenges/{id}/members/me/leave` | `newLeaderUserId` 선택 파라미터 수용 + 활성 멤버 검증 |
 | `ChallengeService.leaveChallenge()` | `WAITING` + 혼자면 하드 삭제 분기 추가 |
 | `ChallengeMemberLeftEvent` | `newLeaderUserId` 필드 추가 |
-| `event-spec.md` | `challenge.member.left` 페이로드 갱신 + **`challenge.deleted` 토픽 신설** |
-| routine-service | `challenge.deleted` 소비자 추가 (챌린지 템플릿 정리) |
+| `event-spec.md` | `challenge.member.left` 페이로드 갱신 (~~`challenge.deleted` 토픽 신설~~ — 2026-09-13 철회) |
+| ~~routine-service~~ | ~~`challenge.deleted` 소비자 추가~~ — 2026-09-13 철회 (ADR-0044) |
 | challenge-service | `challenge.member.left` 처리에 Redis ZSET `ZREM` 추가 |
 | **routine-service** | **`challenge.member.left` 소비자 신설** — 챌린지 루틴 비활성화 (§2.6) |
 | api-spec | 탈퇴 API에 승계·삭제 규칙 명시 |
