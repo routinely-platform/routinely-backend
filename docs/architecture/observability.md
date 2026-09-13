@@ -148,7 +148,7 @@ management:
 | challenge-service | gRPC 응답시간, 챌린지 생성 수 |
 | routine-service | 루틴 완료 수, Outbox Worker 처리 건수 |
 | chat-service | WebSocket 활성 연결 수, 메시지 처리량 |
-| notification-service | SSE 활성 연결 수, PGMQ 처리 건수 |
+| notification-service | SSE 활성 연결 수, 예약 발송 처리 건수, 판정 호출 지연 |
 | 공통 | JVM 힙 사용률, DB 커넥션 풀, Kafka consumer lag |
 
 ---

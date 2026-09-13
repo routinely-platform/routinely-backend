@@ -70,7 +70,7 @@ Swagger UI, DEBUG 로그 등 개발 전용 기능은 `local` 계열에서만 활
 | Service Discovery | Eureka | Config Server 미사용 (ADR-0020) |
 | gRPC | grpc-spring-boot-starter | proto는 `libs/proto`에서 중앙 관리 |
 | Messaging | Kafka | **Outbox 패턴으로만 발행** (ADR-0012) |
-| Job Queue | PGMQ | PostgreSQL 확장, 알림 예약 전용 (ADR-0009) |
+| Job Queue | 예약 테이블 폴링 | 확장 없음. 알림 예약 전용 (ADR-0009 · **ADR-0045** — PGMQ는 쓰지 않는다) |
 | File Storage | AWS S3 | `FileStorage` 인터페이스로 추상화 (`libs/common-storage`) |
 | Resilience | Resilience4j | timeout / retry / circuit breaker |
 | 관측 | Micrometer Tracing + Zipkin, Alloy → Loki, Prometheus | traceId/spanId 자동 주입 |
@@ -88,16 +88,16 @@ Swagger UI, DEBUG 로그 등 개발 전용 기능은 `local` 계열에서만 활
 | `routine-service` | 루틴 생성 / 수행 기록 / 피드 / 통계 | 8082 | 9082 | `routinely_routine` |
 | `challenge-service` | 챌린지 생성 / 참여 / 랭킹 | 8083 | 9083 | `routinely_challenge` |
 | `chat-service` | WebSocket·STOMP 채팅 | 8084 | 9084 | `routinely_chat` |
-| `notification-service` | 알림 스케줄러·워커 (PGMQ) | 8085 | 9085 | `routinely_notification` |
+| `notification-service` | 알림 스케줄러·워커 (테이블 폴링) | 8085 | 9085 | `routinely_notification` |
 
 > gRPC 포트 = HTTP 포트 + 1000. DB는 서비스별 독립 PostgreSQL — **서비스 간 직접 DB 접근 금지.**
 
-인프라: Redis(Rate Limiting·ZSET 랭킹·캐시) / Kafka(도메인 이벤트) / PGMQ(서비스 내부 Job 큐) /
+인프라: Redis(Rate Limiting·ZSET 랭킹·캐시) / Kafka(도메인 이벤트) / 예약 테이블 폴링(서비스 내부 Job) /
 Zipkin·Loki·Prometheus·Grafana(추적·로그·메트릭)
 
 ### 통신 전략
 
-**원칙: Command → gRPC / Event → Kafka / Job → PGMQ / Client 요청 → HTTP**
+**원칙: Command → gRPC / Event → Kafka / Job → DB 폴링(ADR-0045) / Client 요청 → HTTP**
 
 | 구간 | 방식 | 사용 시점 |
 |---|---|---|
@@ -106,7 +106,7 @@ Zipkin·Loki·Prometheus·Grafana(추적·로그·메트릭)
 | 실시간 알림 | SSE | 서버 → 클라이언트 단방향 |
 | 서비스 간 동기 | gRPC | 즉시 응답이 필요한 Command |
 | 서비스 간 비동기 | Kafka + Outbox | 도메인 이벤트 |
-| 서비스 내부 비동기 | PGMQ | 알림 예약 Job |
+| 서비스 내부 비동기 | 예약 테이블 폴링 | 알림 예약 Job (ADR-0045) |
 | Gateway 홈 집계 | WebClient + `Mono.zip()` | `/api/v1/home` 병렬 집계 |
 
 ## 4. 모듈 구조 규칙
@@ -119,12 +119,12 @@ Zipkin·Loki·Prometheus·Grafana(추적·로그·메트릭)
 - `common-observability` / `common-storage` / `proto`
 
 의존 규칙: gateway-service는 JPA가 불필요하므로 `common-jpa`를 넣지 않는다.
-gRPC를 쓰는 서비스(routine·challenge·chat)만 `proto`에 의존한다.
+gRPC를 쓰는 서비스(routine·challenge, 알림 구현 후 notification)만 `proto`에 의존한다. chat은 gRPC를 쓰지 않는다(ADR-0046).
 
 ### 서비스 내부 패키지
 
 `com.routinely.{service}.{layer}` — `domain` / `application` / `infrastructure` / `presentation`.
-새 코드는 이 4계층 중 하나에 넣는다. `infrastructure`는 `persistence` · `kafka` · `grpc` · `pgmq`로,
+새 코드는 이 4계층 중 하나에 넣는다. `infrastructure`는 `persistence` · `kafka` · `grpc` · `scheduler`로,
 `presentation`은 `rest` · `grpc`로 나눈다. 계층 원칙은 `docs/conventions/clean-architecture.md`.
 
 ## 5. 코딩 컨벤션
@@ -283,7 +283,7 @@ Mermaid 관계도로 유지하는 문서가 있으니 **같은 커밋에서 고�
 > 누가 받는지, 어디가 아직 안 이어졌는지를 한 장으로 본다. 갱신 규칙은 §7-2.
 
 **워크스페이스 공유** (`../../docs/`, 워크트리에서는 두 단계 위) — `architecture.md` 전체 아키텍처 ·
-`services/` 서비스별 상세 · `patterns/outbox-inbox.md` · `patterns/pgmq-chaining.md`
+`services/` 서비스별 상세 · `patterns/outbox-inbox.md` · `patterns/notification-polling.md`
 
 > **`docs/product/`** — 제품 규약. `policies.md`가 "무엇을 할 수 있고 없는가"의 **단일 출처**다.
 > `overview.md`(용어·핵심 흐름) · `screens.md`(화면 명세)와 함께 본다. 갱신 규칙은 §7-1.

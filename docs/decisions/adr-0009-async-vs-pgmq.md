@@ -1,7 +1,10 @@
 # ADR-0009: @Async 기반 비동기 vs PGMQ 기반 비동기 처리 전략
 
 ## Status
-Accepted
+Accepted (2026-09-13 개정 — 구현 수단을 **테이블 폴링**으로 좁힌다, [ADR-0045](adr-0045-notification-scheduling-table-polling.md))
+
+> **개정 메모**: "`@Async`가 아니라 내구성 있는 작업 큐를 쓴다"는 이 ADR의 결론은 유지한다.
+> 그 큐를 **PGMQ가 아니라 PostgreSQL 테이블 폴링**으로 구현한다 — 재예약 결함과 확장 설치 부담 때문이다. 아래 PGMQ 설명은 검토 기록으로 남긴다.
 
 ---
 

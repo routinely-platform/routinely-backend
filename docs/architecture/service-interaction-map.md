@@ -50,7 +50,6 @@ graph LR
   C -- "challenge.member.left ⬜" --> H
   C -- "challenge.member.left ⬜🆕" --> N
   R -- "routine.execution.completed 🟡" --> C
-  R -- "routine.execution.completed 🟡" --> N
   R -- "routine.execution.cancelled ⬜🆕" --> C
   R -- "routine.notification.scheduled ⬜" --> N
   H -- "chat.message.created ⬜" --> H
@@ -80,7 +79,7 @@ graph LR
 | `challenge.member.joined` | Challenge | **Challenge**(랭킹) · 🔵 v2: Routine · Chat (#118) | `challengeId` | 🟡 부분 |
 | `challenge.member.left` | Challenge | Chat · **Routine** 🆕 · **Challenge**(랭킹 제외) 🆕 · **Notification**(방장 승계) 🆕 | `challengeId` | 🟡 부분 |
 | ~~`challenge.deleted`~~ | ~~Challenge~~ | ~~Routine~~ | — | ⛔ **철회** (ADR-0042 개정 · ADR-0044) |
-| `routine.execution.completed` | Routine | Challenge · Notification(용도 미정 — `policies.md` §8) | `userId` | 🟡 소비자만 |
+| `routine.execution.completed` | Routine | Challenge | `userId` | 🟡 소비자만 |
 | **`routine.execution.cancelled`** 🆕 | Routine | Challenge | `userId` | ⬜ |
 | `routine.notification.scheduled` | Routine | Notification | `userId` | ⬜ |
 | `chat.message.created` | Chat | Chat (전 인스턴스) | `roomId` | ⬜ |
@@ -98,6 +97,7 @@ graph LR
 | 🔧 | `challenge.member.joined` **구독자** | **Routine 추가**(v2 — `ACTIVE` 재참여 시 루틴 인스턴스 복원) |
 | 🔧 | `challenge.member.joined` **구독자** | **Notification 제거** — 참여 알림은 없다(`policies.md` §8). **Chat은 v2로** — MVP에서는 방이 생기기 전에만 참여가 일어난다 (2026-09-13) |
 | 🔧 | `challenge.member.left` **구독자** | **Notification 추가** — `newLeaderUserId`가 있으면 새 방장에게 `CHALLENGE_EVENT` (2026-09-13) |
+| 🔧 | `routine.execution.completed` **구독자** | **Notification 제거** — 보낼지는 발송 직전 gRPC `CheckNotificationDue`로 묻는다 (ADR-0045) |
 
 ---
 
@@ -108,11 +108,13 @@ graph LR
   C["challenge-service<br/>:9083"]
   R["routine-service<br/>:9082"]
   U["user-service<br/>:9081"]
+  N["notification-service<br/>:9085"]
 
   C -->|"ListCategories ✅"| R
   R -->|"CheckMembership 🟡"| C
   R -->|"GetChallengeContext 🟡"| C
   C -->|"사용자 배치조회 ⬜"| U
+  N -->|"CheckNotificationDue ⬜🆕"| R
 ```
 
 | 호출 | 방향 | 용도 | 상태 |
@@ -121,6 +123,7 @@ graph LR
 | `CheckMembership` | Routine → Challenge | 챌린지 루틴 완료 시 멤버십 검증 (#58) | 🟡 서버만 |
 | `GetChallengeContext` | Routine → Challenge | 챌린지 기간·상태 조회 | 🟡 서버만 |
 | 사용자 배치 조회 | Challenge → User | 랭킹·멤버 목록의 닉네임 채우기 (#153) | ⬜ |
+| **`CheckNotificationDue`** 🆕 | Notification → Routine | **발송 직전 판정** — 빈도형 목표 달성 · 마감 대상 여부. 사용자 단위 배치 (ADR-0045, #69) | ⬜ |
 
 > **트랜잭션 안에서 gRPC를 호출하지 않는다.** 검증은 트랜잭션 시작 전에 파사드에서 끝낸다
 > (`tech-story.md` "트랜잭션 경계와 원격 호출 분리" 참고).

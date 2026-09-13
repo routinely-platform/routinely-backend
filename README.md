@@ -17,7 +17,7 @@
 | Security | Spring Security + JWT |
 | Service Discovery | Eureka |
 | Messaging | Apache Kafka (Outbox 패턴) |
-| Job Queue | PGMQ (PostgreSQL 확장) |
+| Job Queue | 예약 테이블 폴링 (ADR-0045) |
 | DB | PostgreSQL × 5 (서비스별 독립) |
 | Cache | Redis |
 | gRPC | grpc-spring-boot-starter |
@@ -52,7 +52,7 @@
 | 실시간 알림 | SSE | 서버 → 클라이언트 단방향 |
 | 서비스 간 동기 | gRPC | 즉시 응답이 필요한 Command |
 | 서비스 간 비동기 | Kafka + Outbox 패턴 | 도메인 이벤트 |
-| 서비스 내부 비동기 | PGMQ | 알림 예약 Job |
+| 서비스 내부 비동기 | 예약 테이블 폴링 | 알림 예약 Job |
 
 ---
 

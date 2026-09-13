@@ -39,7 +39,7 @@
 
 | 토픽 | Publisher | Subscriber(s) | Partition Key |
 |------|-----------|---------------|---------------|
-| `routine.execution.completed` | RoutineService | ChallengeService, NotificationService(용도 미정 — `policies.md` §8) | `userId` |
+| `routine.execution.completed` | RoutineService | ChallengeService | `userId` |
 | `routine.execution.cancelled` 🆕 | RoutineService | ChallengeService | `userId` |
 | `routine.notification.scheduled` | RoutineService | NotificationService | `userId` |
 | ~~`challenge.created`~~ | ~~ChallengeService~~ | ~~RoutineService~~ | ⛔ 폐지 (ADR-0044) |
@@ -63,7 +63,7 @@
 |------|------|
 | Publisher | RoutineService |
 | Partition Key | `userId` |
-| Consumer Group | `challenge-service.ranking.routine.execution.completed` / `notification-service.routine.execution.completed` |
+| Consumer Group | `challenge-service.ranking.routine.execution.completed` |
 
 **Payload**
 
@@ -92,47 +92,69 @@
 - **ChallengeService** (`challenge-service.ranking.routine.execution.completed`): `challenge_member_summary` UPSERT → Redis ZSET(`ranking:{challengeId}`) 동기화 (ADR-0028). 점수는 **누적 인정 횟수** — 페이로드 계약 변경은 #61(S33)
 
 > **RoutineService는 이 토픽을 구독하지 않는다.** 달성률·스트릭은 저장하지 않고 조회할 때 계산한다(ADR-0043) — `routine_daily_summary` 갱신은 폐기됐다
-- **NotificationService** (`notification-service.routine.execution.completed`): **용도 미정** — 빈도형 목표 달성·마감 알림 판정에 완료 상태가 필요한데 방식이 정해지지 않았다(`policies.md` §8 🟡). 구독 자체가 없어질 수 있다
-
-> 전에 적혀 있던 "스트릭 달성 · 루틴 완료 후속 알림"은 **알림 유형 3종에 없다**(`policies.md` §8, 2026-09-13 정정)
+> **NotificationService는 구독하지 않는다 (ADR-0045).** "이번 기간 목표를 채웠나 · 오늘 안 한 의무 루틴이 있나"는
+> **발송 직전에 routine-service gRPC `CheckNotificationDue`로 묻는다** — 완료 상태를 알림 쪽에 복제하지 않는다.
+> 전에 적혀 있던 "스트릭 달성 · 루틴 완료 후속 알림"은 알림 유형 3종에 없다(`policies.md` §8)
 
 ---
 
 ### 2. `routine.notification.scheduled`
 
-루틴이 생성되거나 수정되어 다음 알림 예약이 필요할 때 발행한다.
+루틴의 **알림 일정이 바뀔 때마다** 그 루틴의 최신 스냅샷을 발행한다. notification-service는 이 스냅샷으로
+**다음 발송 시각을 스스로 계산**하고, **보낼지는 발송 직전에 routine-service에 묻는다**(ADR-0045).
 
 | 항목 | 내용 |
 |------|------|
-| Publisher | RoutineService |
+| Publisher | RoutineService (Outbox) |
 | Partition Key | `userId` |
 | Consumer Group | `notification-service.routine.notification.scheduled` |
+
+**발행 시점** — 루틴 시작(개인 · 챌린지 #157) · 선호 시각/요일 수정 · 정의 수정 · 중단 · 챌린지 탈퇴 비활성(#158)
 
 **Payload**
 
 ```json
 {
   "eventId": "550e8400-e29b-41d4-a716-446655440001",
-  "occurredAt": "2025-02-15T08:00:00Z",
+  "occurredAt": "2026-09-13T08:00:00Z",
   "userId": 1,
-  "routineTemplateId": 10,
-  "routineName": "아침 러닝",
-  "nextSendAt": "2025-02-16T06:55:00Z",
-  "notificationType": "ROUTINE_START"
+  "routineId": 42,
+  "title": "아침 러닝",
+  "active": true,
+  "scheduleType": "WEEKLY_COUNT",
+  "daysOfWeek": null,
+  "targetCount": 3,
+  "preferredTime": "07:00",
+  "preferredDays": ["MON", "WED", "FRI"],
+  "startedAt": "2026-09-01",
+  "endedAt": null
 }
 ```
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|:----:|------|
-| `userId` | long | ✅ | 알림 수신 대상 사용자 ID |
-| `routineTemplateId` | long | ✅ | 루틴 템플릿 ID |
-| `routineName` | string | ✅ | 알림에 표시될 루틴 이름 |
-| `nextSendAt` | string (ISO 8601) | ✅ | 다음 알림 발송 예정 시각 |
-| `notificationType` | string | ✅ | `ROUTINE_START` |
+| `userId` | long | ✅ | 알림 수신 대상 |
+| `routineId` | long | ✅ | **루틴 인스턴스 ID** — 템플릿 ID가 아니다(ADR-0040) |
+| `title` | string | ✅ | 알림에 표시할 루틴 제목 |
+| `active` | boolean | ✅ | `false`면 이 루틴의 예약을 지운다 |
+| `scheduleType` | string | ✅ | `DAILY` · `SPECIFIC_DAYS` · `WEEKLY_COUNT` · `MONTHLY_COUNT` |
+| `daysOfWeek` | string[] | ❌ | `SPECIFIC_DAYS`만 |
+| `targetCount` | int | ❌ | 빈도형만 |
+| `preferredTime` | string (HH:mm) | ❌ | **정각에 보낸다.** null이면 `ROUTINE_START`를 보내지 않는다 |
+| `preferredDays` | string[] | ❌ | 빈도형 리마인더를 보낼 요일 — 없으면 보내지 않는다 |
+| `startedAt` | string (yyyy-MM-dd) | ✅ | |
+| `endedAt` | string (yyyy-MM-dd) | ❌ | null = 무기한(ADR-0041) |
 
 **소비자 처리**
 
-- **NotificationService**: `NOTIFICATION_SCHEDULES` upsert(PENDING) → PGMQ enqueue(vt=nextSendAt)
+- **NotificationService**: 스냅샷을 저장하고 `notification_schedules`의 **다음 1건**을 UPSERT한다
+  - `ROUTINE_START` — `preferredTime` 정각. 지정형은 수행 요일, 빈도형은 `preferredDays`에만.
+    `preferredTime`이 null이거나 `active = false` · 기간 종료면 **지운다**
+  - `DEADLINE` — 사용자에게 활성 루틴이 하나라도 있으면 매일 21:00 1건 유지
+  - 늦게 온 옛 스냅샷(`occurredAt`이 저장된 것보다 이전)은 버린다
+- **보낼지는 발송 직전에** routine-service gRPC `CheckNotificationDue`로 묻는다 — 이 이벤트에는 완료 상태가 없다
+
+> 이전 설계(PGMQ enqueue · `nextSendAt` 하나 · `routineTemplateId` · 5분 전 06:55)는 **ADR-0045로 대체**됐다(2026-09-13).
 - Next-One Chaining 원칙에 따라 이미 PENDING 레코드가 있으면 upsert로 갱신 (ADR-0017)
 
 ---
