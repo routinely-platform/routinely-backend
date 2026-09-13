@@ -4,7 +4,8 @@
 
 ## 시스템 아키텍처 다이어그램
 
-![Routinely System Architecture](./system-architecture.svg)
+전체 구성도는 **[README — 시스템 아키텍처](../../README.md#시스템-아키텍처)** 에 있다(Mermaid, 한 곳에만 둔다).
+이벤트 · gRPC 관계는 [`service-interaction-map.md`](./service-interaction-map.md).
 
 ---
 

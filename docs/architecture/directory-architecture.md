@@ -22,8 +22,7 @@ routinely-backend/
 │   │   ├── tech-stack.md             # 기술 스택 및 아키텍처 설계
 │   │   ├── observability.md          # Observability 전략 (Prometheus / Loki / Zipkin)
 │   │   ├── grpc-guide.md             # gRPC 구현 가이드
-│   │   ├── routinely-architecture.html  # 시스템 아키텍처 다이어그램 (HTML)
-│   │   └── system-architecture.svg   # 시스템 아키텍처 다이어그램 (SVG)
+│   │   └── service-interaction-map.md  # 이벤트 · gRPC 관계도 (Mermaid) — 전체 구성도는 README
 │   ├── db/
 │   │   ├── user-service.sql          # user-service DDL 참조
 │   │   ├── routine-service.sql       # routine-service DDL 참조
