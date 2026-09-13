@@ -117,6 +117,10 @@ PGMQ는 **예약 표와 큐** 두 곳에 상태가 있어 둘을 맞추는 코�
 **Inbox 스케줄러와 같이 ShedLock으로 한 대만 돈다**(ADR-0033). Outbox 폴러(`ChallengeOutboxPoller`)는
 `FOR UPDATE SKIP LOCKED`로 여러 대가 나눠 가지는데, 그 선례를 따르지 않는 이유가 있다.
 
+> **이 결정은 알림 발송 스케줄러에만 해당한다.** 기존 스케줄러는 그대로 둔다 —
+> `ChallengeOutboxPoller`는 SKIP LOCKED, Inbox 스케줄러와 챌린지 상태 전이 스케줄러는 ShedLock.
+> #61의 `RoutineOutboxPoller`도 Outbox 선례대로 SKIP LOCKED를 권고한다. 처리 도중 원격 호출이 끼느냐가 갈림길이다.
+
 **처리 도중에 원격 호출이 낀다.** SKIP LOCKED는 트랜잭션 안에서 행을 잠근 채 처리하고 커밋하며 푼다. 여기서는 그 사이에
 routine-service 판정(gRPC)과 SSE 발송이 들어가 **잠금과 DB 커넥션을 원격 호출 시간만큼 쥔다** —
 "트랜잭션 안에서 gRPC를 호출하지 않는다"는 규칙에 걸린다(`service-interaction-map.md` §3).
