@@ -39,13 +39,14 @@
 
 | 토픽 | Publisher | Subscriber(s) | Partition Key |
 |------|-----------|---------------|---------------|
-| `routine.execution.completed` | RoutineService | RoutineService, ChallengeService, NotificationService | `userId` |
+| `routine.execution.completed` | RoutineService | ChallengeService, NotificationService(용도 미정 — `policies.md` §8) | `userId` |
+| `routine.execution.cancelled` 🆕 | RoutineService | ChallengeService | `userId` |
 | `routine.notification.scheduled` | RoutineService | NotificationService | `userId` |
-| `challenge.created` | ChallengeService | RoutineService | `challengeId` |
+| ~~`challenge.created`~~ | ~~ChallengeService~~ | ~~RoutineService~~ | ⛔ 폐지 (ADR-0044) |
 | `challenge.started` | ChallengeService | RoutineService, NotificationService, ChatService | `challengeId` |
-| `challenge.ended` | ChallengeService | RoutineService, NotificationService, ChatService | `challengeId` |
-| `challenge.member.joined` | ChallengeService | ChatService, NotificationService | `challengeId` |
-| `challenge.member.left` | ChallengeService | ChatService | `challengeId` |
+| `challenge.ended` | ChallengeService | NotificationService, ChatService | `challengeId` |
+| `challenge.member.joined` | ChallengeService | ChallengeService(랭킹) · 🔵 v2: RoutineService, ChatService (#118) | `challengeId` |
+| `challenge.member.left` | ChallengeService | RoutineService, ChallengeService(랭킹), ChatService, NotificationService(방장 승계) | `challengeId` |
 | `chat.message.created` | ChatService | ChatService (전 인스턴스) | `roomId` |
 
 ---
@@ -62,7 +63,7 @@
 |------|------|
 | Publisher | RoutineService |
 | Partition Key | `userId` |
-| Consumer Group | `routine-service.routine.execution.completed` / `challenge-service.routine.execution.completed` / `notification-service.routine.execution.completed` |
+| Consumer Group | `challenge-service.ranking.routine.execution.completed` / `notification-service.routine.execution.completed` |
 
 **Payload**
 
@@ -88,9 +89,12 @@
 
 **소비자 처리**
 
-- **RoutineService** (`routine-service.routine.execution.completed`): `routine_daily_summary` UPSERT — 캡 계산(ADR-0027) 후 `accepted_count`, `achievement_rate` 갱신
-- **ChallengeService** (`challenge-service.routine.execution.completed`): `challenge_member_summary` UPSERT → Redis ZSET(`ranking:{challengeId}`) 동기화 (ADR-0028)
-- **NotificationService** (`notification-service.routine.execution.completed`): 스트릭 달성, 루틴 완료 등 후속 알림 판단 및 발송
+- **ChallengeService** (`challenge-service.ranking.routine.execution.completed`): `challenge_member_summary` UPSERT → Redis ZSET(`ranking:{challengeId}`) 동기화 (ADR-0028). 점수는 **누적 인정 횟수** — 페이로드 계약 변경은 #61(S33)
+
+> **RoutineService는 이 토픽을 구독하지 않는다.** 달성률·스트릭은 저장하지 않고 조회할 때 계산한다(ADR-0043) — `routine_daily_summary` 갱신은 폐기됐다
+- **NotificationService** (`notification-service.routine.execution.completed`): **용도 미정** — 빈도형 목표 달성·마감 알림 판정에 완료 상태가 필요한데 방식이 정해지지 않았다(`policies.md` §8 🟡). 구독 자체가 없어질 수 있다
+
+> 전에 적혀 있던 "스트릭 달성 · 루틴 완료 후속 알림"은 **알림 유형 3종에 없다**(`policies.md` §8, 2026-09-13 정정)
 
 ---
 
@@ -134,6 +138,8 @@
 ---
 
 ### 3. `challenge.created`
+
+> ⛔ **폐지 (ADR-0044)** — 챌린지 루틴 정의를 challenge-service가 소유하면서 템플릿을 만들 이유가 사라졌다. 발행·소비 제거는 #167. 아래는 제거 전 기록이다
 
 챌린지가 생성되었을 때 발행한다. routine-service가 소비해 챌린지 연결 루틴 템플릿(`routine_templates`, `challenge_id` UNIQUE)을 생성한다. (ADR-0034, 소비는 #133)
 
@@ -214,9 +220,9 @@
 
 **소비자 처리**
 
-- **RoutineService**: 챌린지 기간 내 `routine_executions` 사전 생성 (DAILY 루틴 한정 — 전체 기간치 일괄 생성)
+- **RoutineService**: 페이로드의 멤버마다 `routines` 인스턴스를 만들고 **루틴 정의를 복사**한다(ADR-0032 · ADR-0040 · ADR-0044, #157). 실행 기록은 만들지 않는다 — 희소 저장(ADR-0038)
 - **NotificationService**: 챌린지 멤버 전원에게 "챌린지가 시작되었습니다" 알림 발송
-- **ChatService**: 챌린지 채팅방에 SYSTEM 메시지 발행 ("챌린지가 시작되었습니다")
+- **ChatService**: **채팅방을 만들고**(챌린지당 1개) 페이로드 멤버로 `chat_room_members`를 채운 뒤 SYSTEM 메시지 발행 ("챌린지가 시작되었습니다"). ⚠️ 방장(`OWNER`)을 정하려면 방장 ID가 필요한데 **지금 페이로드에 없다** — chat-service 착수 시 추가
 
 ---
 
@@ -228,7 +234,7 @@
 |------|------|
 | Publisher | ChallengeService |
 | Partition Key | `challengeId` |
-| Consumer Group | `routine-service.challenge.member.joined` / `chat-service.challenge.member.joined` / `notification-service.challenge.member.joined` |
+| Consumer Group | `challenge-service.ranking.member.joined` · 🔵 v2: `routine-service.challenge.member.joined` / `chat-service.challenge.member.joined` |
 
 **Payload**
 
@@ -253,9 +259,12 @@
 
 **소비자 처리**
 
-- **RoutineService**: `DAILY` 루틴인 경우 챌린지 기간 전체 `routine_executions` PENDING 레코드 일괄 생성
-- **ChatService**: 챌린지 채팅방 멤버 캐시 갱신
-- **NotificationService**: 기존 챌린지 멤버 전원에게 CHALLENGE_EVENT 알림 발송
+- **ChallengeService** (`challenge-service.ranking.member.joined`): 랭킹 행 초기화 (#48)
+- 🔵 **v2 RoutineService**: `ACTIVE` 재참여 시 챌린지 루틴 인스턴스 복원 (#118)
+- 🔵 **v2 ChatService**: `ACTIVE` 참여 시 `chat_room_members` 추가 + SYSTEM 메시지
+
+> **MVP에서 RoutineService·ChatService는 구독하지 않는다.** 참여는 시작 전에만 가능해 루틴 인스턴스도 채팅방도 아직 없다 — 시작 시점 멤버는 `challenge.started` 페이로드로 한꺼번에 들어온다.
+> **NotificationService도 구독하지 않는다.** 멤버 참여 알림은 없다(`policies.md` §8). 실행 기록 사전 생성은 폐기됐다(ADR-0038)
 
 ---
 
@@ -267,7 +276,7 @@
 |------|------|
 | Publisher | ChallengeService |
 | Partition Key | `challengeId` |
-| Consumer Group | `routine-service.challenge.member.left` / `chat-service.challenge.member.left` |
+| Consumer Group | `routine-service.challenge.member.left` / `challenge-service.ranking.member.left` / `chat-service.challenge.member.left` / `notification-service.challenge.member.left` |
 
 **Payload**
 
@@ -289,8 +298,10 @@
 
 **소비자 처리**
 
-- **RoutineService**: 해당 userId의 미완료 PENDING `routine_executions` 처리 (삭제 또는 CANCELLED)
-- **ChatService**: 채팅방 멤버 캐시 무효화
+- **RoutineService**: 그 멤버의 챌린지 루틴을 `is_active = false`로. 실행 기록은 남긴다 — 달력에 그대로 보인다 (#158, ADR-0038)
+- **ChallengeService** (`challenge-service.ranking.member.left`): 랭킹 제외 — ZSET `ZREM`, summary 행은 유지 (#158)
+- **ChatService**: `chat_room_members` 비활성화 + `left_at` · `newLeaderUserId`가 있으면 `OWNER` 승계 · SYSTEM 메시지. **방이 아직 없으면(`WAITING`) 할 일이 없다**
+- **NotificationService**: `newLeaderUserId`가 있으면 **새 방장에게** `CHALLENGE_EVENT`(방장 승계) (`policies.md` §8)
 
 ---
 
@@ -304,7 +315,7 @@
 |------|------|
 | Publisher | ChallengeService (상태 전이 스케줄러) |
 | Partition Key | `challengeId` |
-| Consumer Group | `routine-service.challenge.ended` / `notification-service.challenge.ended` / `chat-service.challenge.ended` |
+| Consumer Group | `notification-service.challenge.ended` / `chat-service.challenge.ended` |
 
 **Payload**
 
@@ -326,9 +337,10 @@
 
 **소비자 처리**
 
-- **RoutineService**: 미수행 `routine_executions` SKIPPED 처리 및 최종 통계 마감
-- **NotificationService**: 챌린지 멤버 전원에게 종료 알림 및 최종 달성률 안내
-- **ChatService**: 챌린지 채팅방에 SYSTEM 메시지 발행 ("챌린지가 종료되었습니다") 및 채팅방 archive 처리
+- **NotificationService**: 챌린지 멤버 전원에게 `CHALLENGE_EVENT` 종료 알림
+- **ChatService**: SYSTEM 메시지 발행 ("챌린지가 종료되었습니다") · 이후 **발송 차단, 조회는 허용** (#162)
+
+> **RoutineService는 구독하지 않는다.** 루틴 기간 = 챌린지 기간이라 종료 다음 날부터 대상이 아니게 된다(ADR-0038) — 마감 처리할 행이 없다(희소 저장). 최종 순위는 랭킹 조회가 곧 요약이다(`policies.md` §4)
 
 ---
 

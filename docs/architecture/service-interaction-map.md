@@ -3,7 +3,7 @@
 > **이 문서는 그림이 본문이다.** REST API는 Swagger가 담당하지만 **이벤트와 gRPC는 코드를 다 열어보기
 > 전에는 전경이 보이지 않는다.** 여기서 "누가 무엇을 발행하고 누가 받는가"를 한 장으로 본다.
 >
-> **최종 갱신**: 2026-08-23 · **기준**: backend `main` + `feat-57-routine-execution` 워크트리
+> **최종 갱신**: 2026-09-13 · **기준**: backend `main` + `feat-57-routine-execution` 워크트리
 >
 > 상세 페이로드는 `docs/requirements/event-spec.md` · `grpc-spec.md`를 본다. 이 문서는 **관계와 상태**만 담는다.
 
@@ -48,6 +48,7 @@ graph LR
   C -- "challenge.member.joined ⬜🆕" --> R
   C -- "challenge.member.left ⬜🆕" --> R
   C -- "challenge.member.left ⬜" --> H
+  C -- "challenge.member.left ⬜🆕" --> N
   R -- "routine.execution.completed 🟡" --> C
   R -- "routine.execution.completed 🟡" --> N
   R -- "routine.execution.cancelled ⬜🆕" --> C
@@ -76,10 +77,10 @@ graph LR
 | ~~`challenge.created`~~ | ~~Challenge~~ | ~~Routine~~ | — | ⛔ **폐지** (ADR-0044) |
 | `challenge.started` | Challenge | Routine · Notification · Chat | `challengeId` | 🟡 발행만 · **정의 필드 추가 예정** 🆕 |
 | `challenge.ended` | Challenge | Routine · Notification · Chat | `challengeId` | 🟡 발행만 |
-| `challenge.member.joined` | Challenge | **Challenge**(랭킹) · Chat · Notification · **Routine** 🆕 | `challengeId` | 🟡 부분 |
-| `challenge.member.left` | Challenge | Chat · **Routine** 🆕 · **Challenge**(랭킹 제외) 🆕 | `challengeId` | 🟡 부분 |
+| `challenge.member.joined` | Challenge | **Challenge**(랭킹) · 🔵 v2: Routine · Chat (#118) | `challengeId` | 🟡 부분 |
+| `challenge.member.left` | Challenge | Chat · **Routine** 🆕 · **Challenge**(랭킹 제외) 🆕 · **Notification**(방장 승계) 🆕 | `challengeId` | 🟡 부분 |
 | ~~`challenge.deleted`~~ | ~~Challenge~~ | ~~Routine~~ | — | ⛔ **철회** (ADR-0042 개정 · ADR-0044) |
-| `routine.execution.completed` | Routine | Challenge · Notification | `userId` | 🟡 소비자만 |
+| `routine.execution.completed` | Routine | Challenge · Notification(용도 미정 — `policies.md` §8) | `userId` | 🟡 소비자만 |
 | **`routine.execution.cancelled`** 🆕 | Routine | Challenge | `userId` | ⬜ |
 | `routine.notification.scheduled` | Routine | Notification | `userId` | ⬜ |
 | `chat.message.created` | Chat | Chat (전 인스턴스) | `roomId` | ⬜ |
@@ -90,11 +91,13 @@ graph LR
 
 | | 무엇 | 왜 |
 |---|---|---|
-| 🆕 | **`routine.execution.cancelled`** | 완료 이벤트만 있어 **랭킹이 오르는 경로만 있고 내려가는 경로가 없었다.** 소비 측은 `execDate` 기준으로 해당 주/달을 **재집계**한다 — 캡(ADR-0027/0043) 때문에 단순 감소는 틀린다 |
+| 🆕 | **`routine.execution.cancelled`** | 완료 이벤트만 있어 **랭킹이 오르는 경로만 있고 내려가는 경로가 없었다.** 캡 때문에 단순 감소는 틀린다 — **재계산은 routine-service가 한다.** 누적 인정 횟수를 싣고 소비 측은 `revision`을 비교해 덮어쓴다(S33 · 2026-09-10) |
 | ⛔ | ~~`challenge.deleted`~~ | **2026-09-13 철회.** 정리할 챌린지 템플릿이 ADR-0044로 사라졌고, `WAITING` 챌린지는 다른 서비스에 남기는 것이 없다 |
 | 🔧 | `challenge.member.left` **페이로드** | `newLeaderUserId` 추가 — 승계당한 사람이 자기가 방장이 된 걸 알 방법이 없었다 |
 | 🔧 | `challenge.member.left` **구독자** | **Routine 추가**(챌린지 루틴 비활성화) · **Challenge 추가**(랭킹 제외 + ZSET `ZREM`) |
 | 🔧 | `challenge.member.joined` **구독자** | **Routine 추가**(v2 — `ACTIVE` 재참여 시 루틴 인스턴스 복원) |
+| 🔧 | `challenge.member.joined` **구독자** | **Notification 제거** — 참여 알림은 없다(`policies.md` §8). **Chat은 v2로** — MVP에서는 방이 생기기 전에만 참여가 일어난다 (2026-09-13) |
+| 🔧 | `challenge.member.left` **구독자** | **Notification 추가** — `newLeaderUserId`가 있으면 새 방장에게 `CHALLENGE_EVENT` (2026-09-13) |
 
 ---
 
