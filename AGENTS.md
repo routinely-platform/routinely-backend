@@ -119,7 +119,7 @@ Zipkin·Loki·Prometheus·Grafana(추적·로그·메트릭)
 - `common-observability` / `common-storage` / `proto`
 
 의존 규칙: gateway-service는 JPA가 불필요하므로 `common-jpa`를 넣지 않는다.
-gRPC를 쓰는 서비스(routine·challenge, 알림 구현 후 notification)만 `proto`에 의존한다. chat은 gRPC를 쓰지 않는다(ADR-0046).
+gRPC를 쓰는 서비스(routine·challenge, 알림 구현 후 notification)만 `proto`에 의존한다. chat은 **멤버 판정에 gRPC를 쓰지 않는다**(ADR-0046) — 발신자 닉네임만 user-service `GetUsers`(#153)를 부른다.
 
 ### 서비스 내부 패키지
 

@@ -41,9 +41,8 @@ graph LR
   C -- "challenge.started(정의 포함) ⬜🆕" --> R
   C -- "challenge.started 🟡" --> N
   C -- "challenge.started 🟡" --> H
-  C -- "challenge.ended 🟡" --> R
-  C -- "challenge.ended 🟡" --> N
-  C -- "challenge.ended 🟡" --> H
+  C -- "challenge.ended ⬜" --> N
+  C -- "challenge.ended ⬜" --> H
   C -- "challenge.member.joined 🟡" --> C
   C -- "challenge.member.joined ⬜🆕" --> R
   C -- "challenge.member.left ⬜🆕" --> R
@@ -75,16 +74,17 @@ graph LR
 |---|---|---|---|:---:|
 | ~~`challenge.created`~~ | ~~Challenge~~ | ~~Routine~~ | — | ⛔ **폐지** (ADR-0044) |
 | `challenge.started` | Challenge | Routine · Notification · Chat | `challengeId` | 🟡 발행만 · **정의 필드 추가 예정** 🆕 |
-| `challenge.ended` | Challenge | Routine · Notification · Chat | `challengeId` | 🟡 발행만 |
+| `challenge.ended` | Challenge | Notification · Chat | `challengeId` | ⬜ **미발행** — 코드는 전이만 한다 · 페이로드에 `members` 추가 🆕 |
 | `challenge.member.joined` | Challenge | **Challenge**(랭킹) · 🔵 v2: Routine · Chat (#118) | `challengeId` | 🟡 부분 |
 | `challenge.member.left` | Challenge | Chat · **Routine** 🆕 · **Challenge**(랭킹 제외) 🆕 · **Notification**(방장 승계) 🆕 | `challengeId` | 🟡 부분 |
 | ~~`challenge.deleted`~~ | ~~Challenge~~ | ~~Routine~~ | — | ⛔ **철회** (ADR-0042 개정 · ADR-0044) |
 | `routine.execution.completed` | Routine | Challenge | `userId` | 🟡 소비자만 |
 | **`routine.execution.cancelled`** 🆕 | Routine | Challenge | `userId` | ⬜ |
 | `routine.notification.scheduled` | Routine | Notification | `userId` | ⬜ |
-| `chat.message.created` | Chat | Chat (전 인스턴스) | `roomId` | ⬜ |
+| `chat.message.created` | Chat | Chat (전 인스턴스 — **인스턴스마다 다른 그룹**) | `roomId` | ⬜ |
 
 > **모든 발행은 Outbox를 거친다**(ADR-0012). 소비는 Inbox에 적재 후 스케줄러가 처리한다(ADR-0014).
+> **예외 — `chat.message.created`** 는 Inbox를 쓰지 않는다. 공유 Inbox가 다른 인스턴스의 수신을 중복으로 막아 브로드캐스트가 깨진다(ADR-0016 보완 · 2026-09-13).
 
 ### 신설·변경이 결정된 것 (2026-08-23)
 
