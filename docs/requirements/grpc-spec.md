@@ -16,8 +16,8 @@
 ## 호출 관계 요약
 
 ```
-ChatService ──────────────→ ChallengeService
-                            (CheckMembership)
+NotificationService ──────→ RoutineService
+                            (CheckNotificationDue — 신설 예정, ADR-0045)
 
 RoutineService ────────────→ ChallengeService
                             (GetChallengeContext)
@@ -28,9 +28,11 @@ ChallengeService ──────────→ RoutineService
 
 | Caller | Server | RPC | 호출 시점 |
 |--------|--------|-----|-----------|
-| ChatService | ChallengeService | `CheckMembership` | 채팅방 입장 또는 메시지 발송 전 멤버 검증 |
+| NotificationService | RoutineService | `CheckNotificationDue` | **알림 발송 직전 판정** — 빈도형 목표 달성 · 마감 대상 여부 (ADR-0045, 신설 예정) |
 | RoutineService | ChallengeService | `GetChallengeContext` | 챌린지 루틴 실행 완료 처리 전 유효성 검증 |
 | ChallengeService | RoutineService | `ListCategories` | 챌린지 생성 시 categoryCode 유효성 검증 (Redis TTL 24h 캐싱) |
+
+> **ChatService는 gRPC를 호출하지 않는다**(2026-09-13, ADR-0046) — 멤버 판정은 이벤트로 동기화한 로컬 `chat_room_members`로 한다.
 
 ---
 
@@ -153,19 +155,16 @@ ChallengeService (챌린지 생성 요청 수신)
 
 ### `CheckMembership`
 
-**호출자**: ChatService
-
-**호출 시점**:
-- 사용자가 챌린지 채팅방에 입장하려 할 때
-- 사용자가 챌린지 채팅방에 메시지를 발송하려 할 때
+**호출자**: ~~ChatService~~ — **2026-09-13 ADR-0046으로 채팅은 호출하지 않는다.**
+현재 호출자는 없다(서버만 존재). 챌린지 루틴 완료 시 멤버십 검증에 쓸지는 **#58**에서 정한다.
 
 **처리 흐름**:
 
 ```
-ChatService (HTTP 요청 수신)
+호출자
     └── ChallengeGrpcService.CheckMembership(challengeId, userId)
         └── is_active_member == true
-            ├── true  → 채팅 처리 계속
+            ├── true  → 처리 계속
             └── false → FORBIDDEN (NOT_CHALLENGE_MEMBER)
 ```
 

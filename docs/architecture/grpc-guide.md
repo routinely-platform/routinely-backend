@@ -11,12 +11,14 @@
 libs/proto              → .proto 정의 + 컴파일된 스텁 (모든 서비스가 참조)
 services/challenge-service  → spring-grpc-server-spring-boot-starter (서버)
 services/routine-service    → spring-grpc-server-spring-boot-starter (서버)
-services/chat-service       → spring-grpc-client-spring-boot-starter (클라이언트)
+services/notification-service → spring-grpc-client-spring-boot-starter (클라이언트 — ADR-0045)
 services/routine-service    → spring-grpc-client-spring-boot-starter (클라이언트)
 ```
 
 gRPC 호출 관계 (ADR-0007):
-- `chat-service` → `challenge-service` : `CheckMembership`
+- `notification-service` → `routine-service` : `CheckNotificationDue` (ADR-0045, 신설 예정)
+- `challenge-service` → `routine-service` : `ListCategories`
+- chat-service는 gRPC를 쓰지 않는다 — 멤버 판정은 로컬 표(ADR-0046). 아래 예제의 `CheckMembership` 클라이언트 코드는 **작성법 예시**로 남긴다
 - `routine-service` → `challenge-service` : `GetChallengeContext`
 
 ---
