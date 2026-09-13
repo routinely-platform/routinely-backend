@@ -153,8 +153,8 @@ routinely-backend/
 │           │   ├── infrastructure/
 │           │   │   ├── persistence/
 │           │   │   ├── kafka/        # 이벤트 Consumer (Inbox)
-│           │   │   ├── pgmq/         # PGMQ Worker (due 기반 발송)
-│           │   │   └── grpc/         # gRPC Server (알림 예약 요청 수신)
+│           │   │   ├── scheduler/    # 예약 테이블 폴링 워커 (ADR-0045)
+│           │   │   └── grpc/         # gRPC 클라이언트 (발송 직전 판정)
 │           │   └── presentation/
 │           └── resources/
 │               └── application.yml
@@ -298,7 +298,7 @@ com.routinely.routine_service
 | routine-service | 기능별 sub-package | messaging/, grpc/ | rest/ |
 | challenge-service | 기능별 sub-package | messaging/, grpc/, redis/ | rest/ |
 | chat-service | 단일 도메인 | messaging/, websocket/ | **websocket/** (rest/ 없음) |
-| notification-service | 단일 도메인 | messaging/, pgmq/, grpc/ | **없음** (스케줄러 기반) |
+| notification-service | 단일 도메인 | messaging/, scheduler/, grpc/ | rest/ (알림 목록·설정·SSE) — 발송은 스케줄러 |
 
 ---
 

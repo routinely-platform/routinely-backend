@@ -108,11 +108,13 @@ graph LR
   C["challenge-service<br/>:9083"]
   R["routine-service<br/>:9082"]
   U["user-service<br/>:9081"]
+  N["notification-service<br/>:9085"]
 
   C -->|"ListCategories ✅"| R
   R -->|"CheckMembership 🟡"| C
   R -->|"GetChallengeContext 🟡"| C
   C -->|"사용자 배치조회 ⬜"| U
+  N -->|"CheckNotificationDue ⬜🆕"| R
 ```
 
 | 호출 | 방향 | 용도 | 상태 |
@@ -121,6 +123,7 @@ graph LR
 | `CheckMembership` | Routine → Challenge | 챌린지 루틴 완료 시 멤버십 검증 (#58) | 🟡 서버만 |
 | `GetChallengeContext` | Routine → Challenge | 챌린지 기간·상태 조회 | 🟡 서버만 |
 | 사용자 배치 조회 | Challenge → User | 랭킹·멤버 목록의 닉네임 채우기 (#153) | ⬜ |
+| **`CheckNotificationDue`** 🆕 | Notification → Routine | **발송 직전 판정** — 빈도형 목표 달성 · 마감 대상 여부. 사용자 단위 배치 (ADR-0045, #69) | ⬜ |
 
 > **트랜잭션 안에서 gRPC를 호출하지 않는다.** 검증은 트랜잭션 시작 전에 파사드에서 끝낸다
 > (`tech-story.md` "트랜잭션 경계와 원격 호출 분리" 참고).

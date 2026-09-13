@@ -315,16 +315,18 @@ presentation/
         └── ChatMessageResponse.java
 ```
 
-### notification-service — presentation 없음
+### notification-service — 발송은 스케줄러가 트리거한다
 
-외부 HTTP 요청을 받지 않는다. 스케줄러와 PGMQ 워커가 트리거 역할을 한다.
+알림 목록·설정 조회와 SSE 연결은 `presentation/rest`가 받는다. **발송은 HTTP가 아니라 폴링 스케줄러가 트리거한다**(ADR-0045).
 
 ```
 infrastructure/
-├── pgmq/
-│   └── NotificationWorker.java    # PGMQ dequeue → 알림 발송
-└── scheduler/
-    └── NotificationScheduler.java # 주기적 due 체크
+├── scheduler/
+│   └── NotificationDispatchScheduler.java        # due 예약 폴링 → 판정 → 발송
+├── grpc/
+│   └── RoutineNotificationClient.java            # CheckNotificationDue (routine-service)
+└── kafka/
+    └── RoutineNotificationScheduledConsumer.java # 루틴 알림 일정 스냅샷 수신
 ```
 
 ---

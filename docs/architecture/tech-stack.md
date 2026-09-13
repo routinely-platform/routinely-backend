@@ -70,7 +70,7 @@
 | 클라이언트 ↔ 서버 | HTTP (REST) |
 | 서비스 ↔ 서비스 동기 요청 | gRPC |
 | 서비스 ↔ 서비스 비동기 이벤트 | Kafka |
-| 서비스 내부 비동기 작업 | PGMQ |
+| 서비스 내부 비동기 작업 | 예약 테이블 폴링 (ADR-0045) |
 
 ---
 
@@ -124,12 +124,15 @@
 |---|---|
 | Command (즉시 응답 필요) | gRPC |
 | Event (도메인 이벤트 전달) | Kafka |
-| Job (내부 비동기 작업) | PGMQ |
+| Job (내부 비동기 작업) | DB 폴링 |
 | Client 요청 | HTTP (REST) |
 
-**PGMQ vs Kafka 선택 기준**
+**DB 작업 큐 vs Kafka 선택 기준**
 
-| 기준 | PGMQ | Kafka |
+> ⚠️ **2026-09-13 — PGMQ는 쓰지 않기로 했다(ADR-0045).** 아래 표의 왼쪽 칸은 **DB 기반 작업 큐 일반**으로 읽는다 —
+> 트랜잭션 결합·운영 단순성은 테이블 폴링이 그대로 가진다.
+
+| 기준 | DB 작업 큐 (테이블 폴링) | Kafka |
 |---|---|---|
 | 최우선 가치 | 정합성 / 신뢰성 | 확장성 / 처리량 |
 | 트랜잭션과 결합 | 매우 좋음 (Postgres 내) | 직접 결합 어려움 (Outbox 필요) |
@@ -140,7 +143,7 @@
 
 **Routinely 적용**
 
-- **PGMQ**: 정합성 이벤트
+- **DB 작업 큐(테이블 폴링)**: 정합성 작업
   - 알림 예약 등록, 내부 후처리 작업
 - **Kafka**: 스트림 이벤트
   - 루틴 완료 이벤트 (`routine.execution.completed`) → RoutineService / ChallengeService / NotificationService
@@ -156,7 +159,7 @@
 
 - `Docker Compose`
   - PostgreSQL / Redis / Kafka
-  - PGMQ는 PostgreSQL 확장으로 별도 컨테이너 불필요
+  - 알림 예약은 테이블 폴링이라 **PostgreSQL 확장도 필요 없다**(ADR-0045)
 
 **배포 로드맵**
 
@@ -214,7 +217,7 @@
 
 - **PENDING은 "다음 1건만" 유지한다**
 - **발송 성공 시 다음 1건을 즉시 예약한다** (Next-One Chaining)
-- **내부 비동기 실행은 PGMQ로 처리한다**
+- **내부 비동기 실행은 예약 테이블 폴링으로 처리한다** (ADR-0045)
 - **이력은 DeliveryLog로 남긴다**
 
 ### 저장 구조
@@ -223,48 +226,36 @@
 |---|---|
 | `NOTIFICATION_SCHEDULES` | 앞으로 보내야 할 알림 1건 저장 (PENDING \| SENT \| FAILED \| CANCELED) |
 | `NOTIFICATION_DELIVERY_LOGS` | 실제 발송 결과 / 응답 이력 |
-| `PGMQ Queue` | due 기반으로 실행할 job 보관 (payload: scheduleId) |
 
-- `recurring_key` = `userId + templateId + type (+timeBucket)` → 같은 루틴/타입의 "다음 1건"을 유일하게 관리
+- 유일성 `(user_id, routine_id, type)` → 같은 루틴·유형의 "다음 1건"을 유일하게 관리 (`DEADLINE`은 사용자당 1건)
 
 ### 동작 흐름
 
-**A. 루틴 생성/수정 시 (첫 예약 생성)**
+**A. 루틴 알림 일정이 바뀔 때 (예약 갱신)**
 
-1. RoutineService에서 루틴 생성 / 수정
-2. 다음 알림 시각 계산 (예: 매일 07:00 루틴 → 다음 sendAt = 가장 가까운 06:55)
-3. NotificationService에 요청 (gRPC)
-4. `NOTIFICATION_SCHEDULES` upsert (PENDING, sendAt)
-5. PGMQ에 `due=sendAt`으로 enqueue
+1. RoutineService에서 루틴 시작 · 선호 시각/요일 수정 · 중단
+2. `routine.notification.scheduled`로 **루틴 알림 일정 스냅샷** 발행 (Outbox)
+3. NotificationService가 스냅샷 저장 → `NOTIFICATION_SCHEDULES`의 **다음 1건 UPSERT**
 
-> 이 단계에서 미래 n일치를 만들지 않고, **다음 1건만** 만든다.
+> 미래 n일치를 만들지 않고, **다음 1건만** 둔다. 알림 시각을 바꾸면 UPDATE 한 줄이다.
 
-**B. 알림 발송 시 (체인으로 다음 1건 생성)**
+**B. 발송 (폴링 → 판정 → 다음 1건)**
 
 ```
-PGMQ Worker
- └─ read(vt=N초) — 메시지를 N초간 invisible 처리
-     └─ status == PENDING 확인 (멱등성 보장)
-         └─ 알림 발송
-             ├─ 성공 시:
-             │    ├─ pgmq.delete(msg_id)
-             │    ├─ schedule → SENT
-             │    └─ PGMQ에 enqueue(vt=nextSendAt)  ← 다음 1건 체인
-             └─ 실패 시:
-                  ├─ 메시지 삭제 안 함
-                  ├─ schedule은 PENDING 유지
-                  ├─ vt 만료 후 메시지 자동 재등장 → 재시도
-                  └─ read_ct > max_retry 초과 시:
-                       ├─ schedule → FAILED
-                       └─ pgmq.archive(msg_id) → DLT
+폴링 워커 (수 초마다 · ShedLock)
+ └─ next_send_at <= now() AND status = PENDING
+     └─ routine-service에 판정 요청 (gRPC CheckNotificationDue, 사용자 단위 배치)
+         ├─ shouldSend = true  → 발송(SSE) · 이력 기록
+         ├─ shouldSend = false → 보내지 않음
+         └─ 스냅샷으로 다음 1건 계산 → next_send_at UPDATE
+     └─ 실패 시: attempt_count++ · next_attempt_at 백오프 → 한도 초과 시 이번 회차 건너뜀
 ```
 
 ### 운영 특징
 
-- 스케줄러 전수 스캔 방식이 아님
-- PGMQ 워커는 due된 job만 꺼내서 처리
-- 폴링 간격: 1~5초 (정확도 / 구현 난이도 밸런스)
-- DAILY_DIGEST도 동일한 체인 방식으로 1건만 PENDING 유지
+- 스케줄러 전수 스캔 방식이 아님 — due된 예약만 꺼낸다
+- 폴링 간격: 수 초 (정확도 / 구현 난이도 밸런스)
+- 알림 유형은 `ROUTINE_START` · `DEADLINE`(21:00) · `CHALLENGE_EVENT` 셋뿐 (`docs/product/policies.md` §8)
 
 ---
 
