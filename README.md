@@ -29,7 +29,54 @@
 
 ## 시스템 아키텍처
 
-![시스템 아키텍처](docs/architecture/system-architecture.svg)
+```mermaid
+flowchart TB
+  subgraph CLIENT["클라이언트"]
+    FE["React SPA<br/>TypeScript · Vite"]
+  end
+
+  subgraph EDGE["진입"]
+    GW["gateway-service :8080<br/>Spring Cloud Gateway · WebFlux<br/>JWT 검증 · Rate Limit · 라우팅 · 홈 집계"]
+    REG["registry-service :8761<br/>Eureka"]
+  end
+
+  subgraph SVC["마이크로서비스 — 서비스마다 자기 DB"]
+    USER["user-service :8081<br/>가입 · 로그인 · 프로필"]
+    ROUTINE["routine-service :8082 · gRPC 9082<br/>루틴 · 인증 · 피드 · 통계"]
+    CHALLENGE["challenge-service :8083 · gRPC 9083<br/>챌린지 · 멤버 · 랭킹"]
+    CHAT["chat-service :8084<br/>챌린지 채팅 · STOMP"]
+    NOTI["notification-service :8085<br/>예약 알림 폴링 · SSE"]
+  end
+
+  subgraph DATA["데이터 · 메시징"]
+    PG[("PostgreSQL 17<br/>서비스별 DB 5개")]
+    REDIS[("Redis 7<br/>Rate Limit · Refresh Token<br/>랭킹 ZSET · 캐시 · ShedLock")]
+    KAFKA{{"Kafka · KRaft<br/>도메인 이벤트 — Outbox 경유"}}
+    S3[("S3<br/>프로필 · 챌린지 · 인증 사진")]
+  end
+
+  FE -->|"HTTP REST · JWT"| GW
+  FE -->|"WebSocket · STOMP"| GW
+  FE -->|"SSE"| GW
+  GW --> USER & ROUTINE & CHALLENGE & CHAT & NOTI
+  GW -.->|"서비스 탐색"| REG
+
+  CHALLENGE -.->|"gRPC ListCategories"| ROUTINE
+  ROUTINE -.->|"gRPC GetChallengeContext"| CHALLENGE
+  NOTI -.->|"gRPC CheckNotificationDue · 예정"| ROUTINE
+
+  ROUTINE <-->|"발행 · 구독"| KAFKA
+  CHALLENGE <-->|"발행 · 구독"| KAFKA
+  CHAT <-->|"발행 · 구독"| KAFKA
+  KAFKA -->|"구독"| NOTI
+```
+
+- **점선은 gRPC(동기), 실선은 HTTP·Kafka(비동기)** 다. 토픽별 발행·구독과 연결 상태는 [`service-interaction-map.md`](docs/architecture/service-interaction-map.md)가 담당한다
+- **통신 원칙** — Command → gRPC · Event → Kafka(Outbox) · Job → DB 폴링 · Client 요청 → HTTP
+- **데이터** — PostgreSQL은 서비스마다 독립 DB, 파일은 S3(로컬은 LocalStack), 관측은 Zipkin · Prometheus · Loki(Alloy) · Grafana
+
+> 이 그림은 **이 README 한 곳에만** 둔다. 서비스 · 포트 · 통신 방식이 바뀌면 여기를 고친다.
+> 2026-04에 그린 SVG · HTML 그림은 포트 · gRPC 관계 · 큐 구현이 낡아 **2026-09-13에 걷어냈다**(필요하면 git 이력에서 볼 수 있다).
 
 ### 서비스 목록
 
