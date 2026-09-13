@@ -48,7 +48,6 @@ graph LR
   C -- "challenge.member.joined ⬜🆕" --> R
   C -- "challenge.member.left ⬜🆕" --> R
   C -- "challenge.member.left ⬜" --> H
-  C -- "challenge.deleted ⬜🆕" --> R
   R -- "routine.execution.completed 🟡" --> C
   R -- "routine.execution.completed 🟡" --> N
   R -- "routine.execution.cancelled ⬜🆕" --> C
@@ -79,7 +78,7 @@ graph LR
 | `challenge.ended` | Challenge | Routine · Notification · Chat | `challengeId` | 🟡 발행만 |
 | `challenge.member.joined` | Challenge | **Challenge**(랭킹) · Chat · Notification · **Routine** 🆕 | `challengeId` | 🟡 부분 |
 | `challenge.member.left` | Challenge | Chat · **Routine** 🆕 · **Challenge**(랭킹 제외) 🆕 | `challengeId` | 🟡 부분 |
-| **`challenge.deleted`** 🆕 | Challenge | Routine | `challengeId` | ⬜ |
+| ~~`challenge.deleted`~~ | ~~Challenge~~ | ~~Routine~~ | — | ⛔ **철회** (ADR-0042 개정 · ADR-0044) |
 | `routine.execution.completed` | Routine | Challenge · Notification | `userId` | 🟡 소비자만 |
 | **`routine.execution.cancelled`** 🆕 | Routine | Challenge | `userId` | ⬜ |
 | `routine.notification.scheduled` | Routine | Notification | `userId` | ⬜ |
@@ -92,7 +91,7 @@ graph LR
 | | 무엇 | 왜 |
 |---|---|---|
 | 🆕 | **`routine.execution.cancelled`** | 완료 이벤트만 있어 **랭킹이 오르는 경로만 있고 내려가는 경로가 없었다.** 소비 측은 `execDate` 기준으로 해당 주/달을 **재집계**한다 — 캡(ADR-0027/0043) 때문에 단순 감소는 틀린다 |
-| 🆕 | **`challenge.deleted`** | `WAITING`에서 방장이 혼자 탈퇴하면 챌린지를 하드 삭제하는데(ADR-0042), routine-service의 챌린지 템플릿이 고아로 남는다 |
+| ⛔ | ~~`challenge.deleted`~~ | **2026-09-13 철회.** 정리할 챌린지 템플릿이 ADR-0044로 사라졌고, `WAITING` 챌린지는 다른 서비스에 남기는 것이 없다 |
 | 🔧 | `challenge.member.left` **페이로드** | `newLeaderUserId` 추가 — 승계당한 사람이 자기가 방장이 된 걸 알 방법이 없었다 |
 | 🔧 | `challenge.member.left` **구독자** | **Routine 추가**(챌린지 루틴 비활성화) · **Challenge 추가**(랭킹 제외 + ZSET `ZREM`) |
 | 🔧 | `challenge.member.joined` **구독자** | **Routine 추가**(v2 — `ACTIVE` 재참여 시 루틴 인스턴스 복원) |
@@ -173,9 +172,7 @@ sequenceDiagram
   L->>C: POST /challenges/{id}/members/me/leave
 
   alt WAITING + 방장 혼자
-    Note over C: summary → members → challenges 삭제
-    C-->>R: challenge.deleted ⬜🆕
-    Note over R: 챌린지 루틴 템플릿 정리
+    Note over C: summary → members → challenges 삭제<br/>다른 서비스에 알리지 않는다
   else 다른 활성 멤버 있음
     Note over C: 지목자 또는 joinedAt 첫 멤버로 승계
     C-->>R: challenge.member.left (newLeaderUserId) ⬜🆕
