@@ -87,6 +87,9 @@
 | `execDate` | string (yyyy-MM-dd) | ✅ | 실행 날짜 |
 | `challengeId` | long | ❌ | 챌린지 루틴인 경우만 포함. null = 개인 루틴 |
 
+> ⚠️ **위는 현재 코드 기준 페이로드다.** #61에서 `routineTemplateId` → **`routineId`**(루틴 인스턴스 · ADR-0040)로 바뀌고,
+> 챌린지 루틴이면 **`acceptedCount` · `revision`** 이 추가된다(S33). 표 갱신은 #61 PR에서 한다
+
 **소비자 처리**
 
 - **ChallengeService** (`challenge-service.ranking.routine.execution.completed`): `challenge_member_summary` UPSERT → Redis ZSET(`ranking:{challengeId}`) 동기화 (ADR-0028). 점수는 **누적 인정 횟수** — 페이로드 계약 변경은 #61(S33)
@@ -155,7 +158,7 @@
 - **보낼지는 발송 직전에** routine-service gRPC `CheckNotificationDue`로 묻는다 — 이 이벤트에는 완료 상태가 없다
 
 > 이전 설계(PGMQ enqueue · `nextSendAt` 하나 · `routineTemplateId` · 5분 전 06:55)는 **ADR-0045로 대체**됐다(2026-09-13).
-- Next-One Chaining 원칙에 따라 이미 PENDING 레코드가 있으면 upsert로 갱신 (ADR-0017)
+> Next-One(루틴 · 유형마다 PENDING 1건)은 유지된다 — 소비 구현은 #68
 
 ---
 
@@ -330,11 +333,11 @@
 
 ### 7. `challenge.ended`
 
-챌린지 종료일이 지나 스케줄러가 ACTIVE → ENDED 상태 전이를 완료했을 때 발행한다. (ADR-0033)
+챌린지가 ACTIVE → ENDED로 전이됐을 때 발행한다 — 종료일이 지나 스케줄러가 전이할 때(ADR-0033), **`ACTIVE`에서 마지막 멤버가 나가 끝날 때**.
 
 > **MVP에서 발행한다 (2026-09-13 정정).** 전에는 "구독자가 v2에서 구현될 때 활성화"라 적었는데, MVP에 구독자가 둘 있다 —
 > 종료 알림(`policies.md` §8)과 채팅 종료 SYSTEM · 발송 차단(#162).
-> **지금 코드는 `ACTIVE → ENDED` 전이만 하고 발행하지 않는다**(`ChallengeStatusTransitionScheduler` · `ChallengeService`의 `end()` 두 곳) — 발행은 신규 challenge-service 이슈에서 붙인다
+> **지금 코드는 `ACTIVE → ENDED` 전이만 하고 발행하지 않는다**(`ChallengeStatusTransitionScheduler` · `ChallengeService`의 `end()` 두 곳) — 발행은 **#179**
 
 | 항목 | 내용 |
 |------|------|
