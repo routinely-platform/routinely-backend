@@ -244,7 +244,7 @@
 
 - **RoutineService**: 페이로드의 멤버마다 `routines` 인스턴스를 만들고 **루틴 정의를 복사**한다(ADR-0032 · ADR-0040 · ADR-0044, #157). 실행 기록은 만들지 않는다 — 희소 저장(ADR-0038)
 - **NotificationService**: 챌린지 멤버 전원에게 "챌린지가 시작되었습니다" 알림 발송
-- **ChatService**: **채팅방을 만들고**(챌린지당 1개) 페이로드 멤버로 `chat_room_members`를 채운 뒤 SYSTEM 메시지 발행 ("챌린지가 시작되었습니다"). ⚠️ 방장(`OWNER`)을 정하려면 방장 ID가 필요한데 **지금 페이로드에 없다** — chat-service 착수 시 추가
+- **ChatService**: **채팅방을 만들고**(챌린지당 1개) 페이로드 멤버로 `chat_room_members`를 채운 뒤 SYSTEM 메시지 발행 ("챌린지가 시작되었습니다"). 방장(`OWNER`)은 페이로드의 **`leaderUserId`** 로 정한다 — 필드 추가는 #167 (ADR-0046)
 
 ---
 
@@ -323,7 +323,8 @@
 - **RoutineService**: 그 멤버의 챌린지 루틴을 `is_active = false`로. 실행 기록은 남긴다 — 달력에 그대로 보인다 (#158, ADR-0038)
 - **ChallengeService** (`challenge-service.ranking.member.left`): 랭킹 제외 — ZSET `ZREM`, summary 행은 유지 (#158)
 - **ChatService**: `chat_room_members` 비활성화 + `left_at` · `newLeaderUserId`가 있으면 `OWNER` 승계 · SYSTEM 메시지. **방이 아직 없으면(`WAITING`) 할 일이 없다**
-- **NotificationService**: `newLeaderUserId`가 있으면 **새 방장에게** `CHALLENGE_EVENT`(방장 승계) (`policies.md` §8)
+- **NotificationService**: `newLeaderUserId`가 있으면 **새 방장에게** `CHALLENGE_EVENT`(방장 승계) (`policies.md` §8).
+  알림 제목에 챌린지 이름이 필요하다 — notification-service는 챌린지 정보를 갖지 않으므로 **`challengeName`을 페이로드에 싣는다**(`newLeaderUserId`와 함께 #159)
 
 ---
 
@@ -331,7 +332,9 @@
 
 챌린지 종료일이 지나 스케줄러가 ACTIVE → ENDED 상태 전이를 완료했을 때 발행한다. (ADR-0033)
 
-> **MVP에서는 발행하지 않는다.** subscriber(최종 통계 집계, 종료 알림, 채팅방 archive)가 v2 이상에서 구현될 때 함께 활성화한다.
+> **MVP에서 발행한다 (2026-09-13 정정).** 전에는 "구독자가 v2에서 구현될 때 활성화"라 적었는데, MVP에 구독자가 둘 있다 —
+> 종료 알림(`policies.md` §8)과 채팅 종료 SYSTEM · 발송 차단(#162).
+> **지금 코드는 `ACTIVE → ENDED` 전이만 하고 발행하지 않는다**(`ChallengeStatusTransitionScheduler` · `ChallengeService`의 `end()` 두 곳) — 발행은 신규 challenge-service 이슈에서 붙인다
 
 | 항목 | 내용 |
 |------|------|
@@ -347,7 +350,8 @@
   "occurredAt": "2025-04-01T00:00:00Z",
   "challengeId": 5,
   "challengeName": "30일 러닝 챌린지",
-  "endedAt": "2025-03-31"
+  "endedAt": "2025-03-31",
+  "members": [ { "userId": 1 }, { "userId": 2 } ]
 }
 ```
 
@@ -356,10 +360,11 @@
 | `challengeId` | long | ✅ | 챌린지 ID |
 | `challengeName` | string | ✅ | 챌린지 이름 |
 | `endedAt` | string (yyyy-MM-dd) | ✅ | 챌린지 종료일 |
+| `members` | object[] | ✅ | **종료 시점의 활성 멤버** `[{ userId }]` — notification-service는 멤버 목록을 갖지 않는다 (2026-09-13 추가) |
 
 **소비자 처리**
 
-- **NotificationService**: 챌린지 멤버 전원에게 `CHALLENGE_EVENT` 종료 알림
+- **NotificationService**: 페이로드 `members` 전원에게 `CHALLENGE_EVENT` 종료 알림
 - **ChatService**: SYSTEM 메시지 발행 ("챌린지가 종료되었습니다") · 이후 **발송 차단, 조회는 허용** (#162)
 
 > **RoutineService는 구독하지 않는다.** 루틴 기간 = 챌린지 기간이라 종료 다음 날부터 대상이 아니게 된다(ADR-0038) — 마감 처리할 행이 없다(희소 저장). 최종 순위는 랭킹 조회가 곧 요약이다(`policies.md` §4)
@@ -375,7 +380,7 @@ ChatService 멀티 인스턴스 간 WebSocket 브로드캐스트 용도. (ADR-00
 |------|------|
 | Publisher | ChatService (메시지를 수신한 인스턴스) |
 | Partition Key | `roomId` — 방 단위 메시지 순서 보장 |
-| Consumer Group | `chat-service.chat.message.created` (전 인스턴스 동일 그룹) |
+| Consumer Group | **인스턴스마다 다른 그룹** — `chat-service.broadcast.{instanceId}` (ADR-0016 보완) |
 
 **Payload**
 
@@ -395,12 +400,15 @@ ChatService 멀티 인스턴스 간 WebSocket 브로드캐스트 용도. (ADR-00
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|:----:|------|
-| `roomId` | long | ✅ | 채팅방 ID |
-| `messageId` | long | ✅ | 저장된 메시지 ID |
-| `senderId` | long | ✅ | 발신자 사용자 ID |
-| `senderNickname` | string | ✅ | 발신자 닉네임 |
+| `roomId` | long | ✅ | 채팅방 ID (내부 식별자 · 파티션 키) |
+| `challengeId` | long | ✅ | 구독 주소 `/sub/chat/challenges/{challengeId}` — 받는 인스턴스가 방 번호로 챌린지를 다시 찾지 않게 (ADR-0046, 2026-09-13 추가) |
+| `messageId` | long | ✅ | 저장된 메시지 ID — 클라이언트 중복 제거 키 |
+| `senderId` | long | ❌ | 발신자 사용자 ID — **SYSTEM이면 null** (`ck_cm_sender_id`) |
+| `senderNickname` | string | ❌ | 발신자 닉네임 — SYSTEM이면 null. user-service `GetUsers`(#153)로 얻는다 |
 | `content` | string | ✅ | 메시지 내용 |
-| `messageType` | string | ✅ | `TEXT` \| `IMAGE` \| `SYSTEM` |
+| `messageType` | string | ✅ | `TEXT` \| `SYSTEM` (`IMAGE`는 v2) |
+| `systemType` | string | ❌ | SYSTEM일 때 — `STARTED` \| `ENDED` \| `MEMBER_LEFT` \| `LEADER_CHANGED` (2026-09-13 추가) |
+| `targetUserId` | long | ❌ | `MEMBER_LEFT`면 나간 사람 — **받은 인스턴스가 그 사용자의 구독을 끊는다**(ADR-0046 §6) · `LEADER_CHANGED`면 새 방장 |
 | `sentAt` | string (ISO 8601) | ✅ | 메시지 전송 시각 |
 
 **소비자 처리**
@@ -408,8 +416,14 @@ ChatService 멀티 인스턴스 간 WebSocket 브로드캐스트 용도. (ADR-00
 - **ChatService (전 인스턴스)**: 자신의 WebSocket 세션 중 해당 `roomId` 구독자에게 브로드캐스트
 - 해당 방에 연결된 세션이 없는 인스턴스는 consume 후 아무 동작도 하지 않는다
 
-> `roomId`를 partition key로 사용하므로 하나의 채팅방 메시지는 항상 동일 파티션에 배치된다.
-> 동일 consumer group 내에서 하나의 파티션은 한 인스턴스만 처리하므로 방 단위 순서가 보장된다.
+> **그룹을 인스턴스마다 따로 둔다 (2026-09-13 정정).** 전에는 "전 인스턴스 동일 그룹"이라 적었다. 그런데 같은 그룹이면
+> 파티션 하나를 **한 인스턴스만** 받는다 — 다른 인스턴스에 붙은 사람은 메시지를 못 받아 **브로드캐스트가 되지 않는다.**
+>
+> - 그룹이 인스턴스마다 다르면 **모든 인스턴스가 모든 메시지를 받는다.** 방 단위 순서는 partition key `roomId`로 인스턴스마다 지켜진다
+> - **Inbox를 쓰지 않는다** — `chat_inbox`는 인스턴스들이 함께 쓰는 표라, 먼저 받은 인스턴스가 행을 넣으면 나머지는 중복으로 보고 건너뛴다.
+>   브로드캐스트는 DB에 쓰지 않아 두 번 전달돼도 해롭지 않다 — 클라이언트가 `messageId`로 거른다
+> - 새로 뜬 인스턴스는 **최신 위치부터** 읽는다(`auto.offset.reset=latest`). 연결이 끊긴 사이 놓친 메시지는 클라이언트가 재연결 뒤 REST로 채운다
+> - `@RetryableTopic`·DLT를 붙이지 않는다 — 인스턴스마다 재시도 토픽이 생기고, 늦게 도착한 브로드캐스트는 쓸모가 없다
 
 ---
 

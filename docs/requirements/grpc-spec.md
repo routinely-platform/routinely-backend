@@ -32,7 +32,10 @@ ChallengeService ──────────→ RoutineService
 | RoutineService | ChallengeService | `GetChallengeContext` | 챌린지 루틴 실행 완료 처리 전 유효성 검증 |
 | ChallengeService | RoutineService | `ListCategories` | 챌린지 생성 시 categoryCode 유효성 검증 (Redis TTL 24h 캐싱) |
 
-> **ChatService는 gRPC를 호출하지 않는다**(2026-09-13, ADR-0046) — 멤버 판정은 이벤트로 동기화한 로컬 `chat_room_members`로 한다.
+> **ChatService는 멤버 판정에 gRPC를 쓰지 않는다**(2026-09-13, ADR-0046) — 이벤트로 동기화한 로컬 `chat_room_members`로 한다.
+> 발신자 닉네임은 user-service `GetUsers`(#153, 예정)를 부른다 — 챌린지 서비스에 묻는 호출은 없다.
+>
+> `CheckNotificationDue` 판정에는 **지정형 리마인더도 포함된다** — 그날 이미 했으면 보내지 않는다(`policies.md` §8, 2026-09-13).
 
 ---
 
