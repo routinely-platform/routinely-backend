@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted (2026-08-23 개정 — 발송 시각을 `preferredTime` 정각으로 확정)
+Accepted (2026-08-23 개정 — 발송 시각을 `preferredTime` 정각으로 확정 · **2026-09-13 개정 — PGMQ → 테이블 폴링, 판정은 발송 직전 routine-service에 묻는다**)
+
+> **개정 메모 (2026-09-13)**: Due 기반 예약 · Next-One · SSE는 그대로다. **큐 구현(PGMQ)과 다음 1건 계산·판정 방식**을
+> [ADR-0045](adr-0045-notification-scheduling-table-polling.md)가 대체한다. 아래 "Architecture Overview"의 PGMQ 흐름과 06:55 예시는 기록으로 남긴다.
 
 > **개정 메모**: 본문 Context의 "루틴 시작 **5분 전** 알림"은 오프셋이 스키마·설정 어디에도 없어
 > 실제로 구현된 적이 없다. 사용자가 "7시에 알려줘"로 설정한 것을 6시 55분에 보내면 설명 없이는
@@ -36,7 +39,7 @@ Routinely는 다음과 같은 알림 기능을 제공한다:
 Routinely는 다음 전략을 채택한다:
 
 1. **Due 기반 예약 처리** — 전수 스캔 대신 미리 예약된 알림만 처리한다.
-2. **PGMQ** — 별도 인프라 없이 PostgreSQL 기반 큐를 사용한다.
+2. ~~**PGMQ**~~ → **예약 테이블 폴링** (2026-09-13, ADR-0045) — 확장 없이 `notification_schedules`를 주기적으로 훑는다.
 3. **Next-One Chaining** — 반복 알림은 항상 "가장 가까운 다음 1건"만 유지한다.
 4. **SSE(Server-Sent Events)** — 실시간 알림은 FCM 없이 SSE로 구현한다.
 
@@ -112,6 +115,8 @@ Routinely는 다음 전략을 채택한다:
 ---
 
 ## Architecture Overview
+
+> ⚠️ 아래 PGMQ 구성·흐름은 **ADR-0045로 대체됐다**(2026-09-13). 기록으로 남긴다.
 
 ### 구성 요소
 

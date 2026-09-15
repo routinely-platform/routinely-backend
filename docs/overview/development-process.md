@@ -299,8 +299,8 @@ com.routinely.observability/
 
 **구현 순서:**
 1. 알림 이력 조회 REST API + SSE 연결
-2. Kafka Consumer — `routine.execution.completed`, `challenge.member.joined`
-3. PGMQ 워커 — `sendAt` 기반 알림 발송 (Next-One Chaining, ADR-0017)
+2. Kafka Consumer — `routine.notification.scheduled`, `challenge.started` · `ended` · `member.left` (`event-spec.md`)
+3. 예약 테이블 폴링 워커 — 발송 직전 routine-service에 판정을 묻는다 (ADR-0017 · ADR-0045)
 
 #### chat-service 🔲
 
