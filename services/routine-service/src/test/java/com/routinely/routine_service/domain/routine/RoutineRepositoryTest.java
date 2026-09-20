@@ -3,6 +3,7 @@ package com.routinely.routine_service.domain.routine;
 import com.routinely.jpa.config.JpaAuditingConfig;
 import org.springframework.context.annotation.Import;
 
+import com.routinely.routine_service.domain.definition.RoutineDefinition;
 import com.routinely.routine_service.domain.template.RoutineTemplate;
 import com.routinely.routine_service.domain.template.RoutineTemplateRepository;
 import com.routinely.routine_service.domain.template.ScheduleType;
@@ -28,6 +29,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("RoutineRepository")
 class RoutineRepositoryTest {
 
+    private static final RoutineDefinition DEFINITION =
+            RoutineDefinition.of("아침 러닝 30분", "EXERCISE", ScheduleType.DAILY, null, null);
+
     private static final LocalDate START = LocalDate.of(2026, 2, 1);
     private static final LocalDate END = LocalDate.of(2026, 3, 2);
 
@@ -39,12 +43,12 @@ class RoutineRepositoryTest {
 
     private Long savePersonalTemplate(Long userId) {
         RoutineTemplate template = templateRepository.saveAndFlush(
-                RoutineTemplate.forPersonal(userId, "아침 러닝 30분", "EXERCISE", ScheduleType.DAILY, null, null));
+                RoutineTemplate.forPersonal(userId, RoutineDefinition.of("아침 러닝 30분", "EXERCISE", ScheduleType.DAILY, null, null)));
         return template.getId();
     }
 
     private Routine saveRoutine(Long templateId, Long userId, boolean active, Long challengeId) {
-        Routine routine = Routine.forPersonal(templateId, userId, START, END, LocalTime.of(7, 0));
+        Routine routine = Routine.forPersonal(templateId, userId, DEFINITION, START, END, LocalTime.of(7, 0));
         if (!active) {
             routine.deactivate();
         }

@@ -39,7 +39,7 @@ class RoutineExecutionControllerTest {
 
     private static ExecutionCompleteResult completeResult() {
         return new ExecutionCompleteResult(500L, 100L, TODAY, ExecutionStatus.COMPLETED,
-                LocalDateTime.of(TODAY, java.time.LocalTime.NOON), "https://cdn/p.jpg");
+                LocalDateTime.of(TODAY, java.time.LocalTime.NOON), "https://cdn/p.jpg", 700L);
     }
 
     @Test

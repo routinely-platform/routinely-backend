@@ -13,7 +13,7 @@ public record ExecutionResponse(
         String status,
         LocalDateTime completedAt,
         String photoUrl,
-        String memo) {
+        String memo, Long feedCardId) {
 
     public static ExecutionResponse from(ExecutionResult result) {
         return new ExecutionResponse(
@@ -24,7 +24,8 @@ public record ExecutionResponse(
                 result.status().name(),
                 result.completedAt(),
                 result.photoUrl(),
-                result.memo()
+                result.memo(),
+                result.feedCardId()
         );
     }
 }

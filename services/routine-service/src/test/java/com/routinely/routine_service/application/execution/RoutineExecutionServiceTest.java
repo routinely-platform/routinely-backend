@@ -5,13 +5,12 @@ import com.routinely.core.exception.ErrorCode;
 import com.routinely.routine_service.application.execution.dto.CompleteExecutionCommand;
 import com.routinely.routine_service.application.execution.dto.ExecutionCompleteResult;
 import com.routinely.routine_service.application.execution.dto.ExecutionResult;
+import com.routinely.routine_service.domain.definition.RoutineDefinition;
 import com.routinely.routine_service.domain.execution.ExecutionStatus;
 import com.routinely.routine_service.domain.execution.RoutineExecution;
 import com.routinely.routine_service.domain.execution.RoutineExecutionRepository;
 import com.routinely.routine_service.domain.routine.Routine;
 import com.routinely.routine_service.domain.routine.RoutineRepository;
-import com.routinely.routine_service.domain.template.RoutineTemplate;
-import com.routinely.routine_service.domain.template.RoutineTemplateRepository;
 import com.routinely.routine_service.domain.template.ScheduleType;
 import com.routinely.storage.FileStorage;
 import com.routinely.storage.StoredFile;
@@ -41,6 +40,9 @@ import static org.mockito.Mockito.when;
 @DisplayName("RoutineExecutionService")
 class RoutineExecutionServiceTest {
 
+    private static final RoutineDefinition DEFINITION =
+            RoutineDefinition.of("아침 러닝", "EXERCISE", ScheduleType.DAILY, null, null);
+
     private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-07-24T00:00:00Z"), ZONE);
     private static final LocalDate TODAY = LocalDate.of(2026, 7, 24);
@@ -50,14 +52,27 @@ class RoutineExecutionServiceTest {
 
     private final RoutineExecutionRepository executionRepository = mock(RoutineExecutionRepository.class);
     private final RoutineRepository routineRepository = mock(RoutineRepository.class);
-    private final RoutineTemplateRepository templateRepository = mock(RoutineTemplateRepository.class);
+    private final com.routinely.routine_service.domain.feed.FeedCardRepository feedCardRepository = mock(com.routinely.routine_service.domain.feed.FeedCardRepository.class);
+    @org.junit.jupiter.api.BeforeEach
+    void stubCardSave() {
+        when(feedCardRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    }
     private final FileStorage fileStorage = mock(FileStorage.class);
 
-    private final RoutineExecutionService service = new RoutineExecutionService(
-            executionRepository, routineRepository, templateRepository, fileStorage, CLOCK);
+    private final RoutineExecutionService service = new RoutineExecutionServiceImpl(
+            executionRepository, routineRepository, fileStorage, CLOCK, feedCardRepository);
 
     private static Routine routine(LocalDate started, LocalDate ended) {
-        Routine routine = Routine.forPersonal(TEMPLATE_ID, USER_ID, started, ended, null);
+        Routine routine = Routine.forPersonal(TEMPLATE_ID, USER_ID, DEFINITION, started, ended, null);
+        ReflectionTestUtils.setField(routine, "id", ROUTINE_ID);
+        return routine;
+    }
+
+    /** 스케줄이 다른 루틴 — ADR-0040 이후 정의는 템플릿이 아니라 루틴이 갖는다. */
+    private static Routine routine(LocalDate started, LocalDate ended,
+                                   ScheduleType type, Short days, Integer count) {
+        Routine routine = Routine.forPersonal(TEMPLATE_ID, USER_ID,
+                RoutineDefinition.of("아침 러닝", "EXERCISE", type, days, count), started, ended, null);
         ReflectionTestUtils.setField(routine, "id", ROUTINE_ID);
         return routine;
     }
@@ -68,15 +83,58 @@ class RoutineExecutionServiceTest {
         return routine;
     }
 
-    private static RoutineTemplate template(ScheduleType type, Short days, Integer count) {
-        RoutineTemplate template = RoutineTemplate.forPersonal(USER_ID, "아침 러닝", "EXERCISE", type, days, count);
-        ReflectionTestUtils.setField(template, "id", TEMPLATE_ID);
-        return template;
-    }
 
     private CompleteExecutionCommand command(LocalDate date, byte[] photo, String contentType, String memo) {
         return new CompleteExecutionCommand(ROUTINE_ID, USER_ID, date,
                 photo == null ? null : "photo.jpg", contentType, photo, memo);
+    }
+
+    @Nested
+    @DisplayName("무기한 루틴 — ended_at NULL (ADR-0041)")
+    class NoEndDate {
+
+        @Test
+        @DisplayName("종료일이없으면_상한검사를건너뛰고_오늘을완료할수있다")
+        void complete_whenNoEndDate_allowsToday() {
+            when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID))
+                    .thenReturn(Optional.of(routine(LocalDate.of(2026, 7, 1), null)));
+            when(executionRepository.findByRoutineIdAndScheduledDate(ROUTINE_ID, TODAY))
+                    .thenReturn(Optional.empty());
+            when(executionRepository.saveAndFlush(any(RoutineExecution.class)))
+                    .thenAnswer(invocation -> invocation.getArgument(0));
+
+            ExecutionCompleteResult result = service.complete(command(TODAY, null, null, null));
+
+            assertThat(result.status()).isEqualTo(ExecutionStatus.COMPLETED);
+        }
+
+        @Test
+        @DisplayName("종료일이없어도_시작일이전은거부한다")
+        void complete_whenNoEndDate_stillRejectsBeforeStart() {
+            LocalDate started = TODAY.minusDays(3);
+            when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID))
+                    .thenReturn(Optional.of(routine(started, null)));
+
+            assertThatThrownBy(() -> service.complete(command(started.minusDays(1), null, null, null)))
+                    .isInstanceOfSatisfying(BusinessException.class, e ->
+                            assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
+        }
+
+        @Test
+        @DisplayName("종료일이없으면_파생범위가조회종료일까지전개된다")
+        void getMyExecutions_whenNoEndDate_derivesToQueryEnd() {
+            LocalDate start = TODAY.minusDays(2);
+            when(routineRepository.findForExecutionDerivation(USER_ID, null, start, TODAY))
+                    .thenReturn(List.of(routine(LocalDate.of(2026, 7, 1), null)));
+            when(executionRepository.findCompletedInRange(USER_ID, null, start, TODAY))
+                    .thenReturn(List.of());
+
+            List<ExecutionResult> results = service.getMyExecutions(USER_ID, null, null, start, TODAY);
+
+            // 종료일이 없다고 구간이 비면 안 된다 — 사흘 전부터 오늘까지 세 칸이 파생된다.
+            assertThat(results).extracting(ExecutionResult::scheduledDate)
+                    .containsExactlyInAnyOrder(start, start.plusDays(1), TODAY);
+        }
     }
 
     @Nested
@@ -86,10 +144,8 @@ class RoutineExecutionServiceTest {
         @Test
         @DisplayName("오늘예정_DAILY루틴을_사진없이완료하면_COMPLETED결과를반환한다")
         void complete_daily_withoutPhoto_success() {
-            when(routineRepository.findByIdAndUserId(ROUTINE_ID, USER_ID))
+            when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID))
                     .thenReturn(Optional.of(routine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1))));
-            when(templateRepository.findById(TEMPLATE_ID))
-                    .thenReturn(Optional.of(template(ScheduleType.DAILY, null, null)));
             when(executionRepository.findByRoutineIdAndScheduledDate(ROUTINE_ID, TODAY))
                     .thenReturn(Optional.empty());
             when(executionRepository.saveAndFlush(any(RoutineExecution.class)))
@@ -106,10 +162,8 @@ class RoutineExecutionServiceTest {
         @Test
         @DisplayName("이미완료된날이면_409_EXECUTION_ALREADY_COMPLETED")
         void complete_whenAlreadyCompleted_throwsConflict() {
-            when(routineRepository.findByIdAndUserId(ROUTINE_ID, USER_ID))
+            when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID))
                     .thenReturn(Optional.of(routine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1))));
-            when(templateRepository.findById(TEMPLATE_ID))
-                    .thenReturn(Optional.of(template(ScheduleType.DAILY, null, null)));
             when(executionRepository.findByRoutineIdAndScheduledDate(ROUTINE_ID, TODAY))
                     .thenReturn(Optional.of(mock(RoutineExecution.class)));
 
@@ -123,10 +177,8 @@ class RoutineExecutionServiceTest {
         @DisplayName("지난날짜도_수행기간내면_백필로완료할수있다")
         void complete_pastDate_backfill_success() {
             LocalDate past = TODAY.minusDays(3);
-            when(routineRepository.findByIdAndUserId(ROUTINE_ID, USER_ID))
+            when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID))
                     .thenReturn(Optional.of(routine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1))));
-            when(templateRepository.findById(TEMPLATE_ID))
-                    .thenReturn(Optional.of(template(ScheduleType.DAILY, null, null)));
             when(executionRepository.findByRoutineIdAndScheduledDate(ROUTINE_ID, past))
                     .thenReturn(Optional.empty());
             when(executionRepository.saveAndFlush(any(RoutineExecution.class)))
@@ -141,7 +193,7 @@ class RoutineExecutionServiceTest {
         @Test
         @DisplayName("아직오지않은날짜면_검증예외를던진다")
         void complete_futureDate_throwsValidation() {
-            when(routineRepository.findByIdAndUserId(ROUTINE_ID, USER_ID))
+            when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID))
                     .thenReturn(Optional.of(routine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1))));
 
             assertThatThrownBy(() -> service.complete(command(TODAY.plusDays(1), null, null, null)))
@@ -153,7 +205,7 @@ class RoutineExecutionServiceTest {
         @Test
         @DisplayName("중단한루틴이면_완료할수없다")
         void complete_whenInactiveRoutine_throwsValidation() {
-            when(routineRepository.findByIdAndUserId(ROUTINE_ID, USER_ID))
+            when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID))
                     .thenReturn(Optional.of(inactiveRoutine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1))));
 
             assertThatThrownBy(() -> service.complete(command(TODAY, null, null, null)))
@@ -165,7 +217,7 @@ class RoutineExecutionServiceTest {
         @Test
         @DisplayName("루틴수행기간밖이면_검증예외를던진다")
         void complete_whenOutOfPeriod_throwsValidation() {
-            when(routineRepository.findByIdAndUserId(ROUTINE_ID, USER_ID))
+            when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID))
                     .thenReturn(Optional.of(routine(TODAY.plusDays(1), TODAY.plusDays(10))));
 
             assertThatThrownBy(() -> service.complete(command(TODAY, null, null, null)))
@@ -178,10 +230,9 @@ class RoutineExecutionServiceTest {
         @DisplayName("지정형인데_오늘이수행요일이아니면_검증예외를던진다")
         void complete_whenSpecificDaysOffDay_throwsValidation() {
             short offDayMask = (short) (1 << (TODAY.getDayOfWeek().getValue() % 7)); // 오늘 요일 제외
-            when(routineRepository.findByIdAndUserId(ROUTINE_ID, USER_ID))
-                    .thenReturn(Optional.of(routine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1))));
-            when(templateRepository.findById(TEMPLATE_ID))
-                    .thenReturn(Optional.of(template(ScheduleType.SPECIFIC_DAYS, offDayMask, null)));
+            when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID))
+                    .thenReturn(Optional.of(routine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1),
+                            ScheduleType.SPECIFIC_DAYS, offDayMask, null)));
 
             assertThatThrownBy(() -> service.complete(command(TODAY, null, null, null)))
                     .isInstanceOfSatisfying(BusinessException.class, e ->
@@ -192,7 +243,7 @@ class RoutineExecutionServiceTest {
         @Test
         @DisplayName("본인루틴이아니면_ROUTINE_NOT_FOUND")
         void complete_whenNotOwned_throwsNotFound() {
-            when(routineRepository.findByIdAndUserId(ROUTINE_ID, USER_ID)).thenReturn(Optional.empty());
+            when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> service.complete(command(TODAY, null, null, null)))
                     .isInstanceOfSatisfying(BusinessException.class, e ->
@@ -203,10 +254,8 @@ class RoutineExecutionServiceTest {
         @DisplayName("유효한사진이면_저장소에업로드하고_URL을담아완료한다")
         void complete_withValidPhoto_uploadsAndSaves() {
             byte[] jpeg = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0x00, 0x10, 0x20};
-            when(routineRepository.findByIdAndUserId(ROUTINE_ID, USER_ID))
+            when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID))
                     .thenReturn(Optional.of(routine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1))));
-            when(templateRepository.findById(TEMPLATE_ID))
-                    .thenReturn(Optional.of(template(ScheduleType.DAILY, null, null)));
             when(executionRepository.findByRoutineIdAndScheduledDate(ROUTINE_ID, TODAY))
                     .thenReturn(Optional.empty());
             when(fileStorage.upload(any())).thenReturn(new StoredFile("routine-executions/abc.jpg", "https://cdn/abc.jpg"));
@@ -221,30 +270,10 @@ class RoutineExecutionServiceTest {
         }
 
         @Test
-        @DisplayName("지원하지않는사진형식이면_업로드하지않고_예외를던진다")
-        void complete_whenUnsupportedImage_throws() {
-            byte[] notImage = {0x00, 0x01, 0x02, 0x03};
-            when(routineRepository.findByIdAndUserId(ROUTINE_ID, USER_ID))
-                    .thenReturn(Optional.of(routine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1))));
-            when(templateRepository.findById(TEMPLATE_ID))
-                    .thenReturn(Optional.of(template(ScheduleType.DAILY, null, null)));
-            when(executionRepository.findByRoutineIdAndScheduledDate(ROUTINE_ID, TODAY))
-                    .thenReturn(Optional.empty());
-
-            assertThatThrownBy(() -> service.complete(command(TODAY, notImage, "image/jpeg", null)))
-                    .isInstanceOfSatisfying(BusinessException.class, e ->
-                            assertThat(e.getErrorCode()).isEqualTo(ErrorCode.UNSUPPORTED_IMAGE_TYPE));
-            verify(fileStorage, never()).upload(any());
-            verify(executionRepository, never()).saveAndFlush(any());
-        }
-
-        @Test
         @DisplayName("동시완료경합으로_uq_re_routine_date충돌이나면_409_EXECUTION_ALREADY_COMPLETED로변환한다")
         void complete_whenUniqueViolation_translatesToConflict() {
-            when(routineRepository.findByIdAndUserId(ROUTINE_ID, USER_ID))
+            when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID))
                     .thenReturn(Optional.of(routine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1))));
-            when(templateRepository.findById(TEMPLATE_ID))
-                    .thenReturn(Optional.of(template(ScheduleType.DAILY, null, null)));
             when(executionRepository.findByRoutineIdAndScheduledDate(ROUTINE_ID, TODAY))
                     .thenReturn(Optional.empty());
             when(executionRepository.saveAndFlush(any(RoutineExecution.class)))
@@ -264,8 +293,8 @@ class RoutineExecutionServiceTest {
         @DisplayName("오늘완료분을취소하면_행을삭제하고_PENDING결과를반환한다")
         void cancel_success() {
             RoutineExecution execution = RoutineExecution.completed(
-                    ROUTINE_ID, USER_ID, TODAY, LocalDateTime.now(CLOCK), "url", "key", "memo");
-            when(routineRepository.findByIdAndUserId(ROUTINE_ID, USER_ID))
+                    ROUTINE_ID, USER_ID, TODAY, LocalDateTime.now(CLOCK));
+            when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID))
                     .thenReturn(Optional.of(routine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1))));
             when(executionRepository.findByRoutineIdAndScheduledDate(ROUTINE_ID, TODAY))
                     .thenReturn(Optional.of(execution));
@@ -279,7 +308,7 @@ class RoutineExecutionServiceTest {
         @Test
         @DisplayName("완료기록이없으면_EXECUTION_NOT_FOUND")
         void cancel_whenNotFound_throwsNotFound() {
-            when(routineRepository.findByIdAndUserId(ROUTINE_ID, USER_ID))
+            when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID))
                     .thenReturn(Optional.of(routine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1))));
             when(executionRepository.findByRoutineIdAndScheduledDate(ROUTINE_ID, TODAY))
                     .thenReturn(Optional.empty());
@@ -295,8 +324,8 @@ class RoutineExecutionServiceTest {
         void cancel_pastDate_success() {
             LocalDate past = TODAY.minusDays(3);
             RoutineExecution execution = RoutineExecution.completed(
-                    ROUTINE_ID, USER_ID, past, LocalDateTime.now(CLOCK), null, null, null);
-            when(routineRepository.findByIdAndUserId(ROUTINE_ID, USER_ID))
+                    ROUTINE_ID, USER_ID, past, LocalDateTime.now(CLOCK));
+            when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID))
                     .thenReturn(Optional.of(routine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1))));
             when(executionRepository.findByRoutineIdAndScheduledDate(ROUTINE_ID, past))
                     .thenReturn(Optional.of(execution));
@@ -311,8 +340,8 @@ class RoutineExecutionServiceTest {
         @DisplayName("중단한루틴이어도_이미남긴완료는취소할수있다")
         void cancel_whenInactiveRoutine_success() {
             RoutineExecution execution = RoutineExecution.completed(
-                    ROUTINE_ID, USER_ID, TODAY, LocalDateTime.now(CLOCK), null, null, null);
-            when(routineRepository.findByIdAndUserId(ROUTINE_ID, USER_ID))
+                    ROUTINE_ID, USER_ID, TODAY, LocalDateTime.now(CLOCK));
+            when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID))
                     .thenReturn(Optional.of(inactiveRoutine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1))));
             when(executionRepository.findByRoutineIdAndScheduledDate(ROUTINE_ID, TODAY))
                     .thenReturn(Optional.of(execution));
@@ -333,13 +362,11 @@ class RoutineExecutionServiceTest {
             LocalDate start = TODAY.minusDays(1);
             Routine routine = routine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1));
             RoutineExecution completedYesterday = RoutineExecution.completed(
-                    ROUTINE_ID, USER_ID, start, LocalDateTime.of(start, LocalTime.NOON), "u", "k", null);
+                    ROUTINE_ID, USER_ID, start, LocalDateTime.of(start, LocalTime.NOON));
             ReflectionTestUtils.setField(completedYesterday, "id", 500L);
 
             when(routineRepository.findForExecutionDerivation(USER_ID, null, start, TODAY))
                     .thenReturn(List.of(routine));
-            when(templateRepository.findAllById(any()))
-                    .thenReturn(List.of(template(ScheduleType.DAILY, null, null)));
             when(executionRepository.findCompletedInRange(USER_ID, null, start, TODAY))
                     .thenReturn(List.of(completedYesterday));
 
@@ -359,12 +386,10 @@ class RoutineExecutionServiceTest {
             LocalDate start = TODAY.minusDays(1);
             Routine routine = routine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1));
             RoutineExecution completedYesterday = RoutineExecution.completed(
-                    ROUTINE_ID, USER_ID, start, LocalDateTime.of(start, LocalTime.NOON), null, null, null);
+                    ROUTINE_ID, USER_ID, start, LocalDateTime.of(start, LocalTime.NOON));
 
             when(routineRepository.findForExecutionDerivation(USER_ID, null, start, TODAY))
                     .thenReturn(List.of(routine));
-            when(templateRepository.findAllById(any()))
-                    .thenReturn(List.of(template(ScheduleType.DAILY, null, null)));
             when(executionRepository.findCompletedInRange(USER_ID, null, start, TODAY))
                     .thenReturn(List.of(completedYesterday));
 
@@ -380,12 +405,10 @@ class RoutineExecutionServiceTest {
             LocalDate start = TODAY.minusDays(1);
             Routine stopped = inactiveRoutine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1));
             RoutineExecution completedYesterday = RoutineExecution.completed(
-                    ROUTINE_ID, USER_ID, start, LocalDateTime.of(start, LocalTime.NOON), null, null, null);
+                    ROUTINE_ID, USER_ID, start, LocalDateTime.of(start, LocalTime.NOON));
 
             when(routineRepository.findForExecutionDerivation(USER_ID, null, start, TODAY))
                     .thenReturn(List.of(stopped));
-            when(templateRepository.findAllById(any()))
-                    .thenReturn(List.of(template(ScheduleType.DAILY, null, null)));
             when(executionRepository.findCompletedInRange(USER_ID, null, start, TODAY))
                     .thenReturn(List.of(completedYesterday));
 

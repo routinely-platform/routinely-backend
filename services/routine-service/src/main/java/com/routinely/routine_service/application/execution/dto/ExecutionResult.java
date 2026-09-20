@@ -3,6 +3,7 @@ package com.routinely.routine_service.application.execution.dto;
 import com.routinely.routine_service.domain.execution.ExecutionStatus;
 import com.routinely.routine_service.domain.execution.RoutineExecution;
 
+import com.routinely.routine_service.domain.feed.FeedCard;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -20,14 +21,14 @@ public record ExecutionResult(
         ExecutionStatus status,
         LocalDateTime completedAt,
         String photoUrl,
-        String memo) {
+        String memo, Long feedCardId) {
 
     /**
      * 저장된 완료 기록으로부터 생성한다.
      *
      * @param title 기반 루틴(템플릿) 이름 — 실행 기록에는 없으므로 호출 측이 조회해 전달한다.
      */
-    public static ExecutionResult from(RoutineExecution execution, String title) {
+    public static ExecutionResult from(RoutineExecution execution, String title, FeedCard card) {
         return new ExecutionResult(
                 execution.getId(),
                 execution.getRoutineId(),
@@ -35,8 +36,9 @@ public record ExecutionResult(
                 execution.getScheduledDate(),
                 execution.getStatus(),
                 execution.getCompletedAt(),
-                execution.getPhotoUrl(),
-                execution.getMemo()
+                card == null ? null : card.getPhotoUrl(),
+                card == null ? null : card.getMemo(),
+                card == null ? null : card.getId()
         );
     }
 
@@ -45,6 +47,6 @@ public record ExecutionResult(
      */
     public static ExecutionResult derived(Long routineId, String title, LocalDate scheduledDate,
                                           ExecutionStatus status) {
-        return new ExecutionResult(null, routineId, title, scheduledDate, status, null, null, null);
+        return new ExecutionResult(null, routineId, title, scheduledDate, status, null, null, null, null);
     }
 }

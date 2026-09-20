@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Optional;
 
 public interface RoutineExecutionRepository extends JpaRepository<RoutineExecution, Long> {
+    boolean existsByRoutineId(Long routineId);
+    Optional<RoutineExecution> findTopByRoutineIdOrderByScheduledDateDesc(Long routineId);
 
     /**
      * 루틴+날짜로 저장된 실행 기록을 조회한다. sparse 저장이므로 존재한다면 COMPLETED 행이다.

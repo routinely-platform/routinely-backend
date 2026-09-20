@@ -11,7 +11,7 @@ public record ExecutionCompleteResponse(
         LocalDate scheduledDate,
         String status,
         LocalDateTime completedAt,
-        String photoUrl) {
+        String photoUrl, Long feedCardId) {
 
     public static ExecutionCompleteResponse from(ExecutionCompleteResult result) {
         return new ExecutionCompleteResponse(
@@ -20,7 +20,8 @@ public record ExecutionCompleteResponse(
                 result.scheduledDate(),
                 result.status().name(),
                 result.completedAt(),
-                result.photoUrl()
+                result.photoUrl(),
+                result.feedCardId()
         );
     }
 }

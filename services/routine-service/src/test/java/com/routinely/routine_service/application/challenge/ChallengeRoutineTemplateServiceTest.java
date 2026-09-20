@@ -87,11 +87,11 @@ class ChallengeRoutineTemplateServiceTest {
         RoutineTemplate template = captor.getValue();
         assertThat(template.getUserId()).isEqualTo(7L);
         assertThat(template.getChallengeId()).isEqualTo(42L);
-        assertThat(template.getTitle()).isEqualTo("아침 러닝 30분");
-        assertThat(template.getCategoryCode()).isEqualTo("EXERCISE");
-        assertThat(template.getScheduleType()).isEqualTo(ScheduleType.WEEKLY_COUNT);
-        assertThat(template.getTargetCount()).isEqualTo(3);
-        assertThat(template.getDaysOfWeek()).isNull();
+        assertThat(template.getDefinition().getTitle()).isEqualTo("아침 러닝 30분");
+        assertThat(template.getDefinition().getCategoryCode()).isEqualTo("EXERCISE");
+        assertThat(template.getDefinition().getScheduleType()).isEqualTo(ScheduleType.WEEKLY_COUNT);
+        assertThat(template.getDefinition().getTargetCount()).isEqualTo(3);
+        assertThat(template.getDefinition().getDaysOfWeek()).isNull();
 
         assertThat(inbox.getStatus()).isEqualTo(InboxStatus.PROCESSED);
         assertThat(inbox.getProcessedAt()).isEqualTo(LocalDateTime.now(FIXED_CLOCK));

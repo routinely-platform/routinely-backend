@@ -19,8 +19,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("StartRoutineRequest")
 class StartRoutineRequestTest {
 
-    private static final LocalDate START = LocalDate.of(2026, 2, 1);
-    private static final LocalDate END = LocalDate.of(2026, 3, 2);
+    private static final LocalDate START = LocalDate.now();
+    private static final LocalDate END = START.plusDays(30);
 
     private static ValidatorFactory validatorFactory;
     private static Validator validator;
@@ -64,8 +64,8 @@ class StartRoutineRequestTest {
         Set<ConstraintViolation<StartRoutineRequest>> violations = validator.validate(request);
 
         assertThat(violations).anySatisfy(violation -> {
-            assertThat(violation.getPropertyPath()).hasToString("routineTemplateId");
-            assertThat(violation.getMessage()).isEqualTo("루틴 템플릿 ID는 필수입니다.");
+            assertThat(violation.getPropertyPath()).hasToString("sourceExclusive");
+            assertThat(violation.getMessage()).isEqualTo("템플릿 ID 또는 완전한 루틴 정의 중 하나만 지정해야 합니다.");
         });
     }
 

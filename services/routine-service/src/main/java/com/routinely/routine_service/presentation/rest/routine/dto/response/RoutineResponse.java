@@ -16,7 +16,7 @@ public record RoutineResponse(
         LocalDate endedAt,
         String preferredTime,
         List<String> preferredDays,
-        boolean isActive) {
+        boolean isActive, String categoryCode, String scheduleType, List<String> daysOfWeek, Integer targetCount) {
 
     // LocalTime.toString()은 초가 0이면 "HH:mm"으로 축약되므로, HH:mm:ss 계약을 지키려 명시 포맷한다.
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss");
@@ -32,7 +32,9 @@ public record RoutineResponse(
                 result.endedAt(),
                 result.preferredTime() == null ? null : result.preferredTime().format(TIME_FORMAT),
                 days.isEmpty() ? null : days,
-                result.isActive()
+                result.isActive(), result.categoryCode(), result.scheduleType(),
+                Weekdays.toCodes(result.daysOfWeek()).isEmpty() ? null : Weekdays.toCodes(result.daysOfWeek()),
+                result.targetCount()
         );
     }
 }

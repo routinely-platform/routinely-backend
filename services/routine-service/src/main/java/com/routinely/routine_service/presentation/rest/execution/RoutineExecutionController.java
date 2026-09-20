@@ -8,20 +8,10 @@ import com.routinely.routine_service.application.execution.RoutineExecutionServi
 import com.routinely.routine_service.application.execution.dto.CompleteExecutionCommand;
 import com.routinely.routine_service.application.execution.dto.ExecutionCompleteResult;
 import com.routinely.routine_service.domain.execution.ExecutionStatus;
+import com.routinely.routine_service.presentation.rest.execution.dto.ExecutionDto;
 import com.routinely.routine_service.presentation.rest.execution.dto.response.ExecutionCompleteResponse;
 import com.routinely.routine_service.presentation.rest.execution.dto.response.ExecutionResponse;
-import org.jspecify.annotations.Nullable;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
-
+import jakarta.validation.Valid;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
@@ -29,7 +19,18 @@ import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
-
+import org.jspecify.annotations.Nullable;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 import static com.routinely.core.exception.ErrorCode.VALIDATION_FAILED;
 
 /**
@@ -59,10 +60,23 @@ public class RoutineExecutionController {
             @RequestParam(value = "memo", required = false) @Nullable String memo) {
 
         LocalDate scheduledDate = parseRequiredDate(date);
-        ExecutionCompleteResult result =
-                routineExecutionService.complete(toCommand(routineId, userId, scheduledDate, photo, memo));
+        CompleteExecutionCommand command = toCommand(routineId, userId, scheduledDate, photo, memo);
+        new ExecutionInputValidator().validate(command);
+        ExecutionCompleteResult result = routineExecutionService.complete(command);
         return ResponseEntity.ok(
                 ApiResponse.ok("루틴이 완료 처리되었습니다.", ExecutionCompleteResponse.from(result)));
+    }
+
+    @PostMapping("/api/v1/routine-executions/bulk-complete")
+    public ResponseEntity<ApiResponse<ExecutionDto.BulkCompleteResponse>> bulkComplete(
+            @RequestHeader(HeaderConstants.USER_ID) Long userId,
+            @RequestBody @Valid
+            ExecutionDto.BulkCompleteRequest request) {
+        var results = routineExecutionService.bulkComplete(userId, request.getScheduledDate(), request.getRoutineIds())
+                .stream().map(ExecutionCompleteResponse::from).toList();
+        return ResponseEntity.ok(ApiResponse.ok("루틴이 완료 처리되었습니다.",
+                ExecutionDto.BulkCompleteResponse.builder()
+                        .createdCount(results.size()).executions(results).build()));
     }
 
     @DeleteMapping("/api/v1/routines/{routineId}/executions/{date}/complete")
@@ -133,6 +147,9 @@ public class RoutineExecutionController {
                                                @Nullable MultipartFile photo, @Nullable String memo) {
         if (photo == null) {
             return new CompleteExecutionCommand(routineId, userId, scheduledDate, null, null, null, memo);
+        }
+        if (photo.getSize() > 5L * 1024 * 1024) {
+            throw new BusinessException(ErrorCode.FILE_SIZE_EXCEEDED);
         }
         if (photo.isEmpty()) {
             throw new BusinessException(ErrorCode.EMPTY_FILE);

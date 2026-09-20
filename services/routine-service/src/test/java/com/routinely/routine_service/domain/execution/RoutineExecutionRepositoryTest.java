@@ -3,6 +3,7 @@ package com.routinely.routine_service.domain.execution;
 import com.routinely.jpa.config.JpaAuditingConfig;
 import org.springframework.context.annotation.Import;
 
+import com.routinely.routine_service.domain.definition.RoutineDefinition;
 import com.routinely.routine_service.domain.routine.Routine;
 import com.routinely.routine_service.domain.routine.RoutineRepository;
 import com.routinely.routine_service.domain.template.RoutineTemplate;
@@ -45,15 +46,16 @@ class RoutineExecutionRepositoryTest {
 
     private Long saveRoutine(Long userId) {
         RoutineTemplate template = templateRepository.saveAndFlush(
-                RoutineTemplate.forPersonal(userId, "아침 러닝 30분", "EXERCISE", ScheduleType.DAILY, null, null));
+                RoutineTemplate.forPersonal(userId, RoutineDefinition.of("아침 러닝 30분", "EXERCISE", ScheduleType.DAILY, null, null)));
         Routine routine = routineRepository.saveAndFlush(Routine.forPersonal(
-                template.getId(), userId, LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1), null));
+                template.getId(), userId, template.getDefinition().copy(),
+                LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1), null));
         return routine.getId();
     }
 
     private RoutineExecution saveCompleted(Long routineId, Long userId, LocalDate date) {
         return executionRepository.saveAndFlush(RoutineExecution.completed(
-                routineId, userId, date, LocalDateTime.of(date, java.time.LocalTime.NOON), null, null, null));
+                routineId, userId, date, LocalDateTime.of(date, java.time.LocalTime.NOON)));
     }
 
     @Test

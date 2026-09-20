@@ -6,6 +6,7 @@ import com.routinely.core.exception.BusinessException;
 import com.routinely.routine_service.domain.inbox.InboxStatus;
 import com.routinely.routine_service.domain.inbox.RoutineInbox;
 import com.routinely.routine_service.domain.inbox.RoutineInboxRepository;
+import com.routinely.routine_service.domain.definition.RoutineDefinition;
 import com.routinely.routine_service.domain.template.RoutineTemplate;
 import com.routinely.routine_service.domain.template.ScheduleType;
 import com.routinely.routine_service.domain.template.RoutineTemplateRepository;
@@ -92,11 +93,12 @@ public class ChallengeRoutineTemplateService {
         templateRepository.save(RoutineTemplate.forChallenge(
                 payload.creatorUserId(),
                 payload.challengeId(),
-                payload.routineTitle(),
-                payload.categoryCode(),
-                scheduleType,
-                null, // 챌린지 루틴은 SPECIFIC_DAYS 불가 → days_of_week 없음
-                payload.targetCount()
+                RoutineDefinition.of(
+                        payload.routineTitle(),
+                        payload.categoryCode(),
+                        scheduleType,
+                        null, // 현행 페이로드에 daysOfWeek가 없다 — S11로 추가 예정
+                        payload.targetCount())
         ));
     }
 

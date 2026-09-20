@@ -1,6 +1,7 @@
 package com.routinely.routine_service.domain.template;
 
 import com.routinely.jpa.config.JpaAuditingConfig;
+import com.routinely.routine_service.domain.definition.RoutineDefinition;
 import org.springframework.context.annotation.Import;
 
 import org.junit.jupiter.api.DisplayName;
@@ -28,7 +29,7 @@ class RoutineTemplateRepositoryTest {
 
     private RoutineTemplate savePersonal(Long userId, String categoryCode) {
         return routineTemplateRepository.saveAndFlush(
-                RoutineTemplate.forPersonal(userId, "아침 러닝 30분", categoryCode, ScheduleType.DAILY, null, null));
+                RoutineTemplate.forPersonal(userId, RoutineDefinition.of("아침 러닝 30분", categoryCode, ScheduleType.DAILY, null, null)));
     }
 
     @Test
@@ -62,8 +63,7 @@ class RoutineTemplateRepositoryTest {
         RoutineTemplate first = savePersonal(1L, "EXERCISE");
         RoutineTemplate second = savePersonal(1L, "READING");
         savePersonal(2L, "EXERCISE"); // 다른 사용자
-        routineTemplateRepository.saveAndFlush(RoutineTemplate.forChallenge(
-                1L, 42L, "아침 러닝 30분", "EXERCISE", ScheduleType.WEEKLY_COUNT, null, 3)); // 챌린지 연결
+        routineTemplateRepository.saveAndFlush(RoutineTemplate.forChallenge(1L, 42L, RoutineDefinition.of("아침 러닝 30분", "EXERCISE", ScheduleType.WEEKLY_COUNT, null, 3))); // 챌린지 연결
         RoutineTemplate deleted = savePersonal(1L, "EXERCISE");
         deleted.softDelete(LocalDateTime.of(2026, 7, 16, 0, 0));
         routineTemplateRepository.saveAndFlush(deleted);
@@ -82,7 +82,7 @@ class RoutineTemplateRepositoryTest {
         RoutineTemplate reading = savePersonal(1L, "READING");
 
         List<RoutineTemplate> results = routineTemplateRepository
-                .findAllByUserIdAndChallengeIdIsNullAndCategoryCodeAndIsDeletedFalseOrderByIdDesc(
+                .findAllByUserIdAndChallengeIdIsNullAndDefinitionCategoryCodeAndIsDeletedFalseOrderByIdDesc(
                         1L, "READING");
 
         assertThat(results).extracting(RoutineTemplate::getId).containsExactly(reading.getId());

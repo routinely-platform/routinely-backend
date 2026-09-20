@@ -23,7 +23,7 @@ public final class Weekdays {
     }
 
     public static boolean isValidCode(String code) {
-        return CODES.contains(code);
+        return code != null && CODES.contains(code);
     }
 
     /**

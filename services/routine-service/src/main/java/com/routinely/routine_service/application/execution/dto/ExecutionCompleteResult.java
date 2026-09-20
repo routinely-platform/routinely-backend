@@ -3,6 +3,7 @@ package com.routinely.routine_service.application.execution.dto;
 import com.routinely.routine_service.domain.execution.ExecutionStatus;
 import com.routinely.routine_service.domain.execution.RoutineExecution;
 
+import com.routinely.routine_service.domain.feed.FeedCard;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -18,16 +19,17 @@ public record ExecutionCompleteResult(
         LocalDate scheduledDate,
         ExecutionStatus status,
         LocalDateTime completedAt,
-        String photoUrl) {
+        String photoUrl, Long feedCardId) {
 
-    public static ExecutionCompleteResult from(RoutineExecution execution) {
+    public static ExecutionCompleteResult from(RoutineExecution execution, FeedCard card) {
         return new ExecutionCompleteResult(
                 execution.getId(),
                 execution.getRoutineId(),
                 execution.getScheduledDate(),
                 execution.getStatus(),
                 execution.getCompletedAt(),
-                execution.getPhotoUrl()
+                card == null ? null : card.getPhotoUrl(),
+                card == null ? null : card.getId()
         );
     }
 
@@ -36,6 +38,6 @@ public record ExecutionCompleteResult(
      */
     public static ExecutionCompleteResult cancelled(Long routineId, LocalDate scheduledDate) {
         return new ExecutionCompleteResult(
-                null, routineId, scheduledDate, ExecutionStatus.PENDING, null, null);
+                null, routineId, scheduledDate, ExecutionStatus.PENDING, null, null, null);
     }
 }

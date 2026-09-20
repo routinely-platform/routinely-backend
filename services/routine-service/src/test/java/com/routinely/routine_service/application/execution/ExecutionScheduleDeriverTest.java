@@ -1,7 +1,7 @@
 package com.routinely.routine_service.application.execution;
 
 import com.routinely.routine_service.domain.execution.ExecutionStatus;
-import com.routinely.routine_service.domain.template.RoutineTemplate;
+import com.routinely.routine_service.domain.definition.RoutineDefinition;
 import com.routinely.routine_service.domain.template.ScheduleType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -19,8 +19,8 @@ class ExecutionScheduleDeriverTest {
     private static final LocalDate YESTERDAY = TODAY.minusDays(1);
     private static final LocalDate TOMORROW = TODAY.plusDays(1);
 
-    private static RoutineTemplate template(ScheduleType type, Short days, Integer count) {
-        return RoutineTemplate.forPersonal(1L, "러닝", "EXERCISE", type, days, count);
+    private static RoutineDefinition template(ScheduleType type, Short days, Integer count) {
+        return RoutineDefinition.of("러닝", "EXERCISE", type, days, count);
     }
 
     /** 해당 날짜의 요일을 포함하는 비트마스크. */
@@ -36,7 +36,7 @@ class ExecutionScheduleDeriverTest {
     @Nested
     @DisplayName("DAILY")
     class Daily {
-        private final RoutineTemplate t = template(ScheduleType.DAILY, null, null);
+        private final RoutineDefinition t = template(ScheduleType.DAILY, null, null);
 
         @Test
         @DisplayName("오늘은_PENDING_과거는_MISSED_미래는_PENDING")
@@ -60,9 +60,9 @@ class ExecutionScheduleDeriverTest {
         @Test
         @DisplayName("지정요일이면_오늘PENDING_과거MISSED_미래PENDING")
         void dueDay_derivesLikeObligation() {
-            RoutineTemplate today = template(ScheduleType.SPECIFIC_DAYS, maskOf(TODAY), null);
-            RoutineTemplate yest = template(ScheduleType.SPECIFIC_DAYS, maskOf(YESTERDAY), null);
-            RoutineTemplate tom = template(ScheduleType.SPECIFIC_DAYS, maskOf(TOMORROW), null);
+            RoutineDefinition today = template(ScheduleType.SPECIFIC_DAYS, maskOf(TODAY), null);
+            RoutineDefinition yest = template(ScheduleType.SPECIFIC_DAYS, maskOf(YESTERDAY), null);
+            RoutineDefinition tom = template(ScheduleType.SPECIFIC_DAYS, maskOf(TOMORROW), null);
 
             assertThat(ExecutionScheduleDeriver.deriveStatus(today, TODAY, TODAY)).contains(ExecutionStatus.PENDING);
             assertThat(ExecutionScheduleDeriver.deriveStatus(yest, YESTERDAY, TODAY)).contains(ExecutionStatus.MISSED);
@@ -72,9 +72,9 @@ class ExecutionScheduleDeriverTest {
         @Test
         @DisplayName("지정요일이아니면_어떤날도_표시하지않는다")
         void offDay_derivesNothing() {
-            RoutineTemplate today = template(ScheduleType.SPECIFIC_DAYS, maskExcluding(TODAY), null);
-            RoutineTemplate yest = template(ScheduleType.SPECIFIC_DAYS, maskExcluding(YESTERDAY), null);
-            RoutineTemplate tom = template(ScheduleType.SPECIFIC_DAYS, maskExcluding(TOMORROW), null);
+            RoutineDefinition today = template(ScheduleType.SPECIFIC_DAYS, maskExcluding(TODAY), null);
+            RoutineDefinition yest = template(ScheduleType.SPECIFIC_DAYS, maskExcluding(YESTERDAY), null);
+            RoutineDefinition tom = template(ScheduleType.SPECIFIC_DAYS, maskExcluding(TOMORROW), null);
 
             assertThat(ExecutionScheduleDeriver.deriveStatus(today, TODAY, TODAY)).isEmpty();
             assertThat(ExecutionScheduleDeriver.deriveStatus(yest, YESTERDAY, TODAY)).isEmpty();
@@ -99,7 +99,7 @@ class ExecutionScheduleDeriverTest {
         @DisplayName("오늘만_PENDING이고_과거미래는_표시하지않는다(결석없음)")
         void todayPending_pastFutureOmitted() {
             for (ScheduleType type : new ScheduleType[]{ScheduleType.WEEKLY_COUNT, ScheduleType.MONTHLY_COUNT}) {
-                RoutineTemplate t = template(type, null, 3);
+                RoutineDefinition t = template(type, null, 3);
                 assertThat(ExecutionScheduleDeriver.deriveStatus(t, TODAY, TODAY))
                         .as("%s 오늘", type).contains(ExecutionStatus.PENDING);
                 assertThat(ExecutionScheduleDeriver.deriveStatus(t, YESTERDAY, TODAY))

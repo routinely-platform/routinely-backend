@@ -1,0 +1,188 @@
+package com.routinely.routine_service.application.execution;
+
+import com.routinely.core.exception.BusinessException;
+import com.routinely.jpa.config.JpaAuditingConfig;
+import com.routinely.routine_service.application.execution.dto.CompleteExecutionCommand;
+import com.routinely.routine_service.domain.definition.RoutineDefinition;
+import com.routinely.routine_service.domain.execution.RoutineExecutionRepository;
+import com.routinely.routine_service.domain.feed.FeedCardRepository;
+import com.routinely.routine_service.domain.routine.Routine;
+import com.routinely.routine_service.domain.routine.RoutineRepository;
+import com.routinely.routine_service.domain.template.RoutineTemplate;
+import com.routinely.routine_service.domain.template.RoutineTemplateRepository;
+import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.storage.FileStorage;
+import com.routinely.storage.StoredFile;
+import org.junit.jupiter.api.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
+import java.time.*;
+import java.util.List;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+
+@DataJpaTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@ActiveProfiles("test")
+@Import({JpaAuditingConfig.class, RoutineExecutionServiceImpl.class, ExecutionFeedIntegrationTest.Config.class})
+@Transactional(propagation = Propagation.NOT_SUPPORTED)
+@DisplayName("인증과 피드 카드 트랜잭션")
+class ExecutionFeedIntegrationTest {
+    private static final LocalDate TODAY = LocalDate.of(2026, 9, 13);
+    @Autowired RoutineExecutionService service;
+    @Autowired RoutineRepository routines;
+    @Autowired RoutineTemplateRepository templates;
+    @Autowired RoutineExecutionRepository executions;
+    @Autowired FeedCardRepository cards;
+    @Autowired JdbcTemplate jdbc;
+    @Autowired PlatformTransactionManager transactions;
+    @Autowired FileStorage storage;
+
+    @TestConfiguration
+    static class Config {
+        @Bean Clock clock() { return Clock.fixed(Instant.parse("2026-09-13T03:00:00Z"), ZoneId.of("Asia/Seoul")); }
+        @Bean FileStorage fileStorage() { return mock(FileStorage.class); }
+    }
+
+    @BeforeEach
+    @AfterEach
+    void cleanDatabase() {
+        jdbc.update("DELETE FROM feed_reactions");
+        jdbc.update("DELETE FROM feed_cards");
+        jdbc.update("DELETE FROM routine_executions");
+        jdbc.update("DELETE FROM routines");
+        jdbc.update("DELETE FROM routine_templates");
+        reset(storage);
+    }
+
+    private Long routine() {
+        return routines.saveAndFlush(Routine.forPersonal(null, 1L,
+                RoutineDefinition.of("물 한 잔", "HEALTH", ScheduleType.DAILY, null, null),
+                TODAY.minusDays(10), null, null)).getId();
+    }
+    private CompleteExecutionCommand command(Long id, boolean photo) {
+        return new CompleteExecutionCommand(id, 1L, TODAY, photo ? "a.jpg" : null,
+                photo ? "image/jpeg" : null, photo ? new byte[]{(byte)255, (byte)216, (byte)255} : null, "기록");
+    }
+
+    @Test @DisplayName("다중 완료는 선택한 세 루틴마다 카드 한 장을 만든다")
+    void bulkComplete_createsThreeCards() {
+        var ids = List.of(routine(), routine(), routine());
+        var result = service.bulkComplete(1L, TODAY, ids);
+        assertThat(result).hasSize(3);
+        assertThat(executions.count()).isEqualTo(3);
+        assertThat(cards.findAll()).hasSize(3).allSatisfy(card -> {
+            assertThat(card.getRoutineTitle()).isEqualTo("물 한 잔");
+            assertThat(card.getScheduledDate()).isEqualTo(TODAY);
+            assertThat(card.getPhotoUrl()).isNull();
+        });
+        assertThat(result).allSatisfy(row -> assertThat(row.feedCardId()).isNotNull());
+    }
+
+    @Test @DisplayName("다중 완료 중 뒤의 루틴이 실패하면 앞서 저장한 실행과 카드도 롤백한다")
+    void bulkComplete_failureRollsBackAll() {
+        Long active = routine();
+        Long stopped = routine();
+        jdbc.update("UPDATE routines SET is_active = false WHERE id = ?", stopped);
+        assertThatThrownBy(() -> service.bulkComplete(1L, TODAY, List.of(active, stopped)))
+                .isInstanceOf(BusinessException.class);
+        assertThat(executions.count()).isZero();
+        assertThat(cards.count()).isZero();
+    }
+
+    @Test @DisplayName("빈 목록의 다중 완료도 정상 처리한다")
+    void bulkComplete_emptyListReturnsZero() {
+        assertThat(service.bulkComplete(1L, TODAY, List.of())).isEmpty();
+        assertThat(cards.count()).isZero();
+    }
+
+    @Test @DisplayName("리액션이 있어도 취소하면 카드와 실행이 삭제되고 커밋 후 사진을 지운다")
+    void cancel_cascadesReactionsAndDeletesPhotoAfterCommit() {
+        when(storage.upload(any())).thenReturn(new StoredFile("photo-key", "https://cdn/a.jpg"));
+        Long id = routine();
+        var completed = service.complete(command(id, true));
+        jdbc.update("INSERT INTO feed_reactions(feed_card_id, user_id, emoji) VALUES (?, 2, '🔥')", completed.feedCardId());
+        new TransactionTemplate(transactions).executeWithoutResult(tx -> {
+            service.cancelComplete(id, 1L, TODAY);
+            verify(storage, never()).delete(any());
+        });
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM feed_reactions", Long.class)).isZero();
+        assertThat(cards.count()).isZero();
+        assertThat(executions.count()).isZero();
+        verify(storage).delete("photo-key");
+    }
+
+    @Test @DisplayName("취소 트랜잭션이 롤백되면 카드와 실행과 사진을 유지한다")
+    void cancel_rollbackKeepsPhoto() {
+        when(storage.upload(any())).thenReturn(new StoredFile("photo-key", "https://cdn/a.jpg"));
+        Long id = routine();
+        service.complete(command(id, true));
+        new TransactionTemplate(transactions).executeWithoutResult(tx -> {
+            service.cancelComplete(id, 1L, TODAY);
+            tx.setRollbackOnly();
+        });
+        assertThat(cards.count()).isEqualTo(1);
+        assertThat(executions.count()).isEqualTo(1);
+        verify(storage, never()).delete(any());
+    }
+
+    @Test @DisplayName("카드 저장 실패로 완료가 롤백되면 업로드 사진을 보상 삭제한다")
+    void complete_cardFailureCompensatesPhoto() {
+        when(storage.upload(any())).thenReturn(new StoredFile("photo-key", "x".repeat(501)));
+        Long id = routine();
+        assertThatThrownBy(() -> service.complete(command(id, true)))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(executions.count()).isZero();
+        assertThat(cards.count()).isZero();
+        verify(storage).delete("photo-key");
+    }
+
+    @Test @DisplayName("카드보다 실행을 먼저 삭제하면 외래키가 잘못된 순서를 차단한다")
+    void delete_executionBeforeCardViolatesForeignKey() {
+        var completed = service.complete(command(routine(), false));
+        assertThatThrownBy(() -> jdbc.update("DELETE FROM routine_executions WHERE id = ?", completed.executionId()))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(cards.count()).isEqualTo(1);
+    }
+
+    @Test @DisplayName("템플릿 변경과 삭제 후에도 루틴 스케줄이 유지되고 제목 수정 후에도 피드 스냅샷은 유지된다")
+    void complete_templateChangesDoNotRewriteHistory() {
+        var template = templates.saveAndFlush(RoutineTemplate.forPersonal(1L,
+                RoutineDefinition.of("원래 제목", "HEALTH", ScheduleType.DAILY, null, null)));
+        var routine = routines.saveAndFlush(Routine.forPersonal(template.getId(), 1L,
+                template.getDefinition().copy(), TODAY.minusDays(10), null, null));
+        jdbc.update("UPDATE routine_templates SET title = '새 템플릿', schedule_type = 'WEEKLY_COUNT', target_count = 2, is_deleted = true WHERE id = ?", template.getId());
+        var completed = service.complete(command(routine.getId(), false));
+        jdbc.update("UPDATE routines SET title = '새 루틴 제목' WHERE id = ?", routine.getId());
+        assertThat(cards.findById(completed.feedCardId()).orElseThrow().getRoutineTitle()).isEqualTo("원래 제목");
+        assertThat(service.getMyExecutions(1L, routine.getId(), null, TODAY.minusDays(1), TODAY)).hasSize(2);
+    }
+
+    @Test @DisplayName("템플릿과 루틴의 두 CHECK 모두 주간 7회와 월간 29회를 차단한다")
+    void scheduleChecks_enforceBothUpperBounds() {
+        var template = templates.saveAndFlush(RoutineTemplate.forPersonal(1L,
+                RoutineDefinition.of("원래 제목", "HEALTH", ScheduleType.DAILY, null, null)));
+        Long id = routine();
+        for (String table : List.of("routine_templates", "routines")) {
+            Long targetId = table.equals("routines") ? id : template.getId();
+            assertThat(jdbc.update("UPDATE " + table + " SET schedule_type = 'WEEKLY_COUNT', target_count = 6 WHERE id = ?", targetId)).isEqualTo(1);
+            assertThat(jdbc.update("UPDATE " + table + " SET schedule_type = 'MONTHLY_COUNT', target_count = 28 WHERE id = ?", targetId)).isEqualTo(1);
+            assertThatThrownBy(() -> jdbc.update("UPDATE " + table + " SET schedule_type = 'WEEKLY_COUNT', target_count = 7 WHERE id = ?", targetId))
+                    .isInstanceOf(DataIntegrityViolationException.class);
+            assertThatThrownBy(() -> jdbc.update("UPDATE " + table + " SET schedule_type = 'MONTHLY_COUNT', target_count = 29 WHERE id = ?", targetId))
+                    .isInstanceOf(DataIntegrityViolationException.class);
+        }
+    }
+}

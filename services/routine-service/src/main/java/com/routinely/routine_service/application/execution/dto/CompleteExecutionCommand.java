@@ -12,7 +12,7 @@ import java.util.Objects;
  *
  * @param routineId        완료 대상 루틴
  * @param userId           요청자 (소유권 검증용)
- * @param scheduledDate    완료 처리할 날짜(오늘만 허용)
+ * @param scheduledDate    완료 처리할 날짜(수행 기간 내 과거·오늘 허용)
  * @param originalFilename 원본 파일명 (확장자 추출용, 사진 없으면 null)
  * @param contentType      MIME 타입 (사진 없으면 null)
  * @param photoBytes       인증 사진 바이트 (선택)

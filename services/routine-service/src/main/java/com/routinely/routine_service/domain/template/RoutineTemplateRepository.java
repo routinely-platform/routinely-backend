@@ -21,6 +21,10 @@ public interface RoutineTemplateRepository extends JpaRepository<RoutineTemplate
      */
     List<RoutineTemplate> findAllByUserIdAndChallengeIdIsNullAndIsDeletedFalseOrderByIdDesc(Long userId);
 
-    List<RoutineTemplate> findAllByUserIdAndChallengeIdIsNullAndCategoryCodeAndIsDeletedFalseOrderByIdDesc(
+    /**
+     * 정의가 {@code RoutineDefinition} 임베더블로 묶여 있어 경로가 {@code definition.categoryCode} 다.
+     * 메서드명의 {@code Definition} 조각이 그 중첩을 가리킨다 (ADR-0040).
+     */
+    List<RoutineTemplate> findAllByUserIdAndChallengeIdIsNullAndDefinitionCategoryCodeAndIsDeletedFalseOrderByIdDesc(
             Long userId, String categoryCode);
 }

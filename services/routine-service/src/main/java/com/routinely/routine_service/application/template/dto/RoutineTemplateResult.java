@@ -1,5 +1,6 @@
 package com.routinely.routine_service.application.template.dto;
 
+import com.routinely.routine_service.domain.definition.RoutineDefinition;
 import com.routinely.routine_service.domain.template.RoutineTemplate;
 import com.routinely.routine_service.domain.template.ScheduleType;
 
@@ -13,13 +14,14 @@ public record RoutineTemplateResult(
         Long challengeId) {
 
     public static RoutineTemplateResult from(RoutineTemplate template) {
+        RoutineDefinition definition = template.getDefinition();
         return new RoutineTemplateResult(
                 template.getId(),
-                template.getTitle(),
-                template.getCategoryCode(),
-                template.getScheduleType(),
-                template.getDaysOfWeek(),
-                template.getTargetCount(),
+                definition.getTitle(),
+                definition.getCategoryCode(),
+                definition.getScheduleType(),
+                definition.getDaysOfWeek(),
+                definition.getTargetCount(),
                 template.getChallengeId()
         );
     }

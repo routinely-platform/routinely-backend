@@ -4,11 +4,8 @@ import com.routinely.core.exception.BusinessException;
 import com.routinely.core.exception.ErrorCode;
 import com.routinely.core.response.ApiResponse;
 import com.routinely.routine_service.application.routine.RoutineService;
-import com.routinely.routine_service.application.routine.dto.PreferencesResult;
 import com.routinely.routine_service.application.routine.dto.RoutineResult;
 import com.routinely.routine_service.presentation.rest.routine.dto.request.StartRoutineRequest;
-import com.routinely.routine_service.presentation.rest.routine.dto.request.UpdateRoutinePreferencesRequest;
-import com.routinely.routine_service.presentation.rest.routine.dto.response.RoutinePreferencesResponse;
 import com.routinely.routine_service.presentation.rest.routine.dto.response.RoutineResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -35,7 +32,7 @@ class RoutineControllerTest {
 
     private static final RoutineResult RESULT = new RoutineResult(
             100L, 10L, "아침 러닝 30분", null,
-            LocalDate.of(2026, 2, 1), LocalDate.of(2026, 3, 2), LocalTime.of(7, 0), null, true);
+            LocalDate.of(2026, 2, 1), LocalDate.of(2026, 3, 2), LocalTime.of(7, 0), null, true, "EXERCISE", "DAILY", null, null);
 
     @Test
     @DisplayName("루틴시작하면_201과시작메시지를반환한다")
@@ -110,34 +107,13 @@ class RoutineControllerTest {
     }
 
     @Test
-    @DisplayName("선호설정하면_변환한시각과요일비트마스크를서비스에전달하고설정메시지를반환한다")
-    void updatePreferences_delegatesParsedValues() {
-        short monWedFri = 0b0010101;
-        when(routineService.updatePreferences(100L, 1L, LocalTime.of(7, 0), monWedFri))
-                .thenReturn(new PreferencesResult(100L, LocalTime.of(7, 0), monWedFri));
-
-        ResponseEntity<ApiResponse<RoutinePreferencesResponse>> response = controller.updatePreferences(
-                1L, 100L, new UpdateRoutinePreferencesRequest("07:00:00", List.of("MON", "WED", "FRI")));
-
+    @DisplayName("루틴 수정 요청은 새 계약으로 서비스에 전달한다")
+    void updateRoutine_delegates() {
+        var request = org.springframework.beans.BeanUtils.instantiateClass(
+                com.routinely.routine_service.presentation.rest.routine.dto.RoutineDto.UpdateRequest.class);
+        when(routineService.update(org.mockito.ArgumentMatchers.eq(100L), org.mockito.ArgumentMatchers.eq(1L), any())).thenReturn(RESULT);
+        var response = controller.updateRoutine(1L, 100L, request);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody().getMessage()).isEqualTo("알림 설정이 저장되었습니다.");
         assertThat(response.getBody().getData().routineId()).isEqualTo(100L);
-        assertThat(response.getBody().getData().preferredTime()).isEqualTo("07:00:00");
-        assertThat(response.getBody().getData().preferredDays()).containsExactly("MON", "WED", "FRI");
-        verify(routineService).updatePreferences(100L, 1L, LocalTime.of(7, 0), monWedFri);
-    }
-
-    @Test
-    @DisplayName("선호시각과요일을null로보내면_해제로서비스에null을전달한다")
-    void updatePreferences_whenNull_delegatesNull() {
-        when(routineService.updatePreferences(100L, 1L, null, null))
-                .thenReturn(new PreferencesResult(100L, null, null));
-
-        ResponseEntity<ApiResponse<RoutinePreferencesResponse>> response = controller.updatePreferences(
-                1L, 100L, new UpdateRoutinePreferencesRequest(null, null));
-
-        assertThat(response.getBody().getData().preferredTime()).isNull();
-        assertThat(response.getBody().getData().preferredDays()).isNull();
-        verify(routineService).updatePreferences(100L, 1L, null, null);
     }
 }
