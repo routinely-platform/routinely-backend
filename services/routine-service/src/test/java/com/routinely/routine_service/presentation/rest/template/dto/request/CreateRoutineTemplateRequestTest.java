@@ -1,5 +1,6 @@
 package com.routinely.routine_service.presentation.rest.template.dto.request;
 
+import com.routinely.routine_service.presentation.rest.common.ScheduleValidation;
 import com.routinely.routine_service.application.template.dto.CreateRoutineTemplateCommand;
 import com.routinely.routine_service.domain.template.ScheduleType;
 import jakarta.validation.ConstraintViolation;
@@ -181,5 +182,12 @@ class CreateRoutineTemplateRequestTest {
         assertThat(command.scheduleType()).isEqualTo(ScheduleType.SPECIFIC_DAYS);
         assertThat(command.daysOfWeek()).isEqualTo((short) 0b0010101); // 월·수·금
         assertThat(command.targetCount()).isNull();
+    }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({"WEEKLY_COUNT,6,true", "WEEKLY_COUNT,7,false", "MONTHLY_COUNT,28,true", "MONTHLY_COUNT,29,false"})
+    @DisplayName("템플릿의 빈도 목표는 유형별 상한까지 허용한다")
+    void validate_targetUpperBounds(String type, int count, boolean valid) {
+        var request = new CreateRoutineTemplateRequest("루틴", "HEALTH", type, null, count);
+        assertThat(validator.validate(request).isEmpty()).isEqualTo(valid);
     }
 }

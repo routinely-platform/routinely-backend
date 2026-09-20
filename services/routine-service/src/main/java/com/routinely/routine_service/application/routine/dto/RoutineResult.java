@@ -14,22 +14,26 @@ public record RoutineResult(
         LocalDate endedAt,
         LocalTime preferredTime,
         Short preferredDays,
-        boolean isActive) {
+        boolean isActive, String categoryCode, String scheduleType, Short daysOfWeek, Integer targetCount) {
 
     /**
-     * @param title 기반 템플릿의 이름 — routines 테이블에는 없으므로 호출 측이 템플릿에서 조회해 전달한다.
+     * 루틴이 자기 정의를 갖는다 — 제목을 얻으려고 템플릿을 조회하지 않는다 (ADR-0040).
      */
-    public static RoutineResult from(Routine routine, String title) {
+    public static RoutineResult from(Routine routine) {
         return new RoutineResult(
                 routine.getId(),
                 routine.getRoutineTemplateId(),
-                title,
+                routine.getDefinition().getTitle(),
                 routine.getChallengeId(),
                 routine.getStartedAt(),
                 routine.getEndedAt(),
                 routine.getPreferredTime(),
                 routine.getPreferredDays(),
-                routine.isActive()
+                routine.isActive(),
+                routine.getDefinition().getCategoryCode(),
+                routine.getDefinition().getScheduleType().name(),
+                routine.getDefinition().getDaysOfWeek(),
+                routine.getDefinition().getTargetCount()
         );
     }
 }

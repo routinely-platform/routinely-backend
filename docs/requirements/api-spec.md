@@ -939,6 +939,22 @@ public class ApiResponse<T> {
 }
 ```
 
+**직접 정의 입력도 가능** — `routineTemplateId` 대신 아래 필드를 보낸다. 둘 다 주거나 둘 다 없으면 400.
+```json
+{
+  "title": "아침 물 한 잔",
+  "categoryCode": "HEALTH",
+  "scheduleType": "DAILY",
+  "startedAt": "2026-09-14"
+}
+```
+- 정의는 `title`(1~100자), `categoryCode`(1~30자), `scheduleType`, `daysOfWeek`, `targetCount`다.
+- `DAILY`는 요일·횟수 없음, `SPECIFIC_DAYS`는 MON~SUN 요일 목록 필수, 빈도형은 목표 횟수 필수.
+- `WEEKLY_COUNT`는 1~6회, `MONTHLY_COUNT`는 1~28회다. 템플릿에도 같은 제약을 적용한다.
+- `startedAt`은 서울 날짜 기준 오늘부터 90일 전까지 허용하며 미래 시작도 가능하다.
+- `endedAt`은 선택이고 `null`이면 무기한. 지정하면 시작일 이상이며 양 끝 포함 최대 366일이다.
+- 루틴은 정의를 복사해 저장한다. 이후 템플릿 수정·소프트 삭제는 기존 루틴에 영향을 주지 않는다.
+
 > **개인 루틴만** 시작한다. 요청의 `routineTemplateId`는 요청자 본인 소유의 개인 템플릿이어야 한다.
 > 챌린지 루틴 인스턴스는 이 API로 만들지 않는다 — `challenge.started` 수신 시 `preferredTime = null`로 자동 생성되며, 멤버가 이후 `PATCH /api/v1/routines/{routineId}`(#139)로 설정한다 (ADR-0032, ADR-0035).
 > `preferredTime`(HH:mm:ss)은 알림 발송 기준 시각이며 선택값이다. 생략(`null`)하면 리마인더를 발송하지 않는다.
@@ -953,6 +969,10 @@ public class ApiResponse<T> {
     "routineId": 1,
     "routineTemplateId": 1,
     "title": "아침 달리기",
+    "categoryCode": "EXERCISE",
+    "scheduleType": "DAILY",
+    "daysOfWeek": null,
+    "targetCount": null,
     "challengeId": null,
     "startedAt": "2025-02-01",
     "endedAt": "2025-03-02",
@@ -968,7 +988,7 @@ public class ApiResponse<T> {
 - `403 FORBIDDEN` — 본인 소유 템플릿이 아님 / 챌린지 연결 템플릿(챌린지 루틴은 자동 생성)
 - `404 ROUTINE_TEMPLATE_NOT_FOUND` — 없거나 삭제된 템플릿
 
-> 구현 이슈: #56
+> 구현 이슈: #56 · #57
 
 ---
 
@@ -1031,38 +1051,40 @@ public class ApiResponse<T> {
 
 ---
 
-#### `PATCH /api/v1/routines/{routineId}` — 선호 설정(시각·요일) 설정/수정
+#### `PATCH /api/v1/routines/{routineId}` — 루틴 정의·기간·선호 설정 수정
 - Auth: ✅
 
-**Request**
+**Request** — 모든 필드는 선택. 생략 또는 `null`은 기존 값을 유지한다.
 ```json
 {
-  "preferredTime": "07:00:00",
-  "preferredDays": ["MON", "WED", "FRI"]
+  "title": "저녁 달리기",
+  "preferredTime": "19:00:00",
+  "clearEndedAt": true
 }
 ```
 
-> 본인 루틴 인스턴스의 선호 수행 시각(알림 발송 기준)과 선호 요일을 설정·수정한다. 각 필드 값이 그대로 새 값이 되며, `null`(또는 필드 생략)이면 해당 설정을 해제한다(시각 `null` → 리마인더 끔).
-> **선호 요일은 soft다** — 알림/표시용일 뿐 완료를 제약하지 않는다. 빈도 유형(`WEEKLY_COUNT`/`MONTHLY_COUNT`) 루틴에서 "월화수 선호"여도 목·금·토에 수행해 목표 횟수를 채우면 달성이다 (ADR-0039).
-> 개인/챌린지 루틴 모두 인스턴스 단위로 멤버가 직접 설정한다 (ADR-0035).
->
-> 구현 이슈: #139 (선호 요일은 #149에서 추가). 루틴 시작 시 최초 시각 설정은 #56 `POST /routines`에서 처리.
+| 필드 | 개인 루틴 | 챌린지 루틴 |
+|---|---|---|
+| `title`, `categoryCode` | 수정 가능 | 403 |
+| `scheduleType`, `daysOfWeek`, `targetCount` | 완료 기록 0건일 때만 | 403 |
+| `startedAt` | 완료 기록 0건일 때만, 오늘부터 90일 전까지 | 403 |
+| `endedAt` | 시작일 포함 366일 이내, 마지막 완료일 이상 | 403 |
+| `preferredTime`, `preferredDays` | 수정 가능 | 수정 가능 |
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "알림 설정이 저장되었습니다.",
-  "data": {
-    "routineId": 1,
-    "preferredTime": "07:00:00",
-    "preferredDays": ["MON", "WED", "FRI"]
-  }
-}
-```
+- 스케줄 수정은 유형과 그에 맞는 요일/목표 횟수 전체를 보낸다. 유형을 바꾸면 이전 유형의 값은 제거된다.
+- 해제는 `clearEndedAt`, `clearPreferredTime`, `clearPreferredDays`를 `true`로 보낸다.
+  해제 옵션과 해당 값을 함께 보내면 400. 빈 `preferredDays` 대신 명시적 해제를 사용한다.
+- 제목만 보내도 선호 설정은 유지된다. 선호 요일은 알림/표시용이고 완료 요일을 제한하지 않는다.
+- 주기·시작일은 완료 기록이 한 건이라도 있으면 `400 VALIDATION_FAILED`다. 과거 MISSED 판정이
+  통째로 뒤집히기 때문이다(ADR-0040). 정의를 바꾸려면 루틴을 중단하고 새로 시작한다.
+
+**Response** `200` — `message: "루틴이 수정되었습니다."`, `data`는 루틴 생성·목록과 같은 `RoutineResponse`다.
+`categoryCode`, `scheduleType`, `daysOfWeek`, `targetCount`도 루틴 자체 정의로 반환한다.
 
 **Error**
-- `400 VALIDATION_FAILED` — `preferredTime` 형식 오류(HH:mm:ss 아님) / 유효하지 않은 요일 코드
+- `400 VALIDATION_FAILED` — 잘못된 입력 / 해제 옵션 충돌 / 기간 상한 / 마지막 완료일 이전으로 단축 /
+  완료 기록이 있는 루틴의 주기·시작일 수정
+- `403 FORBIDDEN` — 챌린지 루틴 정의·기간 수정
 - `404 ROUTINE_NOT_FOUND` — 없거나 본인 소유가 아닌 루틴
 
 ---
@@ -1071,6 +1093,11 @@ public class ApiResponse<T> {
 - Auth: ✅ (소유자만)
 
 > 물리 삭제하지 않고 `is_active = false`로 전환한다(중단). 이미 중단된 루틴에 대해서도 멱등하게 동작한다.
+> 중단한 루틴은 "오늘 할 일" 파생과 달성률 집계에서 빠지고 완료 이력만 남는다 (ADR-0038).
+>
+> **개인 루틴만 중단할 수 있다.** 챌린지 루틴은 `403 FORBIDDEN` — 모든 참여자에게 고정으로 적용되고
+> (ADR-0036) 인스턴스가 멤버 수만큼 존재해 한 사람이 내려도 챌린지가 끝나지 않는다. 중단을 허용하면
+> 랭킹에서 조용히 이탈하는 통로가 되므로, 챌린지에서 빠지는 수단은 챌린지 탈퇴 하나로 둔다.
 
 **Response** `200`
 ```json
@@ -1088,11 +1115,22 @@ public class ApiResponse<T> {
 
 ---
 
-### 3-3. 루틴 실행 기록
+### 3-3. 루틴 실행 기록 (sparse 저장, ADR-0038)
 
-#### `GET /api/v1/routine-executions` — 실행 기록 조회
+> 사용자가 명시적으로 남긴 행동(현재는 완료)만 저장하고, PENDING/MISSED는 저장하지 않고 스케줄 due
+> 판정(ADR-0039)으로 조회 시 파생한다. 행이 사전에 없으므로 완료 대상은 `executionId`가 아니라
+> `routineId + date`로 지정한다.
+>
+> **백필 허용** — 완료·완료 취소는 아직 오지 않은 날만 아니면 수행 기간 내 어느 날짜든 가능하다.
+> 깜빡한 하루를 나중에 채우면 그 자리의 MISSED는 자동으로 사라진다.
+>
+> **중단(비활성) 루틴** — 완료 이력만 조회되고 PENDING/MISSED는 파생되지 않는다. 완료는 거부, 취소는 허용.
+
+#### `GET /api/v1/routine-executions` — 실행 기록 조회 (완료 + 파생 병합)
 - Auth: ✅
-- Query: `date` (YYYY-MM-DD), `startDate`, `endDate`, `routineId`, `status`
+- Query: `date` (YYYY-MM-DD) **또는** `startDate`+`endDate` (둘 중 하나 필수, 함께 사용 불가, 최대 366일),
+  `routineId`(선택), `status`(선택: `PENDING`/`COMPLETED`/`MISSED`)
+- `executionId`/`feedCardId`/`completedAt`/`photoUrl`/`memo`는 저장된 완료 기록에만 있고, 파생 PENDING/MISSED에서는 `null`
 
 **Response** `200`
 ```json
@@ -1102,13 +1140,25 @@ public class ApiResponse<T> {
   "data": [
     {
       "executionId": 101,
+      "feedCardId": 201,
       "routineId": 1,
       "title": "아침 달리기",
-      "scheduledDate": "2025-02-15",
+      "scheduledDate": "2026-07-24",
       "status": "COMPLETED",
-      "completedAt": "2025-02-15T07:30:00Z",
+      "completedAt": "2026-07-24T07:30:00Z",
       "photoUrl": "https://s3.../photo.jpg",
       "memo": "오늘도 완료!"
+    },
+    {
+      "executionId": null,
+      "feedCardId": null,
+      "routineId": 2,
+      "title": "주 3회 헬스",
+      "scheduledDate": "2026-07-24",
+      "status": "PENDING",
+      "completedAt": null,
+      "photoUrl": null,
+      "memo": null
     }
   ]
 }
@@ -1116,16 +1166,14 @@ public class ApiResponse<T> {
 
 ---
 
-#### `POST /api/v1/routine-executions/{executionId}/complete` — 루틴 완료 처리
+#### `POST /api/v1/routines/{routineId}/executions/{date}/complete` — 루틴 완료 처리
 - Auth: ✅
-
-**Request**
-```json
-{
-  "photoUrl": "https://s3.../photo.jpg",
-  "memo": "오늘도 완료!"
-}
-```
+- Content-Type: `multipart/form-data` — `photo`(파일, 선택), `memo`(텍스트, 선택)
+- `{date}`는 **미래가 아니어야** 하고(지난 날짜 허용 — 백필), 루틴 수행 기간 내·수행 가능 요일이어야 하며,
+  이미 완료면 `409 EXECUTION_ALREADY_COMPLETED`
+- 중단한 루틴은 완료할 수 없다 (`400 VALIDATION_FAILED`)
+- 메모: 최대 500자. 사진·메모는 `feed_cards`에서 읽으며 완료 사실에는 중복 저장하지 않는다.
+- 사진: `image/jpeg`·`image/png`·`image/webp`, 5MB 이하, 매직넘버 검증. multipart 전체 요청은 헤더·메모를 포함해 6MB 이하.
 
 **Response** `200`
 ```json
@@ -1134,17 +1182,23 @@ public class ApiResponse<T> {
   "message": "루틴이 완료 처리되었습니다.",
   "data": {
     "executionId": 101,
+      "feedCardId": 201,
+    "routineId": 1,
+    "scheduledDate": "2026-07-24",
     "status": "COMPLETED",
-    "completedAt": "2025-02-15T07:30:00Z",
-    "feedCardId": 55
+    "completedAt": "2026-07-24T07:30:00Z",
+    "photoUrl": "https://s3.../photo.jpg"
   }
 }
 ```
 
 ---
 
-#### `DELETE /api/v1/routine-executions/{executionId}/complete` — 완료 취소
+#### `DELETE /api/v1/routines/{routineId}/executions/{date}/complete` — 완료 취소
 - Auth: ✅
+- 날짜 제한 없이 취소 가능하며, 중단한 루틴이어도 허용한다. 완료 행을 삭제해 PENDING(파생)으로 되돌린다.
+  카드 삭제 시 리액션도 CASCADE로 삭제하며, 실행 기록은 카드 삭제를 flush한 뒤 삭제한다.
+  인증 사진은 카드의 `photo_object_key`를 확보한 뒤 커밋 후 삭제한다. 롤백 시 기존 사진은 유지한다.
 
 **Response** `200`
 ```json
@@ -1152,11 +1206,41 @@ public class ApiResponse<T> {
   "success": true,
   "message": "루틴 완료가 취소되었습니다.",
   "data": {
-    "executionId": 101,
-    "status": "PENDING"
+    "executionId": null,
+      "feedCardId": null,
+    "routineId": 1,
+    "scheduledDate": "2026-07-24",
+    "status": "PENDING",
+    "completedAt": null,
+    "photoUrl": null
   }
 }
 ```
+
+---
+
+#### `POST /api/v1/routine-executions/bulk-complete` — 날짜별 다중 완료
+- Auth: ✅
+- Content-Type: `application/json`
+
+```json
+{"scheduledDate": "2026-09-13", "routineIds": [12, 34]}
+```
+
+- 사진·메모 없이 루틴마다 실행 1건과 카드 1장을 같은 트랜잭션으로 생성한다.
+- 단건과 같은 소유권·수행 기간·스케줄·중단·중복 완료 검증을 적용한다. 한 건이라도 실패하면 전체 롤백.
+- ID는 중복 없는 양수 목록. 빈 목록은 200, `createdCount: 0`으로 정상 응답한다.
+- ID 오름차순으로 처리·응답한다. 생성 수는 응답의 `createdCount`이며 스트릭 계산은 포함하지 않는다.
+
+**Response** `200`
+```json
+{
+  "success": true,
+  "message": "루틴이 완료 처리되었습니다.",
+  "data": {"createdCount": 0, "executions": []}
+}
+```
+`executions`의 항목은 단건 완료 응답과 동일하다. 인증 모달·상세 달력의 백필·통계 다중 완료 모두 카드 생성 경로를 공유한다.
 
 ---
 

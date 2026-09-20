@@ -5,6 +5,7 @@ import com.routinely.core.exception.ErrorCode;
 import com.routinely.routine_service.application.template.dto.CreateRoutineTemplateCommand;
 import com.routinely.routine_service.application.template.dto.RoutineTemplateResult;
 import com.routinely.routine_service.application.template.dto.UpdateRoutineTemplateCommand;
+import com.routinely.routine_service.domain.definition.RoutineDefinition;
 import com.routinely.routine_service.domain.category.CategoryRepository;
 import com.routinely.routine_service.domain.template.RoutineTemplate;
 import com.routinely.routine_service.domain.template.RoutineTemplateRepository;
@@ -55,15 +56,13 @@ class RoutineTemplateServiceTest {
     }
 
     private RoutineTemplate personalTemplate() {
-        RoutineTemplate template = RoutineTemplate.forPersonal(
-                OWNER_ID, "아침 러닝 30분", "EXERCISE", ScheduleType.DAILY, null, null);
+        RoutineTemplate template = RoutineTemplate.forPersonal(OWNER_ID, RoutineDefinition.of("아침 러닝 30분", "EXERCISE", ScheduleType.DAILY, null, null));
         ReflectionTestUtils.setField(template, "id", TEMPLATE_ID);
         return template;
     }
 
     private RoutineTemplate challengeTemplate() {
-        RoutineTemplate template = RoutineTemplate.forChallenge(
-                OWNER_ID, 42L, "아침 러닝 30분", "EXERCISE", ScheduleType.WEEKLY_COUNT, null, 3);
+        RoutineTemplate template = RoutineTemplate.forChallenge(OWNER_ID, 42L, RoutineDefinition.of("아침 러닝 30분", "EXERCISE", ScheduleType.WEEKLY_COUNT, null, 3));
         ReflectionTestUtils.setField(template, "id", TEMPLATE_ID);
         return template;
     }
@@ -220,7 +219,7 @@ class RoutineTemplateServiceTest {
             assertThat(results).hasSize(1);
             assertThat(results.getFirst().templateId()).isEqualTo(TEMPLATE_ID);
             verify(templateRepository, never())
-                    .findAllByUserIdAndChallengeIdIsNullAndCategoryCodeAndIsDeletedFalseOrderByIdDesc(
+                    .findAllByUserIdAndChallengeIdIsNullAndDefinitionCategoryCodeAndIsDeletedFalseOrderByIdDesc(
                             any(), anyString());
         }
 
@@ -228,7 +227,7 @@ class RoutineTemplateServiceTest {
         @DisplayName("카테고리필터가있으면_해당카테고리만조회한다")
         void getMyTemplates_withFilter_queriesByCategory() {
             when(templateRepository
-                    .findAllByUserIdAndChallengeIdIsNullAndCategoryCodeAndIsDeletedFalseOrderByIdDesc(
+                    .findAllByUserIdAndChallengeIdIsNullAndDefinitionCategoryCodeAndIsDeletedFalseOrderByIdDesc(
                             OWNER_ID, "EXERCISE"))
                     .thenReturn(List.of(personalTemplate()));
 
@@ -340,7 +339,7 @@ class RoutineTemplateServiceTest {
                     .isInstanceOfSatisfying(BusinessException.class, exception ->
                             assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
 
-            assertThat(template.getCategoryCode()).isEqualTo("EXERCISE");
+            assertThat(template.getDefinition().getCategoryCode()).isEqualTo("EXERCISE");
         }
 
         @Test
@@ -368,7 +367,7 @@ class RoutineTemplateServiceTest {
                     .isInstanceOfSatisfying(BusinessException.class, exception ->
                             assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
 
-            assertThat(template.getScheduleType()).isEqualTo(ScheduleType.DAILY);
+            assertThat(template.getDefinition().getScheduleType()).isEqualTo(ScheduleType.DAILY);
         }
 
         @Test

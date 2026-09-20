@@ -4,13 +4,12 @@ import com.routinely.core.constant.HeaderConstants;
 import com.routinely.core.exception.BusinessException;
 import com.routinely.core.response.ApiResponse;
 import com.routinely.routine_service.application.routine.RoutineService;
-import com.routinely.routine_service.application.routine.dto.PreferencesResult;
 import com.routinely.routine_service.application.routine.dto.RoutineResult;
+import com.routinely.routine_service.presentation.rest.routine.dto.RoutineDto;
 import com.routinely.routine_service.presentation.rest.routine.dto.request.StartRoutineRequest;
-import com.routinely.routine_service.presentation.rest.routine.dto.request.UpdateRoutinePreferencesRequest;
-import com.routinely.routine_service.presentation.rest.routine.dto.response.RoutinePreferencesResponse;
 import com.routinely.routine_service.presentation.rest.routine.dto.response.RoutineResponse;
 import jakarta.validation.Valid;
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -23,9 +22,6 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
-
 import static com.routinely.core.exception.ErrorCode.VALIDATION_FAILED;
 import static org.springframework.http.HttpStatus.CREATED;
 
@@ -65,15 +61,12 @@ public class RoutineController {
     }
 
     @PatchMapping("/{routineId}")
-    public ResponseEntity<ApiResponse<RoutinePreferencesResponse>> updatePreferences(
+    public ResponseEntity<ApiResponse<RoutineResponse>> updateRoutine(
             @RequestHeader(HeaderConstants.USER_ID) Long userId,
             @PathVariable Long routineId,
-            @RequestBody @Valid UpdateRoutinePreferencesRequest request) {
-
-        PreferencesResult result = routineService.updatePreferences(
-                routineId, userId, request.toPreferredTime(), request.toPreferredDays());
-        return ResponseEntity.ok(
-                ApiResponse.ok("알림 설정이 저장되었습니다.", RoutinePreferencesResponse.from(result)));
+            @RequestBody @Valid RoutineDto.UpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok("루틴이 수정되었습니다.",
+                RoutineResponse.from(routineService.update(routineId, userId, request.toCommand()))));
     }
 
     @DeleteMapping("/{routineId}")

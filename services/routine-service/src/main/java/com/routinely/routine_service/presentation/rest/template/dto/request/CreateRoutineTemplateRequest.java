@@ -4,11 +4,11 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.routinely.routine_service.application.template.dto.CreateRoutineTemplateCommand;
 import com.routinely.routine_service.domain.template.ScheduleType;
 import com.routinely.routine_service.domain.template.Weekdays;
+import com.routinely.routine_service.presentation.rest.common.ScheduleValidation;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
-
 import java.util.List;
 
 /**
