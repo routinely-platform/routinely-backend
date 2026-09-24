@@ -40,7 +40,7 @@
 | 토픽 | Publisher | Subscriber(s) | Partition Key |
 |------|-----------|---------------|---------------|
 | `routine.execution.completed` | RoutineService | ChallengeService | `userId` |
-| `routine.execution.cancelled` 🆕 | RoutineService | ChallengeService | `userId` |
+| `routine.execution.cancelled` | RoutineService | ChallengeService | `userId` |
 | `routine.notification.scheduled` | RoutineService | NotificationService | `userId` |
 | ~~`challenge.created`~~ | ~~ChallengeService~~ | ~~RoutineService~~ | ⛔ 폐지 (ADR-0044) |
 | `challenge.started` | ChallengeService | RoutineService, NotificationService, ChatService | `challengeId` |
@@ -55,49 +55,65 @@
 
 ---
 
-### 1. `routine.execution.completed`
+### 1. `routine.execution.completed` / `routine.execution.cancelled`
 
-루틴 실행이 COMPLETED 처리되었을 때 발행한다.
+완료 INSERT 또는 취소 DELETE와 **같은 트랜잭션**에서 Outbox에 저장한다.
+두 이벤트는 모두 변경 후의 누적 인정 횟수 스냅샷이다. 취소도 감산 명령이 아니다.
 
 | 항목 | 내용 |
 |------|------|
 | Publisher | RoutineService |
 | Partition Key | `userId` |
-| Consumer Group | `challenge-service.ranking.routine.execution.completed` |
-
-**Payload**
+| Consumer Group | `challenge-service.ranking.routine.execution.completed` / `challenge-service.ranking.routine.execution.cancelled` |
 
 ```json
 {
   "eventId": "550e8400-e29b-41d4-a716-446655440000",
-  "occurredAt": "2025-02-15T07:00:00Z",
+  "occurredAt": "2026-09-23T07:00:00Z",
   "userId": 1,
-  "routineTemplateId": 10,
+  "routineId": 10,
   "executionId": 100,
-  "execDate": "2025-02-15",
-  "challengeId": 5
+  "execDate": "2026-09-20",
+  "challengeId": 5,
+  "acceptedCount": 12,
+  "revision": 4821
 }
 ```
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|:----:|------|
 | `userId` | long | ✅ | 실행한 사용자 ID |
-| `routineTemplateId` | long | ✅ | 루틴 템플릿 ID |
-| `executionId` | long | ✅ | 루틴 실행 레코드 ID |
-| `execDate` | string (yyyy-MM-dd) | ✅ | 실행 날짜 |
-| `challengeId` | long | ❌ | 챌린지 루틴인 경우만 포함. null = 개인 루틴 |
+| `routineId` | long | ✅ | 루틴 인스턴스 ID |
+| `executionId` | long | ✅ | 완료 INSERT 또는 취소 DELETE 대상 ID |
+| `execDate` | string (yyyy-MM-dd) | ✅ | 수행 날짜. 캡 집계 기준 |
+| `challengeId` | long | ❌ | null = 개인 루틴 |
+| `acceptedCount` | int | 조건부 | 챌린지 루틴의 캡 적용 누적 인정 횟수(0 이상) |
+| `revision` | long | 조건부 | 챌린지 루틴만 포함하는 양의 단조 증가 시퀀스 값 |
 
-> ⚠️ **위는 현재 코드 기준 페이로드다.** #61에서 `routineTemplateId` → **`routineId`**(루틴 인스턴스 · ADR-0040)로 바뀌고,
-> 챌린지 루틴이면 **`acceptedCount` · `revision`** 이 추가된다(S33). 표 갱신은 #61 PR에서 한다
+- 개인 루틴은 acceptedCount/revision을 **생략**하고 시퀀스를 사용하지 않는다. 랭킹 소비자는 무시한다.
+- DAILY/SPECIFIC_DAYS는 완료 건수, WEEKLY_COUNT는 Σ min(주별 완료 수, 목표), MONTHLY_COUNT는 달력 월별 동일 계산.
+- 주는 **일요일 00:00~다음 일요일 00:00, Asia/Seoul**. WeekBoundary를 #60과 공유한다.
+  시작·종료의 불완전한 주/월에도 목표 횟수를 줄이지 않는다.
+- 백필의 occurredAt은 발행 시각, execDate는 과거 수행 날짜다. 집계는 전체 이력의 **execDate**로 묶는다.
+- 완료 저장/취소 삭제를 flush한 뒤 재계산한다. 주 3회에서 5→4회로 취소해도 인정 횟수는 3이다.
+- 다중 완료는 실행 기록마다 Outbox 1행, 집계도 건마다 다시 계산한다.
+- 멱등성 키: 완료는 ROUTINE_EXECUTION:{executionId}:completed, 챌린지 취소는
+  ROUTINE_EXECUTION:{executionId}:cancelled:{revision}, 개인 취소는 revision 대신 eventId.
+- revision은 routine_event_revision_seq에서 얻는다. 같은 루틴의 완료/취소는 루틴 행 잠금 안에서
+  재계산·채번하므로 순서를 직렬화한다. 롤백으로 생긴 시퀀스 결번은 허용한다.
 
 **소비자 처리**
 
-- **ChallengeService** (`challenge-service.ranking.routine.execution.completed`): `challenge_member_summary` UPSERT → Redis ZSET(`ranking:{challengeId}`) 동기화 (ADR-0028). 점수는 **누적 인정 횟수** — 페이로드 계약 변경은 #61(S33)
+ChallengeService는 Inbox에 저장하고 멤버 행 잠금 안에서 summary의 revision과 비교한다.
+**수신 revision ≤ 저장 revision이면 처리 완료로 표시하고 폐기**한다.
+최신이면 accepted_count/revision을 저장하고, **accepted_count가 늘었을 때만** last_completed_at을
+occurredAt으로 옮긴다(현재 횟수에 도달한 시각 — 캡 초과 완료·취소로 늦추지 않는다).
+**활성 멤버만** Redis ZADD로 절대값을 덮어쓴다. 탈퇴 멤버의 summary는 갱신해도 ZSET에는 넣지 않는다.
+Redis 장애 시 DB 트랜잭션을 롤백하여 Inbox 재시도가 가능하다.
+동점 등수는 동일하며, 나열은 last_completed_at 빠른 순(NULL 마지막), 이후 userId 순이다.
 
-> **RoutineService는 이 토픽을 구독하지 않는다.** 달성률·스트릭은 저장하지 않고 조회할 때 계산한다(ADR-0043) — `routine_daily_summary` 갱신은 폐기됐다
-> **NotificationService는 구독하지 않는다 (ADR-0045).** "이번 기간 목표를 채웠나 · 오늘 안 한 의무 루틴이 있나"는
-> **발송 직전에 routine-service gRPC `CheckNotificationDue`로 묻는다** — 완료 상태를 알림 쪽에 복제하지 않는다.
-> 전에 적혀 있던 "스트릭 달성 · 루틴 완료 후속 알림"은 알림 유형 3종에 없다(`policies.md` §8)
+RoutineService는 이 토픽을 구독하지 않는다. 달성률·스트릭은 조회 시 계산한다(ADR-0043).
+NotificationService도 구독하지 않는다. 발송 직전 gRPC CheckNotificationDue로 판정한다(ADR-0045).
 
 ---
 
@@ -112,6 +128,8 @@
 | Partition Key | `userId` |
 | Consumer Group | `notification-service.routine.notification.scheduled` |
 
+**현재 배선** — 개인 루틴 시작·정의/선호 수정·중단. 챌린지 시작 #157과 탈퇴 비활성 #158은 해당 경로 구현 시 RoutineEventPublisher를 호출한다.
+
 **발행 시점** — 루틴 시작(개인 · 챌린지 #157) · 선호 시각/요일 수정 · 정의 수정 · 중단 · 챌린지 탈퇴 비활성(#158)
 
 **Payload**
@@ -122,6 +140,7 @@
   "occurredAt": "2026-09-13T08:00:00Z",
   "userId": 1,
   "routineId": 42,
+  "revision": 4822,
   "title": "아침 러닝",
   "active": true,
   "scheduleType": "WEEKLY_COUNT",
@@ -138,6 +157,7 @@
 |------|------|:----:|------|
 | `userId` | long | ✅ | 알림 수신 대상 |
 | `routineId` | long | ✅ | **루틴 인스턴스 ID** — 템플릿 ID가 아니다(ADR-0040) |
+| `revision` | long | ✅ | `routine_event_revision_seq` 값. 같은 루틴의 스냅샷은 루틴 행 잠금 안에서 채번해 커밋 순서와 같다 |
 | `title` | string | ✅ | 알림에 표시할 루틴 제목 |
 | `active` | boolean | ✅ | `false`면 이 루틴의 예약을 지운다 |
 | `scheduleType` | string | ✅ | `DAILY` · `SPECIFIC_DAYS` · `WEEKLY_COUNT` · `MONTHLY_COUNT` |
@@ -154,7 +174,8 @@
   - `ROUTINE_START` — `preferredTime` 정각. 지정형은 수행 요일, 빈도형은 `preferredDays`에만.
     `preferredTime`이 null이거나 `active = false` · 기간 종료면 **지운다**
   - `DEADLINE` — 사용자에게 활성 루틴이 하나라도 있으면 매일 21:00 1건 유지
-  - 늦게 온 옛 스냅샷(`occurredAt`이 저장된 것보다 이전)은 버린다
+  - 늦게 온 옛 스냅샷(`revision`이 저장된 것 이하)은 버린다. `occurredAt`은 인스턴스 간 시계 차이에
+    약해 순서 판정에 쓰지 않는다 — 폴러가 여럿이면 Kafka 도착 순서도 보장되지 않는다
 - **보낼지는 발송 직전에** routine-service gRPC `CheckNotificationDue`로 묻는다 — 이 이벤트에는 완료 상태가 없다
 
 > 이전 설계(PGMQ enqueue · `nextSendAt` 하나 · `routineTemplateId` · 5분 전 06:55)는 **ADR-0045로 대체**됐다(2026-09-13).

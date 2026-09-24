@@ -1,9 +1,11 @@
 package com.routinely.challenge_service.domain.member;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -11,6 +13,11 @@ import java.util.List;
 import java.util.Optional;
 
 public interface ChallengeMemberRepository extends JpaRepository<ChallengeMember, Long> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT m FROM ChallengeMember m WHERE m.challenge.id = :challengeId AND m.userId = :userId")
+    Optional<ChallengeMember> findLockedByChallengeIdAndUserId(
+            @Param("challengeId") Long challengeId, @Param("userId") Long userId);
 
     int countByChallengeIdAndStatus(Long challengeId, MembershipStatus status);
 

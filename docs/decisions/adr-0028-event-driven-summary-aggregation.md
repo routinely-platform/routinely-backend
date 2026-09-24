@@ -24,32 +24,38 @@ ADR-0011에서는 MVP 단계에서 `routine_executions`를 매 요청마다 직�
 
 ## 2. Decision
 
-**루틴 완료 처리 시 `RoutineCompleted` 이벤트를 발행하고, Consumer가 summary 테이블을 갱신한다.**
+**루틴 완료·취소와 Outbox를 같은 트랜잭션으로 저장하고, Consumer가 누적 인정 횟수와 revision을 반영한다.**
+
+2026-09-23 #61 개정: 개인 통계는 ADR-0043에 따라 조회 시 계산하고, 이벤트 집계는 챌린지 랭킹에 사용한다.
 
 ADR-0011의 "요청마다 직접 SQL 집계" 방식을 폐기한다.
 
 ### 흐름
 
-```
-[routine-service]
-루틴 완료 처리 (POST /routine-executions/{id}/complete)
-  ├── routine_executions UPDATE (status = COMPLETED)
-  └── routine_outbox INSERT (event_type = routine.execution.completed)
-
-[Outbox Worker → Kafka]
-  └── routine.execution.completed 발행
-
-[routine-service Consumer]
-  └── routine_daily_summary UPSERT (캡 계산 후 accepted_count, achievement_rate 갱신)
-
-[challenge-service Consumer]
-  ├── challenge_member_summary UPSERT (accepted_count, achievement_rate 갱신)
-  └── Redis ZSET UPDATE (key: ranking:{challengeId}, score: achievement_rate, member: userId)
+```mermaid
+sequenceDiagram
+    participant U as 사용자
+    participant R as routine-service
+    participant K as Outbox 폴러 / Kafka
+    participant C as challenge-service Inbox
+    participant Z as Redis
+    U->>R: POST /api/v1/routines/{id}/executions/{date}/complete
+    Note over R: 루틴 행 잠금, 실행·피드 INSERT<br/>execDate 기준 캡 재계산, revision 채번, Outbox INSERT<br/>하나의 트랜잭션
+    R-->>K: routine.execution.completed
+    K-->>C: eventId 멱등 저장
+    Note over C: 멤버 행 잠금, revision 비교<br/>최신일 때 summary UPSERT
+    C->>Z: 활성 멤버만 ZADD score=acceptedCount
+    U->>R: DELETE /api/v1/routines/{id}/executions/{date}/complete
+    Note over R: 피드·실행 DELETE 후 flush<br/>캡 재계산, 새 revision, Outbox INSERT
+    R-->>K: routine.execution.cancelled
+    K-->>C: 같은 스냅샷 계약
+    Note over C: 저장값 이하 revision은 폐기
+    C->>Z: 활성 멤버만 ZADD (감산 아님)
 ```
 
 ### 조회
 
-- **개인 통계**: `routine_daily_summary`에서 O(1) 조회
+- **개인 통계**: 실행 기록으로 조회 시 계산(ADR-0043)
 - **챌린지 랭킹**: Redis ZSET에서 O(log N) 조회 (fallback: `challenge_member_summary`)
 
 ---
@@ -76,18 +82,18 @@ ADR-0011 채택 이유 중 "집계 쿼리가 단순하다"는 전제가 ADR-0027
 
 ## 4. Consumer 그룹 목록
 
-`routine.execution.completed` 토픽의 소비자:
+완료·취소 모두 challenge-service만 소비한다. routine-service 개인 통계는 조회 시 계산하고,
+notification-service는 발송 직전 gRPC로 판정한다(ADR-0043/0045).
 
 | Consumer Group | 서비스 | 처리 내용 |
 |---|---|---|
-| `routine-service.routine.execution.completed` | routine-service | `routine_daily_summary` UPSERT |
-| `challenge-service.routine.execution.completed` | challenge-service | `challenge_member_summary` UPSERT + Redis ZSET 갱신 |
-| `notification-service.routine.execution.completed` | notification-service | 스트릭/완료 알림 판단 (기존 유지) |
+| challenge-service.ranking.routine.execution.completed | challenge-service | revision 비교 → summary UPSERT → 활성 멤버 ZADD |
+| challenge-service.ranking.routine.execution.cancelled | challenge-service | 완료와 같은 처리 |
 
 ### 4.1 `challenge.member.joined` 자기 소비 — 랭킹 시드 (#48)
 
 challenge-service는 **자신이 발행한** `challenge.member.joined` 이벤트를 **자신이 다시 소비**한다.
-멤버가 참여하면 아직 완료 기록이 없어도 달성률 0%인 랭킹 행이 즉시 노출되어야 하기 때문에,
+멤버가 참여하면 아직 완료 기록이 없어도 인정 횟수 0회인 랭킹 행이 즉시 노출되어야 하기 때문에,
 소비 시점에 `challenge_member_summary`를 생성하고 Redis ZSET에 `0`점으로 시드(seed)한다.
 
 | Consumer Group | 서비스 | 처리 내용 |
@@ -107,7 +113,7 @@ challenge-service는 **자신이 발행한** `challenge.member.joined` 이벤트
    지연·실패시킬 수 있으나, 이벤트로 분리하면 참여 확정에는 영향이 없다.
 
 3. **처리 멱등성** — 시드는 "이미 summary가 있으면 건너뛴다"로 처리한다.
-   참여 후 완료 기록이 쌓여 달성률이 오른 멤버가 이벤트 재처리로 0%로 리셋되면 안 되므로,
+   참여 후 완료 기록이 쌓여 인정 횟수가 오른 멤버가 이벤트 재처리로 0회로 리셋되면 안 되므로,
    재시드 시 기존 값을 덮어쓰지 않고 스킵하는 것이 핵심이다.
 
 ---
@@ -139,3 +145,26 @@ challenge-service는 **자신이 발행한** `challenge.member.joined` 이벤트
 - ADR-0012: Outbox 패턴 (이벤트 발행 정합성 보장)
 - ADR-0013: 멱등성 전략 (Consumer 중복 처리 방지)
 - ADR-0027: 달성률 캡 계산 (이 집계 방식의 계산 공식)
+
+## 7. #61 구현 경계와 배포
+
+- 순위는 accepted_count이며 100 상한이 없다. 동점은 공동 등수, 표시 순서는 last_completed_at
+  빠른 순, 이후 userId다. DB fallback은 활성 멤버만 센다.
+- last_completed_at은 "현재 인정 횟수에 **도달한** 시각"이다. **accepted_count가 늘어난 스냅샷의
+  occurredAt으로만 옮긴다.** 캡 초과 완료나 취소처럼 횟수가 그대로거나 줄면 revision만 올리고 시각은
+  둔다. 이벤트마다 덮어쓰면 캡을 넘겨 더 수행한 사람이 동점 나열에서 뒤로 밀린다. 취소로 줄어든 경우
+  실제 도달 시각보다 늦은 값이 남을 수 있지만, 불리해지는 쪽은 취소한 본인뿐이라 허용한다.
+- routine_event_revision_seq는 payload 직렬화 전에 채번한다. 루틴 행 잠금으로 같은 인스턴스의
+  쓰기를 직렬화한다. #157은 챌린지·사용자마다 하나의 루틴 인스턴스를 유지해야 한다.
+- Outbox는 SKIP LOCKED로 여러 폴러가 나눠 처리하며 ACK 이후 DB 상태를 커밋한다.
+  ACK 타임아웃/DB 커밋 실패 시 중복 전송될 수 있으므로 Inbox eventId와 revision으로 보호한다.
+- 폴러는 **첫 전송 실패에서 배치를 멈춘다.** 건너뛰고 계속 보내면 같은 userId 이벤트의 순서가
+  뒤집히고, 브로커 장애 때 행마다 대기가 쌓여 잠금이 길어진다. 다만 인스턴스가 여럿이면 SKIP LOCKED로
+  서로 다른 행을 동시에 보내므로 **Kafka 도착 순서는 보장하지 않는다** — 순서 판정은 소비자의
+  revision 비교가 맡는다.
+- 기존 achievement_rate/completed_count/total_scheduled는 보존하되 쓰기를 중단한다.
+  기존 집계가 있는 배포에서는 옛 퍼센트 Redis 키를 비우고 routine-service에서 새 계약의
+  스냅샷을 재발행해 재집계해야 한다. 과거 completed_count를 복사하면 기간별 캡을 복원할 수 없다.
+  이번 마이그레이션은 과거 집계의 자동 백필을 수행하지 않는다.
+- routine.notification.scheduled는 개인 시작·수정·중단에 연결됐다. #157 챌린지 시작과
+  #158 탈퇴 비활성 경로는 각각 구현될 때 같은 발행 창구를 호출한다.

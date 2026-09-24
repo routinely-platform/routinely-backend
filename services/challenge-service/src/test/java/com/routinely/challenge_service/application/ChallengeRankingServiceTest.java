@@ -83,7 +83,7 @@ class ChallengeRankingServiceTest {
         assertThat(result.myRanking()).isNotNull();
         assertThat(result.myRanking().rank()).isEqualTo(2);
         assertThat(result.myRanking().userId()).isEqualTo(ME);
-        assertThat(result.myRanking().achievementRate()).isEqualTo(80.0);
+        assertThat(result.myRanking().acceptedCount()).isEqualTo(80);
         assertThat(result.myRanking().isMe()).isTrue();
     }
 
@@ -119,8 +119,8 @@ class ChallengeRankingServiceTest {
         when(rankingRedisRepository.findScore(CHALLENGE_ID, ME)).thenReturn(null);
         when(summaryRepository.findByChallengeIdAndUserId(CHALLENGE_ID, ME))
                 .thenReturn(Optional.of(summary(ME, "50.00")));
-        when(summaryRepository.countByChallengeIdAndAchievementRateGreaterThan(
-                CHALLENGE_ID, new BigDecimal("50.00")))
+        when(summaryRepository.countActiveWithHigherScore(
+                CHALLENGE_ID, 50))
                 .thenReturn(5L);
         when(rankingRedisRepository.countMembers(CHALLENGE_ID)).thenReturn(3L);
 
@@ -129,7 +129,7 @@ class ChallengeRankingServiceTest {
         assertThat(result.myRanking()).isNotNull();
         assertThat(result.myRanking().rank()).isEqualTo(6);
         assertThat(result.myRanking().userId()).isEqualTo(ME);
-        assertThat(result.myRanking().achievementRate()).isEqualTo(50.0);
+        assertThat(result.myRanking().acceptedCount()).isEqualTo(50);
         assertThat(result.rankings()).hasSize(3);
         assertThat(result.rankings()).extracting(ChallengeRankingResult.Entry::isMe)
                 .containsOnly(false);
@@ -139,18 +139,18 @@ class ChallengeRankingServiceTest {
     @DisplayName("ZSET이 비면 summary로 fallback하고, 본인 순위도 summary 기준으로 계산한다")
     void getRanking_whenZsetEmpty_fallsBackToSummary() {
         when(rankingRedisRepository.findTopWithScores(eq(CHALLENGE_ID), anyInt())).thenReturn(Set.of());
-        when(summaryRepository.findByChallengeIdOrderByAchievementRateDescUserIdAsc(eq(CHALLENGE_ID), any(Pageable.class)))
+        when(summaryRepository.findActiveRanking(eq(CHALLENGE_ID), any(Pageable.class)))
                 .thenReturn(List.of(summary(100L, "90.00"), summary(ME, "80.00")));
         // ZSET이 비면 개인 점수 조회도 미스(null) — 실제 Redis는 미등록 멤버에 null을 반환한다.
         when(rankingRedisRepository.findScore(CHALLENGE_ID, ME)).thenReturn(null);
         when(summaryRepository.findByChallengeIdAndUserId(CHALLENGE_ID, ME))
                 .thenReturn(Optional.of(summary(ME, "80.00")));
-        when(summaryRepository.countByChallengeIdAndAchievementRateGreaterThan(
-                CHALLENGE_ID, new BigDecimal("80.00")))
+        when(summaryRepository.countActiveWithHigherScore(
+                CHALLENGE_ID, 80))
                 .thenReturn(1L);
         when(rankingRedisRepository.countMembers(CHALLENGE_ID)).thenReturn(0L);
         // 상위 목록엔 2명만 잡히지만(limit 이내), 실제 전체 참여자는 5명인 상황
-        when(summaryRepository.countByChallengeId(CHALLENGE_ID)).thenReturn(5L);
+        when(challengeMemberRepository.countByChallengeIdAndStatus(CHALLENGE_ID, MembershipStatus.ACTIVE)).thenReturn(5);
 
         ChallengeRankingResult result = service.getRanking(CHALLENGE_ID, ME, 100);
 
@@ -162,7 +162,7 @@ class ChallengeRankingServiceTest {
         assertThat(result.myRanking()).isNotNull();
         assertThat(result.myRanking().rank()).isEqualTo(2);
         assertThat(result.myRanking().userId()).isEqualTo(ME);
-        assertThat(result.myRanking().achievementRate()).isEqualTo(80.0);
+        assertThat(result.myRanking().acceptedCount()).isEqualTo(80);
         assertThat(result.myRanking().isMe()).isTrue();
         // ZCARD 0 → summary COUNT(5)로 fallback. 상위 목록 크기(2)로 축소되면 안 된다.
         assertThat(result.totalMembers()).isEqualTo(5L);
@@ -177,7 +177,7 @@ class ChallengeRankingServiceTest {
                 .thenReturn(tuplesWithoutMe());
         when(rankingRedisRepository.findScore(CHALLENGE_ID, ME)).thenReturn(null);
         when(summaryRepository.findByChallengeIdAndUserId(CHALLENGE_ID, ME)).thenReturn(Optional.empty());
-        when(summaryRepository.countByChallengeIdAndAchievementRateGreaterThan(CHALLENGE_ID, BigDecimal.ZERO))
+        when(summaryRepository.countActiveWithHigherScore(CHALLENGE_ID, 0))
                 .thenReturn(3L);
         when(rankingRedisRepository.countMembers(CHALLENGE_ID)).thenReturn(3L);
 
@@ -186,7 +186,7 @@ class ChallengeRankingServiceTest {
         assertThat(result.myRanking()).isNotNull();
         assertThat(result.myRanking().rank()).isEqualTo(4);
         assertThat(result.myRanking().userId()).isEqualTo(ME);
-        assertThat(result.myRanking().achievementRate()).isEqualTo(0.0);
+        assertThat(result.myRanking().acceptedCount()).isEqualTo(0);
         assertThat(result.myRanking().isMe()).isTrue();
     }
 
@@ -198,6 +198,27 @@ class ChallengeRankingServiceTest {
 
         assertThatThrownBy(() -> service.getRanking(CHALLENGE_ID, ME, 100))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test @DisplayName("100회를 넘는 동점자는 마지막 완료 시각이 빠른 순서로 나열하고 같은 등수를 준다")
+    void getRanking_largeTie_ordersByCompletionTime() {
+        Set<TypedTuple<String>> tuples = Set.of(new DefaultTypedTuple<>("42", 150.0),
+                new DefaultTypedTuple<>("7", 150.0), new DefaultTypedTuple<>("100", 151.0));
+        when(rankingRedisRepository.findTopWithScores(CHALLENGE_ID, 2)).thenReturn(tuples);
+        when(rankingRedisRepository.findByScoreGreaterThanOrEqualWithScores(CHALLENGE_ID, 150)).thenReturn(tuples);
+        var earlier = summary(42, "150");
+        // user7은 하루 늦게 150회에 도달했다 — 149 → 150으로 늘어난 시각이 나열 기준이다.
+        var later = ChallengeMemberSummary.create(CHALLENGE_ID, 7L);
+        later.applyAcceptedCount(149, 1, LocalDateTime.of(2026, 9, 1, 0, 0));
+        later.applyAcceptedCount(150, 2, LocalDateTime.of(2026, 9, 2, 0, 0));
+        when(summaryRepository.findByChallengeIdAndUserIdIn(eq(CHALLENGE_ID), any()))
+                .thenReturn(List.of(earlier, later));
+        when(rankingRedisRepository.findScore(CHALLENGE_ID, ME)).thenReturn(150.0);
+        when(rankingRedisRepository.countGreaterThanScore(CHALLENGE_ID, 150)).thenReturn(1L);
+        var result = service.getRanking(CHALLENGE_ID, ME, 2);
+        assertThat(result.rankings()).extracting(ChallengeRankingResult.Entry::userId).containsExactly(100L, 42L);
+        assertThat(result.myRanking().rank()).isEqualTo(2);
+        assertThat(result.myRanking().acceptedCount()).isEqualTo(150);
     }
 
     private Set<TypedTuple<String>> orderedTuples() {
@@ -238,7 +259,7 @@ class ChallengeRankingServiceTest {
 
     private ChallengeMemberSummary summary(long userId, String rate) {
         ChallengeMemberSummary summary = ChallengeMemberSummary.create(CHALLENGE_ID, userId);
-        summary.applyCompletion(12, 10, new BigDecimal(rate), LocalDateTime.now());
+        summary.applyAcceptedCount(new BigDecimal(rate).intValueExact(), 1L, LocalDateTime.of(2026, 9, 1, 0, 0));
         return summary;
     }
 }

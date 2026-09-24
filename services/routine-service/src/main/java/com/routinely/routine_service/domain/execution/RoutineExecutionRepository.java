@@ -9,6 +9,17 @@ import java.util.List;
 import java.util.Optional;
 
 public interface RoutineExecutionRepository extends JpaRepository<RoutineExecution, Long> {
+    @Query("""
+            SELECT e.scheduledDate FROM RoutineExecution e
+            WHERE e.routineId = :routineId
+              AND e.status = com.routinely.routine_service.domain.execution.ExecutionStatus.COMPLETED
+              AND e.scheduledDate >= :startDate
+              AND e.scheduledDate <= COALESCE(:endDate, e.scheduledDate)
+            """)
+    List<LocalDate> findCompletedDates(@Param("routineId") Long routineId,
+                                     @Param("startDate") LocalDate startDate,
+                                     @Param("endDate") LocalDate endDate);
+
     boolean existsByRoutineId(Long routineId);
     Optional<RoutineExecution> findTopByRoutineIdOrderByScheduledDateDesc(Long routineId);
 

@@ -37,6 +37,8 @@ class ChallengeRankingInboxProcessorTest {
     private ChallengeMemberSummaryRepository summaryRepository;
     private ChallengeRankingRedisRepository rankingRedisRepository;
     private ChallengeRankingInboxProcessor processor;
+    private com.routinely.challenge_service.domain.member.ChallengeMemberRepository memberRepository;
+    private com.routinely.challenge_service.domain.member.ChallengeMember member;
 
     @BeforeEach
     void setUp() {
@@ -44,8 +46,12 @@ class ChallengeRankingInboxProcessorTest {
         summaryRepository = mock(ChallengeMemberSummaryRepository.class);
         rankingRedisRepository = mock(ChallengeRankingRedisRepository.class);
         Clock clock = Clock.fixed(Instant.parse("2026-06-30T00:00:00Z"), ZoneOffset.UTC);
+        memberRepository = mock(com.routinely.challenge_service.domain.member.ChallengeMemberRepository.class);
+        member = mock(com.routinely.challenge_service.domain.member.ChallengeMember.class);
+        when(member.getStatus()).thenReturn(com.routinely.challenge_service.domain.member.MembershipStatus.ACTIVE);
+        when(memberRepository.findLockedByChallengeIdAndUserId(CHALLENGE_ID, USER_ID)).thenReturn(Optional.of(member));
         processor = new ChallengeRankingInboxProcessor(
-                inboxRepository, summaryRepository, rankingRedisRepository, new ObjectMapper(), clock);
+                inboxRepository, summaryRepository, rankingRedisRepository, memberRepository, new ObjectMapper(), clock);
     }
 
     @Test
@@ -64,7 +70,7 @@ class ChallengeRankingInboxProcessorTest {
         verify(summaryRepository).save(captor.capture());
         assertThat(captor.getValue().getChallengeId()).isEqualTo(CHALLENGE_ID);
         assertThat(captor.getValue().getUserId()).isEqualTo(USER_ID);
-        assertThat(captor.getValue().getAchievementRate()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(captor.getValue().getAcceptedCount()).isZero();
         verify(rankingRedisRepository).updateScore(CHALLENGE_ID, USER_ID, 0.0);
         assertThat(inbox.getStatus()).isEqualTo(InboxStatus.PROCESSED);
     }
@@ -95,7 +101,7 @@ class ChallengeRankingInboxProcessorTest {
     void processExecutionCompleted_upsertsSummaryAndUpdatesZsetWithRate() {
         String payload = """
                 {"eventId":"evt-2","occurredAt":"2026-06-30T00:00:00Z","challengeId":7,"userId":42,
-                 "completedCount":10,"totalScheduled":12,"achievementRate":83.33}""";
+                 "acceptedCount":10,"revision":12}""";
         ChallengeInbox inbox = receivedInbox(KafkaTopic.ROUTINE_EXECUTION_COMPLETED, payload);
         when(inboxRepository.findById(1L)).thenReturn(Optional.of(inbox));
         when(summaryRepository.findByChallengeIdAndUserId(CHALLENGE_ID, USER_ID)).thenReturn(Optional.empty());
@@ -105,10 +111,9 @@ class ChallengeRankingInboxProcessorTest {
         ArgumentCaptor<ChallengeMemberSummary> captor = ArgumentCaptor.forClass(ChallengeMemberSummary.class);
         verify(summaryRepository).save(captor.capture());
         ChallengeMemberSummary saved = captor.getValue();
-        assertThat(saved.getCompletedCount()).isEqualTo(10);
-        assertThat(saved.getTotalScheduled()).isEqualTo(12);
-        assertThat(saved.getAchievementRate()).isEqualByComparingTo(new BigDecimal("83.33"));
-        verify(rankingRedisRepository).updateScore(CHALLENGE_ID, USER_ID, 83.33);
+        assertThat(saved.getAcceptedCount()).isEqualTo(10);
+        assertThat(saved.getRevision()).isEqualTo(12);
+        verify(rankingRedisRepository).updateScore(CHALLENGE_ID, USER_ID, 10.0);
         assertThat(inbox.getStatus()).isEqualTo(InboxStatus.PROCESSED);
     }
 
@@ -141,6 +146,77 @@ class ChallengeRankingInboxProcessorTest {
         verify(summaryRepository, never())
                 .findByChallengeIdAndUserId(org.mockito.ArgumentMatchers.anyLong(),
                         org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test @DisplayName("낮거나 같은 revision은 summary와 Redis를 되돌리지 않는다")
+    void processInbox_staleRevision_skips() {
+        var summary = ChallengeMemberSummary.create(CHALLENGE_ID, USER_ID);
+        summary.applyAcceptedCount(120, 12, java.time.LocalDateTime.of(2026, 6, 30, 0, 0));
+        when(summaryRepository.findByChallengeIdAndUserId(CHALLENGE_ID, USER_ID)).thenReturn(Optional.of(summary));
+        for (long revision : new long[]{11, 12}) {
+            var inbox = receivedInbox(KafkaTopic.ROUTINE_EXECUTION_CANCELLED,
+                    "{\"challengeId\":7,\"userId\":42,\"acceptedCount\":1,\"revision\":" + revision
+                            + ",\"occurredAt\":\"2026-06-29T00:00:00Z\"}");
+            when(inboxRepository.findById(1L)).thenReturn(Optional.of(inbox));
+            processor.processInbox(1L);
+            assertThat(inbox.getStatus()).isEqualTo(InboxStatus.PROCESSED);
+        }
+        assertThat(summary.getAcceptedCount()).isEqualTo(120);
+        org.mockito.Mockito.verifyNoInteractions(rankingRedisRepository);
+        verify(summaryRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test @DisplayName("탈퇴 멤버의 최신 취소 이벤트는 집계만 갱신하고 ZSET을 복원하지 않는다")
+    void processInbox_leftMember_updatesOnlySummary() {
+        when(member.getStatus()).thenReturn(com.routinely.challenge_service.domain.member.MembershipStatus.LEFT);
+        var inbox = receivedInbox(KafkaTopic.ROUTINE_EXECUTION_CANCELLED,
+                "{\"challengeId\":7,\"userId\":42,\"acceptedCount\":101,\"revision\":13,\"occurredAt\":\"2026-06-30T00:00:00Z\"}");
+        when(inboxRepository.findById(1L)).thenReturn(Optional.of(inbox));
+        processor.processInbox(1L);
+        var captor = ArgumentCaptor.forClass(ChallengeMemberSummary.class);
+        verify(summaryRepository).save(captor.capture());
+        assertThat(captor.getValue().getAcceptedCount()).isEqualTo(101);
+        org.mockito.Mockito.verifyNoInteractions(rankingRedisRepository);
+    }
+
+    @Test @DisplayName("최신 취소 이벤트는 감소한 인정 횟수를 ZADD로 덮어쓴다")
+    void processInbox_cancelled_replacesScore() {
+        var summary = ChallengeMemberSummary.create(CHALLENGE_ID, USER_ID);
+        summary.applyAcceptedCount(4, 10, java.time.LocalDateTime.of(2026, 6, 29, 0, 0));
+        when(summaryRepository.findByChallengeIdAndUserId(CHALLENGE_ID, USER_ID)).thenReturn(Optional.of(summary));
+        var inbox = receivedInbox(KafkaTopic.ROUTINE_EXECUTION_CANCELLED,
+                "{\"challengeId\":7,\"userId\":42,\"acceptedCount\":3,\"revision\":11,\"occurredAt\":\"2026-06-30T00:00:00Z\"}");
+        when(inboxRepository.findById(1L)).thenReturn(Optional.of(inbox));
+        processor.processInbox(1L);
+        assertThat(summary.getAcceptedCount()).isEqualTo(3);
+        verify(rankingRedisRepository).updateScore(CHALLENGE_ID, USER_ID, 3);
+    }
+
+    @Test @DisplayName("인정 횟수가 그대로인 완료 이벤트는 동점 나열 시각(lastCompletedAt)을 늦추지 않는다")
+    void processInbox_countUnchanged_keepsLastCompletedAt() {
+        var reachedAt = java.time.LocalDateTime.of(2026, 6, 24, 0, 0);
+        var summary = ChallengeMemberSummary.create(CHALLENGE_ID, USER_ID);
+        summary.applyAcceptedCount(3, 10, reachedAt);
+        when(summaryRepository.findByChallengeIdAndUserId(CHALLENGE_ID, USER_ID)).thenReturn(Optional.of(summary));
+        var inbox = receivedInbox(KafkaTopic.ROUTINE_EXECUTION_COMPLETED,
+                "{\"challengeId\":7,\"userId\":42,\"acceptedCount\":3,\"revision\":11,\"occurredAt\":\"2026-06-26T00:00:00Z\"}");
+        when(inboxRepository.findById(1L)).thenReturn(Optional.of(inbox));
+
+        processor.processInbox(1L);
+
+        assertThat(summary.getRevision()).isEqualTo(11);
+        assertThat(summary.getLastCompletedAt()).isEqualTo(reachedAt);
+    }
+
+    @Test @DisplayName("cancelled 필수 필드 누락 오류는 cancelled 토픽명으로 보고한다")
+    void processExecutionCancelled_whenRequiredFieldMissing_reportsCancelledTopic() {
+        var inbox = receivedInbox(KafkaTopic.ROUTINE_EXECUTION_CANCELLED,
+                "{\"eventId\":\"evt-9\",\"challengeId\":7,\"userId\":42}");
+        when(inboxRepository.findById(1L)).thenReturn(Optional.of(inbox));
+
+        assertThatThrownBy(() -> processor.processInbox(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining(KafkaTopic.ROUTINE_EXECUTION_CANCELLED);
     }
 
     private ChallengeInbox receivedInbox(String eventType, String payload) {

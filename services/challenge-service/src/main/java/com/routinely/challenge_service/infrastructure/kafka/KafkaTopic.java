@@ -10,5 +10,6 @@ public final class KafkaTopic {
     public static final String CHALLENGE_STARTED       = "challenge.started";
 
     // 소비 토픽 — routine-service(#61)가 발행하는 루틴 완료 이벤트. 랭킹 집계에 사용한다. (ADR-0028)
-    public static final String ROUTINE_EXECUTION_COMPLETED = "routine.execution.completed";
+    public static final String ROUTINE_EXECUTION_COMPLETED = com.routinely.core.constant.KafkaTopics.ROUTINE_EXECUTION_COMPLETED;
+    public static final String ROUTINE_EXECUTION_CANCELLED = com.routinely.core.constant.KafkaTopics.ROUTINE_EXECUTION_CANCELLED;
 }

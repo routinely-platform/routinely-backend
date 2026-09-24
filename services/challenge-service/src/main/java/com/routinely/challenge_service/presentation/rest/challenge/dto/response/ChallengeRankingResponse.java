@@ -10,11 +10,11 @@ public record ChallengeRankingResponse(
         long totalMembers
 ) {
 
-    public record RankEntryResponse(int rank, Long userId, double achievementRate, boolean isMe) {
+    public record RankEntryResponse(int rank, Long userId, int acceptedCount, boolean isMe) {
 
         private static RankEntryResponse from(ChallengeRankingResult.Entry entry) {
             return new RankEntryResponse(
-                    entry.rank(), entry.userId(), entry.achievementRate(), entry.isMe());
+                    entry.rank(), entry.userId(), entry.acceptedCount(), entry.isMe());
         }
     }
 
