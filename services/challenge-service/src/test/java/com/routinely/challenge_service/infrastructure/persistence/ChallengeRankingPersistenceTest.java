@@ -55,4 +55,22 @@ class ChallengeRankingPersistenceTest {
         assertThat(summaries.countActiveWithHigherScore(challenge.getId(), 150)).isZero();
         assertThat(summaries.countActiveWithHigherScore(challenge.getId(), 149)).isEqualTo(3);
     }
+
+    @Test @DisplayName("방장의 0회 시드 행이 있으면 첫 인증 전에도 DB 랭킹과 활성 인원에 방장이 포함된다")
+    void ranking_leaderSeedBeforeFirstCompletion_included() {
+        var challenge = challenges.saveAndFlush(Challenge.builder().creatorUserId(1L).title("독서")
+                .maxMembers(10).categoryCode("HEALTH")
+                .startedAt(LocalDate.of(2026, 9, 1)).endedAt(LocalDate.of(2026, 9, 30)).build());
+        var time = LocalDateTime.of(2026, 9, 1, 0, 0);
+        members.saveAndFlush(ChallengeMember.createLeader(challenge, 1L, time));
+        members.saveAndFlush(ChallengeMember.createMember(challenge, 2L, time));
+        // 둘 다 processMemberJoined가 만든 시드 상태 — 0회 · 도달 시각 없음
+        summaries.saveAndFlush(ChallengeMemberSummary.create(challenge.getId(), 1L));
+        summaries.saveAndFlush(ChallengeMemberSummary.create(challenge.getId(), 2L));
+
+        assertThat(summaries.findActiveRanking(challenge.getId(), PageRequest.of(0, 20)))
+                .extracting(ChallengeMemberSummary::getUserId).containsExactly(1L, 2L);
+        assertThat(members.countByChallengeIdAndStatus(challenge.getId(),
+                com.routinely.challenge_service.domain.member.MembershipStatus.ACTIVE)).isEqualTo(2);
+    }
 }

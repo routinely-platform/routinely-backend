@@ -44,6 +44,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -154,7 +155,7 @@ class ChallengeServiceTest {
     }
 
     @Test
-    @DisplayName("챌린지생성_challenge.created이벤트를_Outbox에저장한다")
+    @DisplayName("챌린지생성_challenge.created와_방장의challenge.member.joined를_같은시각으로_Outbox에저장한다")
     void createChallenge_savesChallengeCreatedOutbox() {
         when(challengeRepository.save(any(Challenge.class))).thenAnswer(invocation -> {
             Challenge challenge = invocation.getArgument(0);
@@ -178,9 +179,21 @@ class ChallengeServiceTest {
 
         challengeService.createChallengeAfterCategoryValidation(100L, command);
 
+        // 방장도 일반 멤버와 같은 참여 이벤트로 랭킹 시드(0회 summary + ZADD 0)를 받는다 (#183)
         ArgumentCaptor<ChallengeOutbox> outboxCaptor = ArgumentCaptor.forClass(ChallengeOutbox.class);
-        verify(challengeOutboxRepository).save(outboxCaptor.capture());
-        ChallengeOutbox outbox = outboxCaptor.getValue();
+        verify(challengeOutboxRepository, times(2)).save(outboxCaptor.capture());
+        assertThat(outboxCaptor.getAllValues()).extracting(ChallengeOutbox::getEventType)
+                .containsExactly("challenge.created", "challenge.member.joined");
+
+        ChallengeOutbox leaderJoined = outboxCaptor.getAllValues().get(1);
+        assertThat(leaderJoined.getAggregateId()).isEqualTo(1L);
+        assertThat(leaderJoined.getIdempotencyKey()).isEqualTo("challenge.member.joined:1:100:2026-05-24T00:00:00Z");
+        assertThat(leaderJoined.getPayload())
+                .contains("\"occurredAt\":\"2026-05-24T00:00:00Z\"")
+                .contains("\"userId\":100")
+                .contains("\"role\":\"LEADER\"");
+
+        ChallengeOutbox outbox = outboxCaptor.getAllValues().get(0);
         assertThat(outbox.getEventType()).isEqualTo("challenge.created");
         assertThat(outbox.getAggregateType()).isEqualTo("challenge");
         assertThat(outbox.getAggregateId()).isEqualTo(1L);

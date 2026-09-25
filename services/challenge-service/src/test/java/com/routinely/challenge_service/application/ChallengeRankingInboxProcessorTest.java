@@ -76,6 +76,28 @@ class ChallengeRankingInboxProcessorTest {
     }
 
     @Test
+    @DisplayName("방장(LEADER)의 member.joined도 0회 집계 행과 ZSET 0점을 만든다 — 첫 인증 전에도 랭킹에 보인다")
+    void processMemberJoined_leader_seedsZeroSummaryAndZsetEntry() {
+        String payload = """
+                {"eventId":"evt-leader","occurredAt":"2026-06-30T00:00:00Z","challengeId":7,
+                 "challengeName":"5km 러닝","userId":42,"role":"LEADER"}""";
+        ChallengeInbox inbox = receivedInbox(KafkaTopic.CHALLENGE_MEMBER_JOINED, payload);
+        when(inboxRepository.findById(1L)).thenReturn(Optional.of(inbox));
+        when(summaryRepository.findByChallengeIdAndUserId(CHALLENGE_ID, USER_ID)).thenReturn(Optional.empty());
+
+        processor.processInbox(1L);
+
+        ArgumentCaptor<ChallengeMemberSummary> captor = ArgumentCaptor.forClass(ChallengeMemberSummary.class);
+        verify(summaryRepository).save(captor.capture());
+        assertThat(captor.getValue().getAcceptedCount()).isZero();
+        assertThat(captor.getValue().getLastCompletedAt()).isNull();
+        // 방장 행은 생성 트랜잭션에서 먼저 커밋되므로 잠금 조회가 성공한다
+        verify(memberRepository).findLockedByChallengeIdAndUserId(CHALLENGE_ID, USER_ID);
+        verify(rankingRedisRepository).updateScore(CHALLENGE_ID, USER_ID, 0.0);
+        assertThat(inbox.getStatus()).isEqualTo(InboxStatus.PROCESSED);
+    }
+
+    @Test
     @DisplayName("member.joined 처리 시 집계 행이 이미 있으면 점수를 0으로 되돌리지 않는다")
     void processMemberJoined_whenSummaryExists_doesNotResetScore() {
         String payload = """

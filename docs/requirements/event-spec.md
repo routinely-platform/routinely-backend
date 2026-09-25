@@ -287,7 +287,8 @@ NotificationService도 구독하지 않는다. 발송 직전 gRPC CheckNotificat
 
 ### 5. `challenge.member.joined`
 
-사용자가 챌린지에 참여했을 때 발행한다.
+사용자가 챌린지에 참여했을 때 발행한다. **챌린지 생성 시 방장 참여로도 발행한다**(`role: LEADER`, #183) —
+`challenge.created`와 같은 트랜잭션 · 같은 `occurredAt`으로, created 다음에 적재한다.
 
 | 항목 | 내용 |
 |------|------|
@@ -318,7 +319,8 @@ NotificationService도 구독하지 않는다. 발송 직전 gRPC CheckNotificat
 
 **소비자 처리**
 
-- **ChallengeService** (`challenge-service.ranking.member.joined`): 랭킹 행 초기화 (#48)
+- **ChallengeService** (`challenge-service.ranking.member.joined`): 랭킹 행 초기화 (#48) — 0회 summary + `ZADD 0`.
+  방장도 이 경로로 시드를 받아 첫 인증 전에도 랭킹 목록 · `totalMembers`에 포함된다 (#183)
 - 🔵 **v2 RoutineService**: `ACTIVE` 재참여 시 챌린지 루틴 인스턴스 복원 (#118)
 - 🔵 **v2 ChatService**: `ACTIVE` 참여 시 `chat_room_members` 추가 + SYSTEM 메시지
 

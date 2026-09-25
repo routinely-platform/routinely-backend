@@ -91,6 +91,7 @@ graph LR
 #61: completed의 routineTemplateId를 routineId로 교체하고 acceptedCount/reachedAt/revision 스냅샷을 추가했다.
 completed/cancelled는 같은 스냅샷 계약이며 개인 이벤트는 랭킹 필드를 생략한다.
 `routine.notification.scheduled`도 같은 시퀀스의 `revision`을 싣는다 — 소비자가 옛 스냅샷을 거르는 기준이다.
+#183: `challenge.member.joined`는 챌린지 생성 시 **방장 참여(`role: LEADER`)로도 발행**된다 — 방장도 같은 경로로 0회 랭킹 행을 받는다.
 
 | | 무엇 | 왜 |
 |---|---|---|
