@@ -1,6 +1,7 @@
 package com.routinely.routine_service.application.event;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.routinely.routine_service.application.execution.AcceptedCount;
 import com.routinely.routine_service.domain.definition.RoutineDefinition;
 import com.routinely.routine_service.domain.outbox.RoutineOutbox;
 import com.routinely.routine_service.domain.outbox.RoutineOutboxRepository;
@@ -51,24 +52,39 @@ class RoutineEventPublisherTest {
         assertThat(outbox.getAggregateId()).isEqualTo(100L);
         assertThat(outbox.getIdempotencyKey()).isEqualTo("ROUTINE_EXECUTION:100:completed");
         assertThat(json.has("acceptedCount")).isFalse();
+        assertThat(json.has("reachedAt")).isFalse();
         assertThat(json.has("revision")).isFalse();
         assertThat(json.path("execDate").asText()).isEqualTo("2026-09-20");
         assertThat(json.path("occurredAt").asText()).isEqualTo("2026-09-23T00:00:00Z");
         verify(repository, never()).nextRevision();
     }
 
-    @Test @DisplayName("챌린지 취소는 재계산 값과 시퀀스 revision을 저장한다")
+    @Test @DisplayName("챌린지 취소는 재계산 값·도달 시각(UTC)과 시퀀스 revision을 한 스냅샷으로 저장한다")
     void publishCancelled_challenge_includesRevision() throws Exception {
         var routine = routine();
         ReflectionTestUtils.setField(routine, "challengeId", 5L);
         when(repository.nextRevision()).thenReturn(4821L);
-        publisher().publishCancelled(routine, 100L, LocalDate.of(2026, 9, 20), 12);
+        publisher().publishCancelled(routine, 100L, LocalDate.of(2026, 9, 20),
+                new AcceptedCount(12, Instant.parse("2026-09-19T00:00:00Z")));
         var outbox = saved();
         var json = mapper.readTree(outbox.getPayload());
         assertThat(json.path("acceptedCount").asInt()).isEqualTo(12);
+        assertThat(json.path("reachedAt").asText()).isEqualTo("2026-09-19T00:00:00Z");
         assertThat(json.path("revision").asLong()).isEqualTo(4821L);
         assertThat(outbox.getEventType()).isEqualTo("routine.execution.cancelled");
         assertThat(outbox.getIdempotencyKey()).isEqualTo("ROUTINE_EXECUTION:100:cancelled:4821");
+    }
+
+    @Test @DisplayName("챌린지 인정 횟수가 0이면 도달 시각을 null로 명시한다")
+    void publishCancelled_challengeZero_emitsNullReachedAt() throws Exception {
+        var routine = routine();
+        ReflectionTestUtils.setField(routine, "challengeId", 5L);
+        when(repository.nextRevision()).thenReturn(4830L);
+        publisher().publishCancelled(routine, 100L, LocalDate.of(2026, 9, 20), AcceptedCount.ZERO);
+        var json = mapper.readTree(saved().getPayload());
+        assertThat(json.path("acceptedCount").asInt()).isZero();
+        assertThat(json.has("reachedAt")).isTrue();
+        assertThat(json.path("reachedAt").isNull()).isTrue();
     }
 
     @Test @DisplayName("중단과 선호 시각 해제도 revision을 붙인 알림 스냅샷을 저장한다")

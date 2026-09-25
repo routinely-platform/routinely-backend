@@ -150,10 +150,14 @@ challenge-service는 **자신이 발행한** `challenge.member.joined` 이벤트
 
 - 순위는 accepted_count이며 100 상한이 없다. 동점은 공동 등수, 표시 순서는 last_completed_at
   빠른 순, 이후 userId다. DB fallback은 활성 멤버만 센다.
-- last_completed_at은 "현재 인정 횟수에 **도달한** 시각"이다. **accepted_count가 늘어난 스냅샷의
-  occurredAt으로만 옮긴다.** 캡 초과 완료나 취소처럼 횟수가 그대로거나 줄면 revision만 올리고 시각은
-  둔다. 이벤트마다 덮어쓰면 캡을 넘겨 더 수행한 사람이 동점 나열에서 뒤로 밀린다. 취소로 줄어든 경우
-  실제 도달 시각보다 늦은 값이 남을 수 있지만, 불리해지는 쪽은 취소한 본인뿐이라 허용한다.
+- last_completed_at은 "현재 인정 횟수에 **도달한** 시각"이며 **routine-service가 계산해 reachedAt으로
+  싣는다.** 현재 남은 완료 기록을 completed_at 순으로 캡에 넣어 보며, 인정된 마지막 기록의 completed_at이다.
+  - 소비자가 occurredAt을 받아 "점수가 늘었을 때만 옮기는" 방식은 **기각했다.** revision 비교는 중간
+    이벤트를 건너뛰게 허용하는데, 그 방식은 모든 이벤트를 순서대로 받았다고 가정한다. 캡 초과 완료(rev2)가
+    3회 도달(rev1)보다 먼저 처리되면 rev2의 시각이 남아, 같은 이벤트 집합에서 동점 나열이 달라진다.
+  - 소비자가 "더 이른 시각"을 고르는 방식도 취소로 내려갔다 다시 오를 때 틀린다.
+  - 스냅샷이 도달 시각까지 담으면 소비자는 revision이 가장 큰 것 하나만 반영하면 되고, 취소 후에도
+    남은 기록 기준의 정확한 값이 된다.
 - routine_event_revision_seq는 payload 직렬화 전에 채번한다. 루틴 행 잠금으로 같은 인스턴스의
   쓰기를 직렬화한다. #157은 챌린지·사용자마다 하나의 루틴 인스턴스를 유지해야 한다.
 - Outbox는 SKIP LOCKED로 여러 폴러가 나눠 처리하며 ACK 이후 DB 상태를 커밋한다.
@@ -161,7 +165,10 @@ challenge-service는 **자신이 발행한** `challenge.member.joined` 이벤트
 - 폴러는 **첫 전송 실패에서 배치를 멈춘다.** 건너뛰고 계속 보내면 같은 userId 이벤트의 순서가
   뒤집히고, 브로커 장애 때 행마다 대기가 쌓여 잠금이 길어진다. 다만 인스턴스가 여럿이면 SKIP LOCKED로
   서로 다른 행을 동시에 보내므로 **Kafka 도착 순서는 보장하지 않는다** — 순서 판정은 소비자의
-  revision 비교가 맡는다.
+  revision 비교가 맡는다. 첫 실패에서 멈추므로 무관한 키의 이벤트도 함께 지연된다(head-of-line).
+  호출 측 대기는 실패 한 번에 `max.block.ms`(3초)와 ACK 대기(3초)로 묶이며, `delivery.timeout.ms`는
+  호출 측 대기가 아니라 프로듀서 내부의 전송 수명이다 — ACK 대기가 끝난 뒤에도 전송이 이어질 수 있어
+  소비자 멱등성(eventId)과 revision 비교가 여전히 필요하다.
 - 기존 achievement_rate/completed_count/total_scheduled는 보존하되 쓰기를 중단한다.
   기존 집계가 있는 배포에서는 옛 퍼센트 Redis 키를 비우고 routine-service에서 새 계약의
   스냅샷을 재발행해 재집계해야 한다. 과거 completed_count를 복사하면 기간별 캡을 복원할 수 없다.

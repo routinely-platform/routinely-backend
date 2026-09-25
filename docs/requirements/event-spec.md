@@ -76,6 +76,7 @@
   "execDate": "2026-09-20",
   "challengeId": 5,
   "acceptedCount": 12,
+  "reachedAt": "2026-09-22T00:00:00Z",
   "revision": 4821
 }
 ```
@@ -88,9 +89,20 @@
 | `execDate` | string (yyyy-MM-dd) | ✅ | 수행 날짜. 캡 집계 기준 |
 | `challengeId` | long | ❌ | null = 개인 루틴 |
 | `acceptedCount` | int | 조건부 | 챌린지 루틴의 캡 적용 누적 인정 횟수(0 이상) |
+| `reachedAt` | string (ISO 8601, UTC) | 조건부 | 챌린지 루틴의 **현재 인정 횟수에 도달한 시각**. `acceptedCount = 0`이면 `null`(키는 존재) |
 | `revision` | long | 조건부 | 챌린지 루틴만 포함하는 양의 단조 증가 시퀀스 값 |
 
-- 개인 루틴은 acceptedCount/revision을 **생략**하고 시퀀스를 사용하지 않는다. 랭킹 소비자는 무시한다.
+- 개인 루틴의 실행 이벤트는 랭킹 필드 세 개(acceptedCount/reachedAt/revision)를 **모두 생략**하고
+  시퀀스를 사용하지 않는다. 랭킹 소비자는 무시한다.
+- **acceptedCount · reachedAt · revision은 한 벌의 완전한 스냅샷이다.** 소비자가 이전 이벤트를 몰라도
+  최신 스냅샷 하나로 최종 상태가 정해진다 — 역순 도착·중간 누락에도 결과가 같다.
+- reachedAt은 "처음 그 점수를 찍었던 역사적 시각"이 아니라 **현재 남아 있는 완료 기록으로 현재 인정
+  횟수를 채운 시각**, 즉 인정된 기록 중 마지막 `completed_at`이다.
+  - 주·월 묶음은 `execDate`(scheduled_date) 기준, 인정할 기록은 `completed_at` 오름차순으로 묶음마다 목표 N개까지
+  - DAILY·SPECIFIC_DAYS는 모든 완료를 인정
+  - 예: 주 3회에서 월·화·수·금 완료 → 3회, 도달 수요일(금은 캡 초과). 화요일을 취소하면 금요일이
+    인정 대상이 되어 도달 금요일
+  - `completed_at`은 Asia/Seoul 벽시계로 기록된 값이라 서비스 시간대로 해석해 **UTC Instant**로 싣는다
 - DAILY/SPECIFIC_DAYS는 완료 건수, WEEKLY_COUNT는 Σ min(주별 완료 수, 목표), MONTHLY_COUNT는 달력 월별 동일 계산.
 - 주는 **일요일 00:00~다음 일요일 00:00, Asia/Seoul**. WeekBoundary를 #60과 공유한다.
   시작·종료의 불완전한 주/월에도 목표 횟수를 줄이지 않는다.
@@ -106,8 +118,9 @@
 
 ChallengeService는 Inbox에 저장하고 멤버 행 잠금 안에서 summary의 revision과 비교한다.
 **수신 revision ≤ 저장 revision이면 처리 완료로 표시하고 폐기**한다.
-최신이면 accepted_count/revision을 저장하고, **accepted_count가 늘었을 때만** last_completed_at을
-occurredAt으로 옮긴다(현재 횟수에 도달한 시각 — 캡 초과 완료·취소로 늦추지 않는다).
+최신이면 accepted_count · last_completed_at(= reachedAt, 0회면 null) · revision을 **조건 없이 함께 덮어쓴다.**
+소비자는 이전 값과 비교해 시각을 추론하지 않는다 — 추론하면 처리 순서에 따라 결과가 달라진다.
+acceptedCount > 0인데 reachedAt이 없거나, 0인데 있으면 계약 위반으로 예외(재시도 → FAILED)다.
 **활성 멤버만** Redis ZADD로 절대값을 덮어쓴다. 탈퇴 멤버의 summary는 갱신해도 ZSET에는 넣지 않는다.
 Redis 장애 시 DB 트랜잭션을 롤백하여 Inbox 재시도가 가능하다.
 동점 등수는 동일하며, 나열은 last_completed_at 빠른 순(NULL 마지막), 이후 userId 순이다.

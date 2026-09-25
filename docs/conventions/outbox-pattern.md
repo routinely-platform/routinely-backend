@@ -124,7 +124,7 @@ RoutineEventPublisher가 완료·취소·알림 일정 스냅샷을 JSON으로 �
 - created_at은 발행 창구가 Clock으로 넣는다(폴링 정렬 키 — 테스트에서 고정 가능).
 - ACK 후 DB 커밋 실패나 ACK 타임아웃은 재전송을 만들 수 있다. 전달 보장은 at-least-once이며,
   Outbox UNIQUE 키는 중복 INSERT를 막고 소비자는 payload의 동일한 eventId로 중복 처리를 막아야 한다.
-- 챌린지 실행 이벤트만 시퀀스 revision과 acceptedCount를 포함한다. 개인 루틴은 둘 다 생략한다.
+- 챌린지 실행 이벤트만 시퀀스 revision · acceptedCount · reachedAt을 포함한다. 개인 루틴의 실행 이벤트는 셋 다 생략한다.
   개인 취소 키는 revision 대신 eventId를 붙인다. 알림 스냅샷 키에도 eventId를 붙인다.
 - 알림 스냅샷은 개인·챌린지 구분 없이 revision을 싣는다(소비자의 옛 스냅샷 폐기 기준).
 - 알림 스냅샷은 중단 또는 preferredTime 해제도 저장한다. 요일 마스크는 `Weekdays.toCodes`로

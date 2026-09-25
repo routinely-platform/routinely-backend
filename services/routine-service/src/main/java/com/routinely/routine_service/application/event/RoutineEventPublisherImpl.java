@@ -3,6 +3,7 @@ package com.routinely.routine_service.application.event;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.routinely.core.constant.KafkaTopics;
+import com.routinely.routine_service.application.execution.AcceptedCount;
 import com.routinely.routine_service.domain.outbox.RoutineOutbox;
 import com.routinely.routine_service.domain.outbox.RoutineOutboxRepository;
 import com.routinely.routine_service.domain.routine.Routine;
@@ -33,26 +34,28 @@ public class RoutineEventPublisherImpl implements RoutineEventPublisher {
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
-    public void publishCompleted(Routine routine, Long executionId, LocalDate execDate, Integer acceptedCount) {
-        publishExecution(routine, executionId, execDate, acceptedCount, false);
+    public void publishCompleted(Routine routine, Long executionId, LocalDate execDate, AcceptedCount ranking) {
+        publishExecution(routine, executionId, execDate, ranking, false);
     }
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
-    public void publishCancelled(Routine routine, Long executionId, LocalDate execDate, Integer acceptedCount) {
-        publishExecution(routine, executionId, execDate, acceptedCount, true);
+    public void publishCancelled(Routine routine, Long executionId, LocalDate execDate, AcceptedCount ranking) {
+        publishExecution(routine, executionId, execDate, ranking, true);
     }
 
     private void publishExecution(Routine routine, Long executionId, LocalDate execDate,
-                                  Integer acceptedCount, boolean cancelled) {
+                                  AcceptedCount ranking, boolean cancelled) {
         Map<String, Object> payload = envelope(routine);
         payload.put("executionId", executionId);
         payload.put("execDate", execDate.toString());
         payload.put("challengeId", routine.getChallengeId());
         Long revision = null;
         if (routine.isChallengeRoutine()) {
+            // 세 필드가 한 벌의 완전한 스냅샷이다 — 소비자는 이전 이벤트 없이 이것만으로 덮어쓴다.
             revision = outboxRepository.nextRevision();
-            payload.put("acceptedCount", acceptedCount);
+            payload.put("acceptedCount", ranking.count());
+            payload.put("reachedAt", ranking.reachedAt() == null ? null : ranking.reachedAt().toString());
             payload.put("revision", revision);
         }
         String key = "ROUTINE_EXECUTION:" + executionId + (cancelled ? ":cancelled:" +

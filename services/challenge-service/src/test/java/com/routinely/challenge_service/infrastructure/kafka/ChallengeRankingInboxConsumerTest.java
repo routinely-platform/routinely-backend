@@ -15,7 +15,7 @@ class ChallengeRankingInboxConsumerTest {
     private final ChallengeRankingInboxConsumer consumer = new ChallengeRankingInboxConsumer(repository, new ObjectMapper());
     private static final String EVENT = """
             {"eventId":"event-1","occurredAt":"2026-09-23T00:00:00Z","routineId":10,
-            "executionId":100,"execDate":"2026-09-20","challengeId":5,"userId":7,"acceptedCount":3,"revision":42}
+            "executionId":100,"execDate":"2026-09-20","challengeId":5,"userId":7,"acceptedCount":3,"reachedAt":"2026-09-20T00:00:00Z","revision":42}
             """;
 
     @Test @DisplayName("취소 이벤트를 같은 Inbox 경로에 저장하고 중복 eventId는 건너뛴다")

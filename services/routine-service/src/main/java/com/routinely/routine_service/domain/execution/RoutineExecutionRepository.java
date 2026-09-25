@@ -9,16 +9,19 @@ import java.util.List;
 import java.util.Optional;
 
 public interface RoutineExecutionRepository extends JpaRepository<RoutineExecution, Long> {
+    /** 인정 횟수·도달 시각 계산용. 완료 처리 시각 순(동시각은 id 순)으로 돌려준다. */
     @Query("""
-            SELECT e.scheduledDate FROM RoutineExecution e
+            SELECT new com.routinely.routine_service.domain.execution.CompletionMark(e.scheduledDate, e.completedAt)
+            FROM RoutineExecution e
             WHERE e.routineId = :routineId
               AND e.status = com.routinely.routine_service.domain.execution.ExecutionStatus.COMPLETED
               AND e.scheduledDate >= :startDate
               AND e.scheduledDate <= COALESCE(:endDate, e.scheduledDate)
+            ORDER BY e.completedAt ASC, e.id ASC
             """)
-    List<LocalDate> findCompletedDates(@Param("routineId") Long routineId,
-                                     @Param("startDate") LocalDate startDate,
-                                     @Param("endDate") LocalDate endDate);
+    List<CompletionMark> findCompletionMarks(@Param("routineId") Long routineId,
+                                             @Param("startDate") LocalDate startDate,
+                                             @Param("endDate") LocalDate endDate);
 
     boolean existsByRoutineId(Long routineId);
     Optional<RoutineExecution> findTopByRoutineIdOrderByScheduledDateDesc(Long routineId);

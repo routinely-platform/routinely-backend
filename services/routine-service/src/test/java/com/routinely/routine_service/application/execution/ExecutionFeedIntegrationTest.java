@@ -126,6 +126,27 @@ class ExecutionFeedIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM routine_outbox", Integer.class)).isEqualTo(7);
     }
 
+    @Test @DisplayName("도달 시각은 PostgreSQL의 completed_at 순서로 계산하고, 캡 안 기록을 취소하면 초과 기록이 도달 시각이 된다")
+    void cancelInsideCap_movesReachedAtToPromotedRecord() {
+        Long id = routine();
+        jdbc.update("UPDATE routines SET challenge_id = 5, ended_at = ?, schedule_type = 'WEEKLY_COUNT', target_count = 3 WHERE id = ?", TODAY, id);
+        // 9/6(일)~9/12(토) 같은 주. 월·화·수·금을 각 날짜 09:00(KST)에 누른 것으로 맞춘다.
+        for (int day : new int[]{7, 8, 9, 11}) {
+            LocalDate date = LocalDate.of(2026, 9, day);
+            service.complete(new CompleteExecutionCommand(id, 1L, date, null, null, null, null));
+            jdbc.update("UPDATE routine_executions SET completed_at = ? WHERE routine_id = ? AND scheduled_date = ?",
+                    date.atTime(9, 0), id, date);
+        }
+        // 화요일(캡 안) 취소 → 남은 월·수·금으로 3회, 금요일 09:00 KST에 채웠다
+        service.cancelComplete(id, 1L, LocalDate.of(2026, 9, 8));
+
+        var last = jdbc.queryForMap("SELECT event_type, (payload->>'acceptedCount')::int AS cnt, payload->>'reachedAt' AS reached "
+                + "FROM routine_outbox ORDER BY id DESC LIMIT 1");
+        assertThat(last.get("event_type")).isEqualTo("routine.execution.cancelled");
+        assertThat(last.get("cnt")).isEqualTo(3);
+        assertThat(last.get("reached")).isEqualTo("2026-09-11T00:00:00Z");
+    }
+
     @Test @DisplayName("루틴 시작과 선호 시각 해제 및 중단은 각각 알림 스냅샷을 저장한다")
     void routineLifecycle_publishesNotificationSnapshots() {
         var template = templates.saveAndFlush(RoutineTemplate.forPersonal(1L,

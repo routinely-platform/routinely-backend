@@ -110,7 +110,8 @@ public class ChallengeRankingInboxProcessor {
 
     /**
      * 루틴 완료·취소 — routine-service가 계산한 인정 횟수 스냅샷으로 summary를 UPSERT하고 ZSET 점수를 덮어쓴다.
-     * 두 이벤트 모두 변경 후 절대값이라 처리 코드가 같다.
+     * 두 이벤트 모두 변경 후 절대값이라 처리 코드가 같다. 스냅샷이 도달 시각까지 담고 있어 이전 이벤트를
+     * 몰라도 되므로, 역순·중간 누락이 있어도 가장 큰 revision 하나로 최종 상태가 정해진다.
      */
     private void processExecutionSnapshot(String eventType, String payloadJson) {
         RoutineExecutionCompletedPayload payload = deserialize(payloadJson,
@@ -125,8 +126,7 @@ public class ChallengeRankingInboxProcessor {
                 .orElseGet(() -> ChallengeMemberSummary.create(payload.challengeId(), payload.userId()));
 
         if (payload.revision() <= summary.getRevision()) return;
-        summary.applyAcceptedCount(payload.acceptedCount(), payload.revision(),
-                parseOccurredAt(payload.occurredAt()));
+        summary.applyAcceptedCount(payload.acceptedCount(), payload.revision(), toLocal(payload.reachedAt()));
         summaryRepository.save(summary);
 
         if (member.getStatus() == MembershipStatus.ACTIVE) {
@@ -137,14 +137,20 @@ public class ChallengeRankingInboxProcessor {
     private void validate(String eventType, RoutineExecutionCompletedPayload payload) {
         if (payload.challengeId() == null || payload.userId() == null
                 || payload.acceptedCount() == null || payload.acceptedCount() < 0
-                || payload.revision() == null || payload.revision() <= 0 || payload.occurredAt() == null) {
+                || payload.revision() == null || payload.revision() <= 0) {
             throw new BusinessException(INTERNAL_SERVER_ERROR,
                     "%s 필수 집계 필드가 누락되었습니다. eventId=%s".formatted(eventType, payload.eventId()));
         }
+        // 도달 시각은 인정 횟수와 짝이다 — 1회 이상이면 반드시 있고, 0회면 없어야 한다.
+        if ((payload.acceptedCount() > 0) != (payload.reachedAt() != null)) {
+            throw new BusinessException(INTERNAL_SERVER_ERROR,
+                    "%s acceptedCount와 reachedAt이 짝을 이루지 않습니다. eventId=%s".formatted(eventType, payload.eventId()));
+        }
     }
 
-    private LocalDateTime parseOccurredAt(String occurredAt) {
-        return Instant.parse(occurredAt).atZone(clock.getZone()).toLocalDateTime();
+    /** UTC ISO-8601 도달 시각을 서비스 시간대 벽시계로 바꾼다. null(0회)은 그대로 둔다. */
+    private LocalDateTime toLocal(String reachedAt) {
+        return reachedAt == null ? null : Instant.parse(reachedAt).atZone(clock.getZone()).toLocalDateTime();
     }
 
     private <T> T deserialize(String message, Class<T> type, String eventType) {

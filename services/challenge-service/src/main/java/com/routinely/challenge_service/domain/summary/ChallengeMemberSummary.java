@@ -56,19 +56,16 @@ public class ChallengeMemberSummary {
     }
 
     /**
-     * 루틴 완료 이벤트가 전달한 집계값으로 갱신한다. 값은 routine-service에서 캡까지 적용해
-     * 계산한 결과이므로 여기서는 그대로 반영한다. (멱등 — 같은 최종값으로 덮어써도 결과 동일)
+     * routine-service가 보낸 랭킹 스냅샷으로 덮어쓴다. revision이 저장값보다 클 때만 반영한다.
      *
-     * <p>{@code lastCompletedAt}은 동점 나열 기준인 "현재 횟수에 도달한 시각"이다(ADR-0043).
-     * 그래서 <b>인정 횟수가 늘었을 때만</b> 옮긴다. 캡을 넘긴 완료나 취소처럼 횟수가 그대로거나 줄어든
-     * 이벤트로 시각을 늦추면, 더 수행한 사람이 동점 나열에서 뒤로 밀린다.
+     * <p>{@code lastCompletedAt}은 동점 나열 기준인 "현재 인정 횟수에 도달한 시각"(ADR-0043)이며
+     * <b>발행 측이 계산해 싣는다.</b> 여기서 이전 값과 비교해 추론하면 이벤트 처리 순서에 따라 결과가
+     * 달라진다(역순으로 받으면 캡 초과 완료의 시각이 남는다). 0회면 null로 덮어쓴다.
      */
-    public void applyAcceptedCount(int acceptedCount, long revision, LocalDateTime occurredAt) {
+    public void applyAcceptedCount(int acceptedCount, long revision, LocalDateTime reachedAt) {
         if (revision <= this.revision) return;
-        if (acceptedCount > this.acceptedCount) {
-            this.lastCompletedAt = occurredAt;
-        }
         this.acceptedCount = acceptedCount;
+        this.lastCompletedAt = reachedAt;
         this.revision = revision;
     }
 

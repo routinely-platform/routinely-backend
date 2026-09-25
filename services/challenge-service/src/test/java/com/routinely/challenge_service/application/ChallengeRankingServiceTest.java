@@ -207,10 +207,9 @@ class ChallengeRankingServiceTest {
         when(rankingRedisRepository.findTopWithScores(CHALLENGE_ID, 2)).thenReturn(tuples);
         when(rankingRedisRepository.findByScoreGreaterThanOrEqualWithScores(CHALLENGE_ID, 150)).thenReturn(tuples);
         var earlier = summary(42, "150");
-        // user7은 하루 늦게 150회에 도달했다 — 149 → 150으로 늘어난 시각이 나열 기준이다.
+        // user7은 하루 늦게 150회에 도달했다 — 발행 측이 계산한 도달 시각(reachedAt)이 나열 기준이다.
         var later = ChallengeMemberSummary.create(CHALLENGE_ID, 7L);
-        later.applyAcceptedCount(149, 1, LocalDateTime.of(2026, 9, 1, 0, 0));
-        later.applyAcceptedCount(150, 2, LocalDateTime.of(2026, 9, 2, 0, 0));
+        later.applyAcceptedCount(150, 1, LocalDateTime.of(2026, 9, 2, 0, 0));
         when(summaryRepository.findByChallengeIdAndUserIdIn(eq(CHALLENGE_ID), any()))
                 .thenReturn(List.of(earlier, later));
         when(rankingRedisRepository.findScore(CHALLENGE_ID, ME)).thenReturn(150.0);

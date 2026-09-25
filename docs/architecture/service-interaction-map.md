@@ -88,7 +88,7 @@ graph LR
 
 ### 신설·변경 사항
 
-#61: completed의 routineTemplateId를 routineId로 교체하고 acceptedCount/revision을 추가했다.
+#61: completed의 routineTemplateId를 routineId로 교체하고 acceptedCount/reachedAt/revision 스냅샷을 추가했다.
 completed/cancelled는 같은 스냅샷 계약이며 개인 이벤트는 랭킹 필드를 생략한다.
 `routine.notification.scheduled`도 같은 시퀀스의 `revision`을 싣는다 — 소비자가 옛 스냅샷을 거르는 기준이다.
 

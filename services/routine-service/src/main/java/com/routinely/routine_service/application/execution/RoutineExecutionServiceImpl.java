@@ -113,8 +113,7 @@ public class RoutineExecutionServiceImpl implements RoutineExecutionService {
                 .challengeId(routine.getChallengeId()).routineTitle(routine.getDefinition().getTitle())
                 .scheduledDate(date).photoUrl(photoUrl).photoObjectKey(photoObjectKey).memo(command.memo())
                 .build());
-        eventPublisher.publishCompleted(routine, execution.getId(), date,
-                routine.isChallengeRoutine() ? acceptedCountCalculator.calculate(routine) : null);
+        eventPublisher.publishCompleted(routine, execution.getId(), date, rankingSnapshot(routine));
         return ExecutionCompleteResult.from(execution, card);
     }
 
@@ -136,8 +135,7 @@ public class RoutineExecutionServiceImpl implements RoutineExecutionService {
         }
         executionRepository.delete(execution);
         executionRepository.flush();
-        eventPublisher.publishCancelled(routine, execution.getId(), date,
-                routine.isChallengeRoutine() ? acceptedCountCalculator.calculate(routine) : null);
+        eventPublisher.publishCancelled(routine, execution.getId(), date, rankingSnapshot(routine));
         deleteAfterCommit(photoObjectKey);
 
         return ExecutionCompleteResult.cancelled(routineId, date);
@@ -207,6 +205,11 @@ public class RoutineExecutionServiceImpl implements RoutineExecutionService {
         // ID 순으로 잠가 겹치는 다중 요청의 교착을 방지한다. 한 건 실패하면 전체 롤백한다.
         return routineIds.stream().sorted().map(id -> complete(new CompleteExecutionCommand(
                 id, userId, date, null, null, null, null))).toList();
+    }
+
+    /** 챌린지 루틴만 랭킹 스냅샷을 계산한다. 개인 루틴은 랭킹 대상이 아니다. */
+    private AcceptedCount rankingSnapshot(Routine routine) {
+        return routine.isChallengeRoutine() ? acceptedCountCalculator.calculate(routine) : null;
     }
 
     private Routine getOwnedRoutineOrThrow(Long routineId, Long userId) {
