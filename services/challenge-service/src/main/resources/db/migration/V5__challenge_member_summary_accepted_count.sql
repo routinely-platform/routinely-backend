@@ -13,4 +13,4 @@ COMMENT ON COLUMN challenge_member_summary.revision IS '마지막 반영 이벤�
 COMMENT ON COLUMN challenge_member_summary.achievement_rate IS '미사용(#61) — 후속 정리에서 삭제';
 COMMENT ON COLUMN challenge_member_summary.completed_count IS '미사용(#61) — 후속 정리에서 삭제';
 COMMENT ON COLUMN challenge_member_summary.total_scheduled IS '미사용(#61) — 분모는 저장하지 않음';
-COMMENT ON COLUMN challenge_member_summary.last_completed_at IS '현재 accepted_count에 도달한 시각 — 동점 나열 기준. 횟수가 늘 때만 갱신';
+COMMENT ON COLUMN challenge_member_summary.last_completed_at IS '현재 accepted_count에 도달한 시각 — 동점 나열 기준. 발행 측이 계산한 reachedAt을 그대로 반영';
