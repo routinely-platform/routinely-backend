@@ -18,14 +18,15 @@ import static com.routinely.core.exception.ErrorCode.INTERNAL_SERVER_ERROR;
 /**
  * 랭킹 집계용 이벤트 Consumer. (#48, ADR-0028)
  *
- * <p>두 토픽을 소비한다.
+ * <p>세 토픽을 소비한다.
  * <ul>
- *     <li>{@code challenge.member.joined} — 멤버 참여 시 0% 랭킹 행을 만들기 위함</li>
- *     <li>{@code routine.execution.completed} — 달성률 갱신을 위함 (routine-service #61 발행)</li>
+ *     <li>{@code challenge.member.joined} — 멤버 참여 시 0회 랭킹 행을 만들기 위함</li>
+ *     <li>{@code routine.execution.completed} — 인정 횟수 갱신을 위함 (routine-service #61 발행)</li>
+ *     <li>{@code routine.execution.cancelled} — 취소 후 재계산한 인정 횟수 반영</li>
  * </ul>
  *
  * <p>Inbox 패턴(ADR-0013/0014)에 따라 수신 메시지를 challenge_inbox에 RECEIVED 상태로 저장만 하고 즉시 ACK한다.
- * 달성률 재계산·summary UPSERT·ZSET 갱신 등 후속 처리는 {@code ChallengeInboxScheduler}가 수행하므로,
+ * summary UPSERT·ZSET 갱신 등 후속 처리는 {@code ChallengeInboxScheduler}가 수행하므로,
  * Kafka 소비가 처리 지연·실패와 결합되지 않는다.
  *
  * <p>멱등성은 두 단계로 보장한다.
@@ -62,7 +63,17 @@ public class ChallengeRankingInboxConsumer {
     public void consumeRoutineExecutionCompleted(String message) {
         RoutineExecutionCompletedPayload payload = deserialize(message,
                 RoutineExecutionCompletedPayload.class, KafkaTopic.ROUTINE_EXECUTION_COMPLETED);
+        if (payload.challengeId() == null) return;
         store(payload.eventId(), KafkaTopic.ROUTINE_EXECUTION_COMPLETED, message, payload.challengeId());
+    }
+
+    @KafkaListener(topics = KafkaTopic.ROUTINE_EXECUTION_CANCELLED,
+            groupId = "challenge-service.ranking.routine.execution.cancelled")
+    public void consumeRoutineExecutionCancelled(String message) {
+        RoutineExecutionCompletedPayload payload = deserialize(message,
+                RoutineExecutionCompletedPayload.class, KafkaTopic.ROUTINE_EXECUTION_CANCELLED);
+        if (payload.challengeId() == null) return;
+        store(payload.eventId(), KafkaTopic.ROUTINE_EXECUTION_CANCELLED, message, payload.challengeId());
     }
 
     private void store(String messageId, String eventType, String message, Long challengeId) {

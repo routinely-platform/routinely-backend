@@ -3,7 +3,7 @@
 > **이 문서는 그림이 본문이다.** REST API는 Swagger가 담당하지만 **이벤트와 gRPC는 코드를 다 열어보기
 > 전에는 전경이 보이지 않는다.** 여기서 "누가 무엇을 발행하고 누가 받는가"를 한 장으로 본다.
 >
-> **최종 갱신**: 2026-09-13 · **기준**: backend `main` + `feat-57-routine-execution` 워크트리
+> **최종 갱신**: 2026-09-23 · **기준**: #61 Kafka Outbox 구현
 >
 > 상세 페이로드는 `docs/requirements/event-spec.md` · `grpc-spec.md`를 본다. 이 문서는 **관계와 상태**만 담는다.
 
@@ -48,9 +48,9 @@ graph LR
   C -- "challenge.member.left ⬜🆕" --> R
   C -- "challenge.member.left ⬜" --> H
   C -- "challenge.member.left ⬜🆕" --> N
-  R -- "routine.execution.completed 🟡" --> C
-  R -- "routine.execution.cancelled ⬜🆕" --> C
-  R -- "routine.notification.scheduled ⬜" --> N
+  R -- "routine.execution.completed ✅" --> C
+  R -- "routine.execution.cancelled ✅" --> C
+  R -- "routine.notification.scheduled 🟡" --> N
   H -- "chat.message.created ⬜" --> H
 
   C -. "gRPC ListCategories ✅" .-> R
@@ -78,19 +78,24 @@ graph LR
 | `challenge.member.joined` | Challenge | **Challenge**(랭킹) · 🔵 v2: Routine · Chat (#118) | `challengeId` | 🟡 부분 |
 | `challenge.member.left` | Challenge | Chat · **Routine** 🆕 · **Challenge**(랭킹 제외) 🆕 · **Notification**(방장 승계) 🆕 | `challengeId` | 🟡 부분 |
 | ~~`challenge.deleted`~~ | ~~Challenge~~ | ~~Routine~~ | — | ⛔ **철회** (ADR-0042 개정 · ADR-0044) |
-| `routine.execution.completed` | Routine | Challenge | `userId` | 🟡 소비자만 |
-| **`routine.execution.cancelled`** 🆕 | Routine | Challenge | `userId` | ⬜ |
-| `routine.notification.scheduled` | Routine | Notification | `userId` | ⬜ |
+| `routine.execution.completed` | Routine | Challenge | `userId` | ✅ |
+| **`routine.execution.cancelled`** | Routine | Challenge | `userId` | ✅ |
+| `routine.notification.scheduled` | Routine | Notification | `userId` | 🟡 발행 구현 · #157/#158 추가 배선 예정 |
 | `chat.message.created` | Chat | Chat (전 인스턴스 — **인스턴스마다 다른 그룹**) | `roomId` | ⬜ |
 
 > **모든 발행은 Outbox를 거친다**(ADR-0012). 소비는 Inbox에 적재 후 스케줄러가 처리한다(ADR-0014).
 > **예외 — `chat.message.created`** 는 Inbox를 쓰지 않는다. 공유 Inbox가 다른 인스턴스의 수신을 중복으로 막아 브로드캐스트가 깨진다(ADR-0016 보완 · 2026-09-13).
 
-### 신설·변경이 결정된 것 (2026-08-23)
+### 신설·변경 사항
+
+#61: completed의 routineTemplateId를 routineId로 교체하고 acceptedCount/reachedAt/revision 스냅샷을 추가했다.
+completed/cancelled는 같은 스냅샷 계약이며 개인 이벤트는 랭킹 필드를 생략한다.
+`routine.notification.scheduled`도 같은 시퀀스의 `revision`을 싣는다 — 소비자가 옛 스냅샷을 거르는 기준이다.
+#183: `challenge.member.joined`는 챌린지 생성 시 **방장 참여(`role: LEADER`)로도 발행**된다 — 방장도 같은 경로로 0회 랭킹 행을 받는다.
 
 | | 무엇 | 왜 |
 |---|---|---|
-| 🆕 | **`routine.execution.cancelled`** | 완료 이벤트만 있어 **랭킹이 오르는 경로만 있고 내려가는 경로가 없었다.** 캡 때문에 단순 감소는 틀린다 — **재계산은 routine-service가 한다.** 누적 인정 횟수를 싣고 소비 측은 `revision`을 비교해 덮어쓴다(S33 · 2026-09-10) |
+| ✅ #61 | **`routine.execution.cancelled`** | 완료 이벤트만 있어 **랭킹이 오르는 경로만 있고 내려가는 경로가 없었다.** 캡 때문에 단순 감소는 틀린다 — **재계산은 routine-service가 한다.** 누적 인정 횟수를 싣고 소비 측은 `revision`을 비교해 덮어쓴다(S33 · 2026-09-10) |
 | ⛔ | ~~`challenge.deleted`~~ | **2026-09-13 철회.** 정리할 챌린지 템플릿이 ADR-0044로 사라졌고, `WAITING` 챌린지는 다른 서비스에 남기는 것이 없다 |
 | 🔧 | `challenge.member.left` **페이로드** | `newLeaderUserId` 추가 — 승계당한 사람이 자기가 방장이 된 걸 알 방법이 없었다 |
 | 🔧 | `challenge.member.left` **구독자** | **Routine 추가**(챌린지 루틴 비활성화) · **Challenge 추가**(랭킹 제외 + ZSET `ZREM`) |
@@ -153,15 +158,16 @@ sequenceDiagram
 
   actor M as 멤버
   M->>R: POST /routines/{id}/executions/{date}/complete
-  Note over R: COMPLETED 행 + feed_cards INSERT
-  R-->>C: routine.execution.completed 🟡
-  Note over C: 주/달 재집계 (캡 적용)
+  Note over R: COMPLETED 행 + feed_cards + Outbox INSERT<br/>execDate 기준 캡 계산
+  R-->>C: routine.execution.completed ✅
+  Note over C: revision 비교 → summary 갱신<br/>활성 멤버만 ZADD
   C->>Rd: ZADD score=acceptedCount
 
   M->>R: DELETE .../complete
   Note over R: feed_reactions → feed_cards → executions
-  R-->>C: routine.execution.cancelled ⬜🆕
-  Note over C: execDate 기준 재집계
+  Note over R: 삭제 flush 후 캡 재계산 + Outbox
+  R-->>C: routine.execution.cancelled ✅
+  Note over C: revision 비교 → summary 갱신
   C->>Rd: ZADD (갱신)
 ```
 

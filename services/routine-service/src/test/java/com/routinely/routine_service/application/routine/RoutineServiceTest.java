@@ -53,7 +53,8 @@ class RoutineServiceTest {
         templateRepository = mock(RoutineTemplateRepository.class);
         service = new RoutineServiceImpl(routineRepository, templateRepository,
                 mock(com.routinely.routine_service.domain.execution.RoutineExecutionRepository.class),
-                mock(com.routinely.routine_service.domain.category.CategoryRepository.class));
+                mock(com.routinely.routine_service.domain.category.CategoryRepository.class),
+                mock(com.routinely.routine_service.application.event.RoutineEventPublisher.class));
     }
 
     private RoutineTemplate personalTemplate() {

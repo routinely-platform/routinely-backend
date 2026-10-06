@@ -27,6 +27,8 @@ dependencies {
 	annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
 	runtimeOnly 'org.postgresql:postgresql'
 	testRuntimeOnly 'com.h2database:h2'
+	testImplementation 'org.testcontainers:testcontainers-jdbc'
+	testImplementation 'org.testcontainers:testcontainers-postgresql'
 	testImplementation 'org.springframework.boot:spring-boot-data-jpa-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-kafka-test'
 	testImplementation 'org.springframework.grpc:spring-grpc-test'

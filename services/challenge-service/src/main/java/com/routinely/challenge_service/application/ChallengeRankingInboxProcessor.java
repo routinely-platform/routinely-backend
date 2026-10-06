@@ -7,6 +7,8 @@ import com.routinely.challenge_service.application.routine.RoutineExecutionCompl
 import com.routinely.challenge_service.domain.inbox.ChallengeInbox;
 import com.routinely.challenge_service.domain.inbox.ChallengeInboxRepository;
 import com.routinely.challenge_service.domain.inbox.InboxStatus;
+import com.routinely.challenge_service.domain.member.ChallengeMemberRepository;
+import com.routinely.challenge_service.domain.member.MembershipStatus;
 import com.routinely.challenge_service.domain.summary.ChallengeMemberSummary;
 import com.routinely.challenge_service.domain.summary.ChallengeMemberSummaryRepository;
 import com.routinely.challenge_service.infrastructure.kafka.KafkaTopic;
@@ -16,7 +18,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -40,17 +41,20 @@ public class ChallengeRankingInboxProcessor {
     private final ChallengeInboxRepository inboxRepository;
     private final ChallengeMemberSummaryRepository summaryRepository;
     private final ChallengeRankingRedisRepository rankingRedisRepository;
+    private final ChallengeMemberRepository memberRepository;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
     public ChallengeRankingInboxProcessor(ChallengeInboxRepository inboxRepository,
                                           ChallengeMemberSummaryRepository summaryRepository,
                                           ChallengeRankingRedisRepository rankingRedisRepository,
+                                          ChallengeMemberRepository memberRepository,
                                           ObjectMapper objectMapper,
                                           Clock clock) {
         this.inboxRepository = inboxRepository;
         this.summaryRepository = summaryRepository;
         this.rankingRedisRepository = rankingRedisRepository;
+        this.memberRepository = memberRepository;
         this.objectMapper = objectMapper;
         this.clock = clock;
     }
@@ -68,7 +72,8 @@ public class ChallengeRankingInboxProcessor {
 
         switch (inbox.getEventType()) {
             case KafkaTopic.CHALLENGE_MEMBER_JOINED -> processMemberJoined(inbox.getPayload());
-            case KafkaTopic.ROUTINE_EXECUTION_COMPLETED -> processExecutionCompleted(inbox.getPayload());
+            case KafkaTopic.ROUTINE_EXECUTION_COMPLETED, KafkaTopic.ROUTINE_EXECUTION_CANCELLED ->
+                    processExecutionSnapshot(inbox.getEventType(), inbox.getPayload());
             default -> log.warn("[Inbox] 처리 대상이 아닌 eventType - id: {}, eventType: {}",
                     inboxId, inbox.getEventType());
         }
@@ -83,54 +88,69 @@ public class ChallengeRankingInboxProcessor {
     }
 
     /**
-     * 멤버 참여 — 0% 랭킹 행을 생성한다. 완료 이벤트가 먼저 처리돼 이미 집계 행이 있으면
+     * 멤버 참여 — 0회 랭킹 행을 생성한다. 완료 이벤트가 먼저 처리돼 이미 집계 행이 있으면
      * 점수를 0으로 되돌리지 않도록 건드리지 않는다.
      */
     private void processMemberJoined(String payloadJson) {
         ChallengeMemberJoinedEvent event = deserialize(payloadJson, ChallengeMemberJoinedEvent.class,
                 KafkaTopic.CHALLENGE_MEMBER_JOINED);
 
+        var member = memberRepository.findLockedByChallengeIdAndUserId(event.challengeId(), event.userId())
+                .orElseThrow(() -> new BusinessException(INTERNAL_SERVER_ERROR, "랭킹 멤버를 찾을 수 없습니다."));
         if (summaryRepository.findByChallengeIdAndUserId(event.challengeId(), event.userId()).isPresent()) {
             return;
         }
 
         ChallengeMemberSummary summary = ChallengeMemberSummary.create(event.challengeId(), event.userId());
         summaryRepository.save(summary);
-        rankingRedisRepository.updateScore(event.challengeId(), event.userId(),
-                summary.getAchievementRate().doubleValue());
+        if (member.getStatus() == MembershipStatus.ACTIVE) {
+            rankingRedisRepository.updateScore(event.challengeId(), event.userId(), 0);
+        }
     }
 
     /**
-     * 루틴 완료 — routine-service가 계산한 집계값으로 summary를 UPSERT하고 ZSET 점수를 달성률로 갱신한다.
+     * 루틴 완료·취소 — routine-service가 계산한 인정 횟수 스냅샷으로 summary를 UPSERT하고 ZSET 점수를 덮어쓴다.
+     * 두 이벤트 모두 변경 후 절대값이라 처리 코드가 같다. 스냅샷이 도달 시각까지 담고 있어 이전 이벤트를
+     * 몰라도 되므로, 역순·중간 누락이 있어도 가장 큰 revision 하나로 최종 상태가 정해진다.
      */
-    private void processExecutionCompleted(String payloadJson) {
+    private void processExecutionSnapshot(String eventType, String payloadJson) {
         RoutineExecutionCompletedPayload payload = deserialize(payloadJson,
-                RoutineExecutionCompletedPayload.class, KafkaTopic.ROUTINE_EXECUTION_COMPLETED);
-        validate(payload);
-
-        BigDecimal rate = payload.achievementRate();
+                RoutineExecutionCompletedPayload.class, eventType);
+        if (payload.challengeId() == null) return;
+        validate(eventType, payload);
+        // 이미 존재하는 멤버 행을 잠가 summary 최초 INSERT와 revision 비교도 직렬화한다.
+        var member = memberRepository.findLockedByChallengeIdAndUserId(payload.challengeId(), payload.userId())
+                .orElseThrow(() -> new BusinessException(INTERNAL_SERVER_ERROR, "랭킹 멤버를 찾을 수 없습니다."));
         ChallengeMemberSummary summary = summaryRepository
                 .findByChallengeIdAndUserId(payload.challengeId(), payload.userId())
                 .orElseGet(() -> ChallengeMemberSummary.create(payload.challengeId(), payload.userId()));
 
-        summary.applyCompletion(payload.totalScheduled(), payload.completedCount(), rate,
-                parseOccurredAt(payload.occurredAt()));
+        if (payload.revision() <= summary.getRevision()) return;
+        summary.applyAcceptedCount(payload.acceptedCount(), payload.revision(), toLocal(payload.reachedAt()));
         summaryRepository.save(summary);
 
-        rankingRedisRepository.updateScore(payload.challengeId(), payload.userId(), rate.doubleValue());
-    }
-
-    private void validate(RoutineExecutionCompletedPayload payload) {
-        if (payload.challengeId() == null || payload.userId() == null
-                || payload.completedCount() == null || payload.totalScheduled() == null
-                || payload.achievementRate() == null) {
-            throw new BusinessException(INTERNAL_SERVER_ERROR,
-                    "routine.execution.completed 필수 집계 필드가 누락되었습니다. eventId=" + payload.eventId());
+        if (member.getStatus() == MembershipStatus.ACTIVE) {
+            rankingRedisRepository.updateScore(payload.challengeId(), payload.userId(), payload.acceptedCount());
         }
     }
 
-    private LocalDateTime parseOccurredAt(String occurredAt) {
-        return Instant.parse(occurredAt).atZone(clock.getZone()).toLocalDateTime();
+    private void validate(String eventType, RoutineExecutionCompletedPayload payload) {
+        if (payload.challengeId() == null || payload.userId() == null
+                || payload.acceptedCount() == null || payload.acceptedCount() < 0
+                || payload.revision() == null || payload.revision() <= 0) {
+            throw new BusinessException(INTERNAL_SERVER_ERROR,
+                    "%s 필수 집계 필드가 누락되었습니다. eventId=%s".formatted(eventType, payload.eventId()));
+        }
+        // 도달 시각은 인정 횟수와 짝이다 — 1회 이상이면 반드시 있고, 0회면 없어야 한다.
+        if ((payload.acceptedCount() > 0) != (payload.reachedAt() != null)) {
+            throw new BusinessException(INTERNAL_SERVER_ERROR,
+                    "%s acceptedCount와 reachedAt이 짝을 이루지 않습니다. eventId=%s".formatted(eventType, payload.eventId()));
+        }
+    }
+
+    /** UTC ISO-8601 도달 시각을 서비스 시간대 벽시계로 바꾼다. null(0회)은 그대로 둔다. */
+    private LocalDateTime toLocal(String reachedAt) {
+        return reachedAt == null ? null : Instant.parse(reachedAt).atZone(clock.getZone()).toLocalDateTime();
     }
 
     private <T> T deserialize(String message, Class<T> type, String eventType) {

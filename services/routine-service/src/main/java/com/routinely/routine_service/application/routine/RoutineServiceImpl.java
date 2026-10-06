@@ -1,6 +1,7 @@
 package com.routinely.routine_service.application.routine;
 
 import com.routinely.core.exception.BusinessException;
+import com.routinely.routine_service.application.event.RoutineEventPublisher;
 import com.routinely.routine_service.application.routine.dto.RoutineResult;
 import com.routinely.routine_service.application.routine.dto.StartRoutineCommand;
 import com.routinely.routine_service.application.routine.dto.UpdateRoutineCommand;
@@ -41,6 +42,7 @@ public class RoutineServiceImpl implements RoutineService {
     private final RoutineTemplateRepository templateRepository;
     private final RoutineExecutionRepository executionRepository;
     private final CategoryRepository categoryRepository;
+    private final RoutineEventPublisher eventPublisher;
 
     @Transactional
     public RoutineResult start(StartRoutineCommand command) {
@@ -60,6 +62,7 @@ public class RoutineServiceImpl implements RoutineService {
                 command.endedAt(),
                 command.preferredTime()
         ));
+        eventPublisher.publishNotificationScheduled(routine);
         return RoutineResult.from(routine);
     }
 
@@ -87,6 +90,7 @@ public class RoutineServiceImpl implements RoutineService {
         }
 
         routine.deactivate();
+        eventPublisher.publishNotificationScheduled(routine);
     }
 
     @Transactional
@@ -124,6 +128,7 @@ public class RoutineServiceImpl implements RoutineService {
                 ? routine.getPreferredTime() : command.preferredTime(),
                 command.clearPreferredDays() ? null : command.preferredDays() == null
                 ? routine.getPreferredDays() : command.preferredDays());
+        eventPublisher.publishNotificationScheduled(routine);
         return RoutineResult.from(routine);
     }
 

@@ -36,10 +36,17 @@ spring:
       port: ${REDIS_PORT:6379}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    # Outbox 폴러는 트랜잭션·행 잠금 안에서 전송을 기다린다. 브로커 장애 시 한 번의 폴링이 잠금을
+    # 오래 잡지 않도록 대기 한도를 짧게 둔다. 기본값은 max.block 60s · delivery 120s다.
+    # delivery.timeout.ms ≥ linger.ms + request.timeout.ms 제약을 지켜야 한다.
     producer:
       acks: all
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        max.block.ms: 3000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
     consumer:
       auto-offset-reset: earliest
       enable-auto-commit: false

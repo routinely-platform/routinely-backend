@@ -37,7 +37,8 @@ class RoutineUpdateTest {
     private final RoutineDefinition definition = RoutineDefinition.of("원래 제목", "HEALTH", ScheduleType.DAILY, null, null);
     private Routine routine;
     @BeforeEach void setUp() {
-        service = new RoutineServiceImpl(routines, templates, executions, categories);
+        service = new RoutineServiceImpl(routines, templates, executions, categories,
+                mock(com.routinely.routine_service.application.event.RoutineEventPublisher.class));
         routine = Routine.forPersonal(null, 1L, definition, start, start.plusDays(30), LocalTime.NOON);
         ReflectionTestUtils.setField(routine, "id", 1L);
         routine.changePreferences(LocalTime.NOON, (short)21);

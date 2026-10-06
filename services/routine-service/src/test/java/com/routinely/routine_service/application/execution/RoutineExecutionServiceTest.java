@@ -60,7 +60,8 @@ class RoutineExecutionServiceTest {
     private final FileStorage fileStorage = mock(FileStorage.class);
 
     private final RoutineExecutionService service = new RoutineExecutionServiceImpl(
-            executionRepository, routineRepository, fileStorage, CLOCK, feedCardRepository);
+            executionRepository, routineRepository, fileStorage, CLOCK, feedCardRepository,
+            new AcceptedCountCalculator(executionRepository, CLOCK), mock(com.routinely.routine_service.application.event.RoutineEventPublisher.class));
 
     private static Routine routine(LocalDate started, LocalDate ended) {
         Routine routine = Routine.forPersonal(TEMPLATE_ID, USER_ID, DEFINITION, started, ended, null);

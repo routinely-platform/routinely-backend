@@ -87,7 +87,12 @@ public class ChallengeService {
         ChallengeMember leader = ChallengeMember.createLeader(savedChallenge, creatorUserId, now());
         challengeMemberRepository.save(leader);
 
-        saveCreatedOutbox(savedChallenge, creatorUserId, command, toEventOccurredAt(now()));
+        // 두 이벤트가 같은 시각을 쓴다 — joined의 idempotencyKey에 occurredAt이 들어가 now()를 두 번 부르면 키가 흔들린다.
+        String occurredAt = toEventOccurredAt(now());
+        saveCreatedOutbox(savedChallenge, creatorUserId, command, occurredAt);
+        // 방장도 참여 이벤트를 낸다 — 일반 멤버와 같은 경로(Inbox → processMemberJoined)로 0회 랭킹 행이 생긴다. (#183)
+        // created 다음에 적재해 폴러의 (created_at, id) 순서대로 created → joined로 나간다.
+        saveJoinedOutbox(savedChallenge, creatorUserId, ChallengeMemberRole.LEADER, occurredAt);
 
         return ChallengeResult.from(
                 savedChallenge,

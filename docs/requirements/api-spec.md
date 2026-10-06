@@ -685,34 +685,24 @@ public class ApiResponse<T> {
 
 ---
 
-#### `GET /api/v1/challenges/{challengeId}/ranking` — 챌린지 내 랭킹
-- Auth: ✅
+#### GET /api/v1/challenges/{challengeId}/ranking — 챌린지 내 랭킹
+- Auth: ✅ 활성 멤버만 조회
+- 인정 횟수 내림차순 공동 등수. 동점 나열은 last_completed_at 오름차순(NULL 마지막), 이후 userId.
+- #61: 응답의 achievementRate를 정수 acceptedCount로 교체한다.
 
-**Response** `200`
+**Response** 200
 ```json
 {
   "success": true,
   "message": "랭킹 조회가 완료되었습니다.",
-  "data": [
-    {
-      "rank": 1,
-      "userId": 3,
-      "nickname": "박열심",
-      "acceptedCount": 28,
-      "totalScheduled": 30,
-      "achievementRate": 93.33,
-      "lastCompletedAt": "2025-02-28T07:30:00Z"
-    },
-    {
-      "rank": 2,
-      "userId": 1,
-      "nickname": "김루틴",
-      "acceptedCount": 25,
-      "totalScheduled": 30,
-      "achievementRate": 83.33,
-      "lastCompletedAt": "2025-02-27T08:00:00Z"
-    }
-  ]
+  "data": {
+    "rankings": [
+      {"rank": 1, "userId": 3, "acceptedCount": 28, "isMe": false},
+      {"rank": 2, "userId": 1, "acceptedCount": 25, "isMe": true}
+    ],
+    "myRanking": {"rank": 2, "userId": 1, "acceptedCount": 25, "isMe": true},
+    "totalMembers": 2
+  }
 }
 ```
 
