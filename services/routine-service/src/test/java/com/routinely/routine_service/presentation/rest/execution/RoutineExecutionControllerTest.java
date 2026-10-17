@@ -122,7 +122,7 @@ class RoutineExecutionControllerTest {
     @DisplayName("date만주면_start_end를같게해서비스에위임한다")
     void getMyExecutions_singleDate_delegates() {
         when(service.getMyExecutions(eq(1L), isNull(), isNull(), eq(TODAY), eq(TODAY)))
-                .thenReturn(List.of(ExecutionResult.derived(100L, "러닝", TODAY, ExecutionStatus.PENDING)));
+                .thenReturn(List.of(ExecutionResult.derived(100L, "러닝", TODAY, ExecutionStatus.PENDING, true)));
 
         ResponseEntity<ApiResponse<List<ExecutionResponse>>> response =
                 controller.getMyExecutions(1L, "2026-07-24", null, null, null, null);

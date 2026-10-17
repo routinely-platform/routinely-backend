@@ -6,6 +6,7 @@ import com.routinely.routine_service.application.challenge.ChallengeContext;
 import com.routinely.routine_service.application.event.RoutineEventPublisher;
 import com.routinely.routine_service.application.execution.dto.CompleteExecutionCommand;
 import com.routinely.routine_service.application.execution.dto.ExecutionCompleteResult;
+import com.routinely.routine_service.application.execution.dto.ExecutionResult;
 import com.routinely.routine_service.domain.definition.RoutineDefinition;
 import com.routinely.routine_service.domain.execution.ExecutionStatus;
 import com.routinely.routine_service.domain.execution.RoutineExecution;
@@ -28,7 +29,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -326,6 +329,20 @@ class RoutineExecutionChallengeTest {
         }
 
         @Test
+        @DisplayName("완료취소는_챌린지루틴이어도_백필창이지난날짜를취소할수있다")
+        void cancelComplete_challenge_outsideWindow_allowed() {
+            LocalDate old = TODAY.minusDays(10);
+            givenRoutine(challengeRoutine(ROUTINE_ID, CHALLENGE_ID, STARTED, ENDED));
+            when(executionRepository.findByRoutineIdAndScheduledDate(ROUTINE_ID, old))
+                    .thenReturn(Optional.of(RoutineExecution.completed(ROUTINE_ID, USER_ID, old, LocalDateTime.now(CLOCK))));
+
+            ExecutionCompleteResult result = service.cancelComplete(ROUTINE_ID, USER_ID, old);
+
+            assertThat(result.status()).isEqualTo(ExecutionStatus.PENDING);
+            verify(executionRepository).delete(any(RoutineExecution.class));
+        }
+
+        @Test
         @DisplayName("완료취소는_챌린지루틴이어도_gRPC를부르지않는다")
         void cancelComplete_challenge_doesNotCallGrpc() {
             givenRoutine(challengeRoutine(ROUTINE_ID, CHALLENGE_ID, STARTED, ENDED));
@@ -335,6 +352,73 @@ class RoutineExecutionChallengeTest {
             service.cancelComplete(ROUTINE_ID, USER_ID, TODAY);
 
             verifyNoInteractions(challengeClient);
+        }
+    }
+
+    @Nested
+    @DisplayName("조회 응답의 backfillable (결정 ⑤)")
+    class Backfillable {
+
+        private Map<LocalDate, Boolean> backfillableByDate(Routine routine, LocalDate from, LocalDate to,
+                                                           List<RoutineExecution> completed) {
+            when(routineRepository.findForExecutionDerivation(USER_ID, null, from, to)).thenReturn(List.of(routine));
+            when(executionRepository.findCompletedInRange(USER_ID, null, from, to)).thenReturn(completed);
+            return service.getMyExecutions(USER_ID, null, null, from, to).stream()
+                    .collect(Collectors.toMap(ExecutionResult::scheduledDate, ExecutionResult::backfillable));
+        }
+
+        private static RoutineExecution completedOn(LocalDate date) {
+            return RoutineExecution.completed(ROUTINE_ID, USER_ID, date, LocalDateTime.now(CLOCK));
+        }
+
+        @Test
+        @DisplayName("챌린지루틴은_오늘·지난3일째까지true_4일째부터false_미래는false")
+        void getMyExecutions_backfillable_challengeWindow() {
+            Map<LocalDate, Boolean> result = backfillableByDate(
+                    challengeRoutine(ROUTINE_ID, CHALLENGE_ID, STARTED, ENDED),
+                    TODAY.minusDays(5), TODAY.plusDays(2), List.of());
+
+            assertThat(result).containsEntry(TODAY.plusDays(2), false)
+                    .containsEntry(TODAY.plusDays(1), false)
+                    .containsEntry(TODAY, true)
+                    .containsEntry(TODAY.minusDays(3), true)
+                    .containsEntry(TODAY.minusDays(4), false)
+                    .containsEntry(TODAY.minusDays(5), false);
+        }
+
+        @Test
+        @DisplayName("COMPLETED행도_같은규칙으로계산한다_창안true·창밖false")
+        void getMyExecutions_backfillable_completedRowsUseSameRule() {
+            Map<LocalDate, Boolean> result = backfillableByDate(
+                    challengeRoutine(ROUTINE_ID, CHALLENGE_ID, STARTED, ENDED),
+                    TODAY.minusDays(5), TODAY,
+                    List.of(completedOn(TODAY.minusDays(2)), completedOn(TODAY.minusDays(5))));
+
+            assertThat(result).containsEntry(TODAY.minusDays(2), true)
+                    .containsEntry(TODAY.minusDays(5), false);
+        }
+
+        @Test
+        @DisplayName("개인루틴은_30일전도true_미래는false")
+        void getMyExecutions_backfillable_personalUnlimited() {
+            Map<LocalDate, Boolean> result = backfillableByDate(
+                    personalRoutine(ROUTINE_ID, TODAY.minusDays(60), null),
+                    TODAY.minusDays(30), TODAY.plusDays(1), List.of());
+
+            assertThat(result).containsEntry(TODAY.minusDays(30), true)
+                    .containsEntry(TODAY, true)
+                    .containsEntry(TODAY.plusDays(1), false);
+        }
+
+        @Test
+        @DisplayName("중단한루틴의_완료이력은false")
+        void getMyExecutions_backfillable_inactiveRoutineFalse() {
+            Routine routine = personalRoutine(ROUTINE_ID, STARTED, ENDED);
+            routine.deactivate();
+
+            Map<LocalDate, Boolean> result = backfillableByDate(routine, TODAY, TODAY, List.of(completedOn(TODAY)));
+
+            assertThat(result).containsEntry(TODAY, false);
         }
     }
 }
