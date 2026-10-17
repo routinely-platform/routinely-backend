@@ -201,13 +201,15 @@ public class RoutineExecutionServiceImpl implements RoutineExecutionService {
                 RoutineExecution row = completed.get(current);
                 if (row != null) {
                     // 저장된 완료는 중단 여부와 무관하게 이력으로 남긴다.
-                    results.add(ExecutionResult.from(row, title, cards.get(row.getId())));
+                    results.add(ExecutionResult.from(row, title, cards.get(row.getId()),
+                            isBackfillable(routine, current, today)));
                 } else if (routine.isActive()) {
                     // 중단한 루틴은 파생하지 않는다. 중단 시각을 기록하지 않아 "중단 이후의 과거"를
                     // 구분할 수 없으므로, 그만둔 뒤의 날짜에 MISSED를 붙이지 않도록 전 구간을 제외한다.
                     ExecutionScheduleDeriver.deriveStatus(definition, current, today)
                             .ifPresent(derived -> results.add(
-                                    ExecutionResult.derived(routine.getId(), title, current, derived)));
+                                    ExecutionResult.derived(routine.getId(), title, current, derived,
+                                            isBackfillable(routine, current, today))));
                 }
             }
         }
@@ -288,12 +290,34 @@ public class RoutineExecutionServiceImpl implements RoutineExecutionService {
      * 미래 날짜·수행 기간은 앞에서 이미 걸렀으므로 여기서는 "너무 오래된 과거"만 본다.
      */
     private void validateBackfillWindow(LocalDate date, LocalDate today) {
-        // TODO(human): date가 백필 창(오늘 + 지난 backfillProperties.backfillDays()일) 밖이면
-        //              ErrorCode.EXECUTION_BACKFILL_WINDOW_EXCEEDED 로 BusinessException을 던진다.
+        if (!isWithinBackfillWindow(date, today)) {
+            throw new BusinessException(ErrorCode.EXECUTION_BACKFILL_WINDOW_EXCEEDED, String.format(
+                    "챌린지 루틴은 지난 %d일까지만 인증할 수 있습니다.", backfillProperties.backfillDays()));
+        }
+    }
+
+    /**
+     * 백필 창 규칙의 단일 출처 — 완료 검증({@link #validateBackfillWindow})과 조회 응답의
+     * {@code backfillable}(결정 ⑤)이 같이 쓴다. 둘이 다르게 계산하면 버튼은 켜졌는데 400이 난다.
+     */
+    private boolean isWithinBackfillWindow(LocalDate date, LocalDate today) {
+        // TODO(human): date가 백필 창(오늘 + 지난 backfillProperties.backfillDays()일) 안이면 true를 돌려준다.
         // HINT: 경계는 date >= today - backfillDays 가 "허용"이다. backfillDays=3, today=7/24면 7/21은 허용, 7/20은 거부.
-        //       "포함/미포함"을 한 글자 틀리면 테스트 complete_challenge_backfillWindow_* 가 알려 준다.
-        //       설정값을 바꿔도 메시지가 맞도록 customMessage에 일수를 넣을지도 정해 본다.
+        //       "포함/미포함"을 한 글자 틀리면 complete_challenge_backfillWindow_* · getMyExecutions_backfillable_* 테스트가 알려 준다.
         // REFERENCE: WORKPLAN.md 결정 ② · docs/decisions ADR-0038 (3일 창) · validateWithinPeriod()
+        return true;
+    }
+
+    /**
+     * 조회 응답의 {@code backfillable} (#58 결정 ⑤) — "이 날짜를 지금 인증할 수 있는가".
+     * 미래 날짜 · 중단한 루틴은 false, 챌린지 루틴은 백필 창 밖이면 false, 개인 루틴은 창 제한이 없다.
+     * 수행 기간·요일은 파생 단계에서 이미 걸러져 행 자체가 없으므로 여기서 다시 보지 않는다.
+     */
+    private boolean isBackfillable(Routine routine, LocalDate date, LocalDate today) {
+        if (date.isAfter(today) || !routine.isActive()) {
+            return false;
+        }
+        return !routine.isChallengeRoutine() || isWithinBackfillWindow(date, today);
     }
 
     /**

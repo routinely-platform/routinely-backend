@@ -13,7 +13,8 @@ public record ExecutionResponse(
         String status,
         LocalDateTime completedAt,
         String photoUrl,
-        String memo, Long feedCardId) {
+        String memo, Long feedCardId,
+        boolean backfillable) {
 
     public static ExecutionResponse from(ExecutionResult result) {
         return new ExecutionResponse(
@@ -25,7 +26,8 @@ public record ExecutionResponse(
                 result.completedAt(),
                 result.photoUrl(),
                 result.memo(),
-                result.feedCardId()
+                result.feedCardId(),
+                result.backfillable()
         );
     }
 }
