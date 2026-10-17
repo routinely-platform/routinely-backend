@@ -58,10 +58,17 @@ class ExecutionFeedIntegrationTest {
         @Bean com.fasterxml.jackson.databind.ObjectMapper objectMapper() { return new com.fasterxml.jackson.databind.ObjectMapper(); }
         @Bean Clock clock() { return Clock.fixed(Instant.parse("2026-09-13T03:00:00Z"), ZoneId.of("Asia/Seoul")); }
         @Bean FileStorage fileStorage() { return mock(FileStorage.class); }
+        // 챌린지 루틴 완료는 challenge-service 확인을 거친다(#58) — 여기서는 항상 ACTIVE 챌린지의 활성 멤버로 둔다.
         @Bean com.routinely.routine_service.infrastructure.grpc.ChallengeServiceGrpcClient challengeServiceGrpcClient() {
-            return mock(com.routinely.routine_service.infrastructure.grpc.ChallengeServiceGrpcClient.class);
+            var client = mock(com.routinely.routine_service.infrastructure.grpc.ChallengeServiceGrpcClient.class);
+            when(client.getChallengeContext(any(), any())).thenReturn(
+                    com.routinely.routine_service.application.challenge.ChallengeContext.of(
+                            com.routinely.routine_service.application.challenge.ChallengeContext.Status.ACTIVE, true));
+            return client;
         }
-        @Bean ChallengeBackfillProperties challengeBackfillProperties() { return new ChallengeBackfillProperties(3); }
+        // 이 클래스의 랭킹 테스트는 9/13 기준으로 지난 주(9/6~9/12) 전체를 채워 캡·revision을 본다.
+        // 백필 창(기본 3일, #58)이 관심사가 아니므로 한 주를 덮도록 7일로 넓힌다. 창 자체는 RoutineExecutionChallengeTest가 본다.
+        @Bean ChallengeBackfillProperties challengeBackfillProperties() { return new ChallengeBackfillProperties(7); }
     }
 
     @BeforeEach
