@@ -35,6 +35,7 @@ public enum ErrorCode {
     ROUTINE_NOT_FOUND("ROUTINE_NOT_FOUND", "루틴을 찾을 수 없습니다.", ErrorStatus.NOT_FOUND),
     EXECUTION_NOT_FOUND("EXECUTION_NOT_FOUND", "루틴 수행 기록을 찾을 수 없습니다.", ErrorStatus.NOT_FOUND),
     EXECUTION_ALREADY_COMPLETED("EXECUTION_ALREADY_COMPLETED", "이미 완료된 수행 기록입니다.", ErrorStatus.CONFLICT),
+    EXECUTION_BACKFILL_WINDOW_EXCEEDED("EXECUTION_BACKFILL_WINDOW_EXCEEDED", "챌린지 루틴은 지난 3일까지만 인증할 수 있습니다.", ErrorStatus.BAD_REQUEST),
 
     // Chat
     CHAT_ROOM_NOT_FOUND("CHAT_ROOM_NOT_FOUND", "채팅방을 찾을 수 없습니다.", ErrorStatus.NOT_FOUND),

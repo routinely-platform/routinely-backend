@@ -87,6 +87,9 @@ resilience4j:
 
 # 파일 저장(S3) — 루틴 수행 인증 사진 업로드 (#57). local 프로파일은 LocalStack을 사용한다.
 routinely:
+  # 챌린지 루틴은 오늘 + 지난 N일까지만 인증할 수 있다 (#58 · ADR-0038). 개인 루틴은 제한 없음
+  challenge:
+    backfill-days: 3
   storage:
     s3:
       enabled: true
