@@ -61,7 +61,9 @@ class RoutineExecutionServiceTest {
 
     private final RoutineExecutionService service = new RoutineExecutionServiceImpl(
             executionRepository, routineRepository, fileStorage, CLOCK, feedCardRepository,
-            new AcceptedCountCalculator(executionRepository, CLOCK), mock(com.routinely.routine_service.application.event.RoutineEventPublisher.class));
+            new AcceptedCountCalculator(executionRepository, CLOCK), mock(com.routinely.routine_service.application.event.RoutineEventPublisher.class),
+            mock(com.routinely.routine_service.infrastructure.grpc.ChallengeServiceGrpcClient.class),
+            new ChallengeBackfillProperties(3));
 
     private static Routine routine(LocalDate started, LocalDate ended) {
         Routine routine = Routine.forPersonal(TEMPLATE_ID, USER_ID, DEFINITION, started, ended, null);

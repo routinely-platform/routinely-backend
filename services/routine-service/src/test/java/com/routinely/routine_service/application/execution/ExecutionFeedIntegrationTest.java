@@ -58,6 +58,10 @@ class ExecutionFeedIntegrationTest {
         @Bean com.fasterxml.jackson.databind.ObjectMapper objectMapper() { return new com.fasterxml.jackson.databind.ObjectMapper(); }
         @Bean Clock clock() { return Clock.fixed(Instant.parse("2026-09-13T03:00:00Z"), ZoneId.of("Asia/Seoul")); }
         @Bean FileStorage fileStorage() { return mock(FileStorage.class); }
+        @Bean com.routinely.routine_service.infrastructure.grpc.ChallengeServiceGrpcClient challengeServiceGrpcClient() {
+            return mock(com.routinely.routine_service.infrastructure.grpc.ChallengeServiceGrpcClient.class);
+        }
+        @Bean ChallengeBackfillProperties challengeBackfillProperties() { return new ChallengeBackfillProperties(3); }
     }
 
     @BeforeEach
