@@ -201,10 +201,23 @@ RoutineService (루틴 실행 완료 요청 수신)
     │   ├── challenge_id IS NULL → 개인 루틴으로 처리 (gRPC 호출 불필요)
     │   └── challenge_id IS NOT NULL → 챌린지 루틴
     │       └── ChallengeGrpcService.GetChallengeContext(challengeId, userId)
-    │           ├── challenge_status != "ACTIVE" → FORBIDDEN (CHALLENGE_ALREADY_ENDED 등)
-    │           ├── is_member_active == false    → FORBIDDEN (NOT_CHALLENGE_MEMBER)
+    │           ├── WAITING                   → 409 CHALLENGE_NOT_STARTED
+    │           ├── ENDED                     → 409 CHALLENGE_ALREADY_ENDED
+    │           ├── is_member_active == false → 403 NOT_CHALLENGE_MEMBER
+    │           ├── NOT_FOUND                 → 404 CHALLENGE_NOT_FOUND (+ log.error, 데이터 이상)
     │           └── 모두 통과 → 실행 완료 처리
 ```
+
+**호출 측 구현** (#58 ✅) — `routine-service` `infrastructure/grpc/ChallengeServiceGrpcClient`
+
+- deadline 3s + 서킷 브레이커 `challenge-service-cb`(COUNT_BASED 10 · 최소 5 · 실패율 50% · OPEN 10s · timelimiter 5s)
+- **Fail Closed** — 호출 실패·서킷 OPEN이면 `503 SERVICE_UNAVAILABLE`로 인증을 막는다
+- **`NOT_FOUND`는 장애로 세지 않는다** — supplier 안에서 잡아 "없음" 결과로 바꾼다. 밖으로 던지면 서킷이 실패로 세어 503이 된다
+- `challenge_status`가 `UNSPECIFIED`/모르는 값이면 판단 근거가 없으므로 장애로 보고 막는다
+- 호출 위치는 **트랜잭션 안, 루틴 비관적 잠금 뒤, 로컬 검증(미래·활성·종료일·기간·백필 창·요일·중복)을 모두 통과한 다음, 사진 업로드·저장·Outbox 앞**이다.
+  잠금·커넥션을 최대 deadline만큼 쥐는 건 장애 초반 몇 건뿐이고 서킷이 열리면 즉시 실패한다.
+  트래픽이 커지거나 challenge-service가 평소에도 느려지면 트랜잭션 밖 Facade로 옮긴다
+- 완료 취소에는 호출하지 않는다
 
 **응답 케이스**:
 
@@ -227,9 +240,9 @@ gRPC 호출 실패 시 gRPC Status Code를 사용한다.
 | 상황 | gRPC Status | 호출자 처리 |
 |------|-------------|-------------|
 | 정상 | `OK` | 응답 값으로 비즈니스 로직 처리 |
-| 챌린지 없음 | `NOT_FOUND` | HTTP 404 반환 |
-| 내부 오류 | `INTERNAL` | HTTP 500 반환 |
-| 타임아웃 | `DEADLINE_EXCEEDED` | HTTP 503 또는 재시도 |
+| 챌린지 없음 | `NOT_FOUND` | HTTP 404 반환 (서킷 실패로 세지 않는다) |
+| 내부 오류 | `INTERNAL` | `GetChallengeContext`: HTTP 503 (Fail Closed, 서킷 실패로 센다) |
+| 타임아웃 | `DEADLINE_EXCEEDED` | HTTP 503 (Fail Closed, 서킷 실패로 센다) |
 
 > 비즈니스 판단(멤버 아님, 챌린지 종료 등)은 gRPC Status가 아닌
 > 응답 필드(`is_active_member`, `challenge_status`)로 전달한다.
