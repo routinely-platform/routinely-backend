@@ -5,7 +5,7 @@ services:
     image: openzipkin/zipkin:3
     container_name: routinely-zipkin
     ports:
-      - "9411:9411"
+      - "127.0.0.1:9411:9411"
     networks:
       - routinely-net
 
@@ -16,7 +16,7 @@ services:
     image: prom/prometheus:v2.55.1
     container_name: routinely-prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     extra_hosts:
@@ -29,7 +29,7 @@ services:
     image: grafana/loki:3.3.0
     container_name: routinely-loki
     ports:
-      - "3100:3100"
+      - "127.0.0.1:3100:3100"
     command: -config.file=/etc/loki/local-config.yaml
     networks:
       - routinely-net
@@ -56,7 +56,7 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana_data:/var/lib/grafana
