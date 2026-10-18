@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Local MVP Services" type="CompoundRunConfigurationType">
+    <toRun name="RegistryServiceApplication" type="SpringBootApplicationConfigurationType" />
+    <toRun name="GatewayServiceApplication" type="SpringBootApplicationConfigurationType" />
+    <toRun name="UserServiceApplication" type="SpringBootApplicationConfigurationType" />
+    <toRun name="RoutineServiceApplication" type="SpringBootApplicationConfigurationType" />
+    <toRun name="ChallengeServiceApplication" type="SpringBootApplicationConfigurationType" />
+    <method v="2" />
+  </configuration>
+</component>
