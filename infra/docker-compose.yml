@@ -10,8 +10,9 @@ services:
       POSTGRES_USER: routinely
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: user_db
+    # 127.0.0.1 바인딩: 이 호스트에서만 접속된다. 같은 네트워크의 다른 기기에는 열지 않는다 (아래 포트 전부 동일).
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./config/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
@@ -28,7 +29,7 @@ services:
     image: redis:7-alpine
     container_name: routinely-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     networks:
       - routinely-net
     healthcheck:
@@ -58,7 +59,7 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
       CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
     ports:
-      - "29092:29092"
+      - "127.0.0.1:29092:29092"
     networks:
       - routinely-net
     healthcheck:
@@ -79,7 +80,7 @@ services:
       SERVICES: s3
       DEBUG: 0
     ports:
-      - "4566:4566"
+      - "127.0.0.1:4566:4566"
     volumes:
       - ./config/localstack/init-s3.sh:/etc/localstack/init/ready.d/init-s3.sh:ro
     networks:
