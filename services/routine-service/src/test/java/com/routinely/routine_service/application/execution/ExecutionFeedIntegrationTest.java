@@ -58,6 +58,9 @@ class ExecutionFeedIntegrationTest {
         @Bean com.fasterxml.jackson.databind.ObjectMapper objectMapper() { return new com.fasterxml.jackson.databind.ObjectMapper(); }
         @Bean Clock clock() { return Clock.fixed(Instant.parse("2026-09-13T03:00:00Z"), ZoneId.of("Asia/Seoul")); }
         @Bean FileStorage fileStorage() { return mock(FileStorage.class); }
+        // 이 클래스의 랭킹 테스트는 9/13 기준으로 지난 주(9/6~9/12) 전체를 채워 캡·revision을 본다.
+        // 백필 창(기본 3일, #58)이 관심사가 아니므로 한 주를 덮도록 7일로 넓힌다. 창 자체는 RoutineExecutionChallengeTest가 본다.
+        @Bean ChallengeBackfillProperties challengeBackfillProperties() { return new ChallengeBackfillProperties(7); }
     }
 
     @BeforeEach
@@ -85,7 +88,7 @@ class ExecutionFeedIntegrationTest {
     @Test @DisplayName("다중 완료는 선택한 세 루틴마다 카드 한 장을 만든다")
     void bulkComplete_createsThreeCards() {
         var ids = List.of(routine(), routine(), routine());
-        var result = service.bulkComplete(1L, TODAY, ids);
+        var result = service.bulkCompleteAfterChallengeCheck(1L, TODAY, ids);
         assertThat(result).hasSize(3);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM routine_outbox", Integer.class)).isEqualTo(3);
         assertThat(executions.count()).isEqualTo(3);
@@ -102,7 +105,7 @@ class ExecutionFeedIntegrationTest {
         Long active = routine();
         Long stopped = routine();
         jdbc.update("UPDATE routines SET is_active = false WHERE id = ?", stopped);
-        assertThatThrownBy(() -> service.bulkComplete(1L, TODAY, List.of(active, stopped)))
+        assertThatThrownBy(() -> service.bulkCompleteAfterChallengeCheck(1L, TODAY, List.of(active, stopped)))
                 .isInstanceOf(BusinessException.class);
         assertThat(executions.count()).isZero();
         assertThat(cards.count()).isZero();
@@ -114,14 +117,14 @@ class ExecutionFeedIntegrationTest {
         Long id = routine();
         jdbc.update("UPDATE routines SET challenge_id = 5, ended_at = ?, schedule_type = 'WEEKLY_COUNT', target_count = 3 WHERE id = ?", TODAY, id);
         for (int day = 6; day <= 10; day++) {
-            service.complete(new CompleteExecutionCommand(id, 1L, LocalDate.of(2026, 9, day), null, null, null, null));
+            service.completeAfterChallengeCheck(new CompleteExecutionCommand(id, 1L, LocalDate.of(2026, 9, day), null, null, null, null));
         }
         assertThat(jdbc.queryForList("SELECT (payload->>'acceptedCount')::int FROM routine_outbox ORDER BY id", Integer.class))
                 .containsExactly(1, 2, 3, 3, 3);
         service.cancelComplete(id, 1L, LocalDate.of(2026, 9, 10));
         assertThat(jdbc.queryForObject("SELECT (payload->>'acceptedCount')::int FROM routine_outbox ORDER BY id DESC LIMIT 1", Integer.class)).isEqualTo(3);
         assertThat(jdbc.queryForObject("SELECT event_type FROM routine_outbox ORDER BY id DESC LIMIT 1", String.class)).isEqualTo("routine.execution.cancelled");
-        service.complete(new CompleteExecutionCommand(id, 1L, LocalDate.of(2026, 9, 10), null, null, null, null));
+        service.completeAfterChallengeCheck(new CompleteExecutionCommand(id, 1L, LocalDate.of(2026, 9, 10), null, null, null, null));
         assertThat(jdbc.queryForList("SELECT (payload->>'revision')::bigint FROM routine_outbox ORDER BY id", Long.class)).isSorted().doesNotHaveDuplicates();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM routine_outbox", Integer.class)).isEqualTo(7);
     }
@@ -133,7 +136,7 @@ class ExecutionFeedIntegrationTest {
         // 9/6(일)~9/12(토) 같은 주. 월·화·수·금을 각 날짜 09:00(KST)에 누른 것으로 맞춘다.
         for (int day : new int[]{7, 8, 9, 11}) {
             LocalDate date = LocalDate.of(2026, 9, day);
-            service.complete(new CompleteExecutionCommand(id, 1L, date, null, null, null, null));
+            service.completeAfterChallengeCheck(new CompleteExecutionCommand(id, 1L, date, null, null, null, null));
             jdbc.update("UPDATE routine_executions SET completed_at = ? WHERE routine_id = ? AND scheduled_date = ?",
                     date.atTime(9, 0), id, date);
         }
@@ -167,7 +170,7 @@ class ExecutionFeedIntegrationTest {
 
     @Test @DisplayName("빈 목록의 다중 완료도 정상 처리한다")
     void bulkComplete_emptyListReturnsZero() {
-        assertThat(service.bulkComplete(1L, TODAY, List.of())).isEmpty();
+        assertThat(service.bulkCompleteAfterChallengeCheck(1L, TODAY, List.of())).isEmpty();
         assertThat(cards.count()).isZero();
     }
 
@@ -175,7 +178,7 @@ class ExecutionFeedIntegrationTest {
     void cancel_cascadesReactionsAndDeletesPhotoAfterCommit() {
         when(storage.upload(any())).thenReturn(new StoredFile("photo-key", "https://cdn/a.jpg"));
         Long id = routine();
-        var completed = service.complete(command(id, true));
+        var completed = service.completeAfterChallengeCheck(command(id, true));
         jdbc.update("INSERT INTO feed_reactions(feed_card_id, user_id, emoji) VALUES (?, 2, '🔥')", completed.feedCardId());
         new TransactionTemplate(transactions).executeWithoutResult(tx -> {
             service.cancelComplete(id, 1L, TODAY);
@@ -191,7 +194,7 @@ class ExecutionFeedIntegrationTest {
     void cancel_rollbackKeepsPhoto() {
         when(storage.upload(any())).thenReturn(new StoredFile("photo-key", "https://cdn/a.jpg"));
         Long id = routine();
-        service.complete(command(id, true));
+        service.completeAfterChallengeCheck(command(id, true));
         new TransactionTemplate(transactions).executeWithoutResult(tx -> {
             service.cancelComplete(id, 1L, TODAY);
             tx.setRollbackOnly();
@@ -205,7 +208,7 @@ class ExecutionFeedIntegrationTest {
     void complete_cardFailureCompensatesPhoto() {
         when(storage.upload(any())).thenReturn(new StoredFile("photo-key", "x".repeat(501)));
         Long id = routine();
-        assertThatThrownBy(() -> service.complete(command(id, true)))
+        assertThatThrownBy(() -> service.completeAfterChallengeCheck(command(id, true)))
                 .isInstanceOf(DataIntegrityViolationException.class);
         assertThat(executions.count()).isZero();
         assertThat(cards.count()).isZero();
@@ -215,7 +218,7 @@ class ExecutionFeedIntegrationTest {
 
     @Test @DisplayName("카드보다 실행을 먼저 삭제하면 외래키가 잘못된 순서를 차단한다")
     void delete_executionBeforeCardViolatesForeignKey() {
-        var completed = service.complete(command(routine(), false));
+        var completed = service.completeAfterChallengeCheck(command(routine(), false));
         assertThatThrownBy(() -> jdbc.update("DELETE FROM routine_executions WHERE id = ?", completed.executionId()))
                 .isInstanceOf(DataIntegrityViolationException.class);
         assertThat(cards.count()).isEqualTo(1);
@@ -228,7 +231,7 @@ class ExecutionFeedIntegrationTest {
         var routine = routines.saveAndFlush(Routine.forPersonal(template.getId(), 1L,
                 template.getDefinition().copy(), TODAY.minusDays(10), null, null));
         jdbc.update("UPDATE routine_templates SET title = '새 템플릿', schedule_type = 'WEEKLY_COUNT', target_count = 2, is_deleted = true WHERE id = ?", template.getId());
-        var completed = service.complete(command(routine.getId(), false));
+        var completed = service.completeAfterChallengeCheck(command(routine.getId(), false));
         jdbc.update("UPDATE routines SET title = '새 루틴 제목' WHERE id = ?", routine.getId());
         assertThat(cards.findById(completed.feedCardId()).orElseThrow().getRoutineTitle()).isEqualTo("원래 제목");
         assertThat(service.getMyExecutions(1L, routine.getId(), null, TODAY.minusDays(1), TODAY)).hasSize(2);

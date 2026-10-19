@@ -46,6 +46,10 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * 가능하다. 깜빡한 하루가 영구히 MISSED로 굳지 않게 하려는 정책이며, MISSED는 저장된 사실이 아니라
  * 완료 기록이 없어서 계산된 값이라 백필하면 자동으로 사라진다.
  *
+ * <p><b>챌린지 루틴</b>(#58): 백필은 오늘 + 지난 {@link ChallengeBackfillProperties#backfillDays()}일로 제한한다.
+ * 챌린지가 ACTIVE이고 사용자가 활성 멤버인지는 트랜잭션 밖의 {@link RoutineExecutionCompletionService}가 먼저
+ * 확인하고 넘긴다(결정 ③ C) — 이 클래스는 원격 호출을 하지 않는다.
+ *
  * <p>인증 사진은 공통 모듈 {@link FileStorage}(S3)에 위임해 저장하고, MIME/크기/시그니처 검증은 요청 계층에서 수행한다. 완료 취소 시 사진 오브젝트는 커밋 이후 삭제하고, 업로드 후 트랜잭션이
  * 롤백되면 새 오브젝트를 보상 삭제해 DB 참조와 저장소 실체의 불일치를 방지한다. (#95/#142 패턴)
  */
@@ -63,18 +67,30 @@ public class RoutineExecutionServiceImpl implements RoutineExecutionService {
     private final FeedCardRepository feedCardRepository;
     private final AcceptedCountCalculator acceptedCountCalculator;
     private final RoutineEventPublisher eventPublisher;
+    private final ChallengeBackfillProperties backfillProperties;
 
     /**
      * 완료 처리 — 지난 날짜를 포함해 수행 기간 내 날짜에 COMPLETED 행을 새로 만든다(sparse, 백필 허용).
      * 아직 오지 않은 날짜, 중단한 루틴은 거부하고, 이미 완료된 날이면 409.
+     *
+     * <p>검증 순서(#58 결정 ③ C): [트랜잭션 밖 챌린지 확인] → 잠금 → 미래 날짜 → 활성 → ended_at NULL 가드 → 수행 기간
+     * → 백필 창 → 수행 요일 → 중복 → 업로드 → 저장 → Outbox. 수행 기간이 백필 창보다 앞이라, 이 메서드 안에서는
+     * 챌린지 종료 후 날짜가 "수행 기간이 아닙니다"로 거부된다(API로 오면 앞의 챌린지 확인이 ENDED로 먼저 막는다).
      */
     @Transactional
-    public ExecutionCompleteResult complete(CompleteExecutionCommand command) {
+    public ExecutionCompleteResult completeAfterChallengeCheck(CompleteExecutionCommand command) {
         Routine routine = getOwnedRoutineOrThrow(command.routineId(), command.userId());
         LocalDate date = command.scheduledDate();
+        LocalDate today = LocalDate.now(clock);
         validateNotFuture(date);
         validateActive(routine);
+        if (routine.isChallengeRoutine()) {
+            ensureEndDate(routine);
+        }
         validateWithinPeriod(routine, date);
+        if (routine.isChallengeRoutine()) {
+            validateBackfillWindow(date, today);
+        }
 
         if (!ExecutionScheduleDeriver.isCompletable(routine.getDefinition(), date)) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED, "오늘은 이 루틴의 수행 요일이 아닙니다.");
@@ -179,13 +195,15 @@ public class RoutineExecutionServiceImpl implements RoutineExecutionService {
                 RoutineExecution row = completed.get(current);
                 if (row != null) {
                     // 저장된 완료는 중단 여부와 무관하게 이력으로 남긴다.
-                    results.add(ExecutionResult.from(row, title, cards.get(row.getId())));
+                    results.add(ExecutionResult.from(row, title, cards.get(row.getId()),
+                            isBackfillable(routine, current, today)));
                 } else if (routine.isActive()) {
                     // 중단한 루틴은 파생하지 않는다. 중단 시각을 기록하지 않아 "중단 이후의 과거"를
                     // 구분할 수 없으므로, 그만둔 뒤의 날짜에 MISSED를 붙이지 않도록 전 구간을 제외한다.
                     ExecutionScheduleDeriver.deriveStatus(definition, current, today)
                             .ifPresent(derived -> results.add(
-                                    ExecutionResult.derived(routine.getId(), title, current, derived)));
+                                    ExecutionResult.derived(routine.getId(), title, current, derived,
+                                            isBackfillable(routine, current, today))));
                 }
             }
         }
@@ -201,9 +219,10 @@ public class RoutineExecutionServiceImpl implements RoutineExecutionService {
     }
 
     @Transactional
-    public List<ExecutionCompleteResult> bulkComplete(Long userId, LocalDate date, List<Long> routineIds) {
+    public List<ExecutionCompleteResult> bulkCompleteAfterChallengeCheck(Long userId, LocalDate date,
+                                                                         List<Long> routineIds) {
         // ID 순으로 잠가 겹치는 다중 요청의 교착을 방지한다. 한 건 실패하면 전체 롤백한다.
-        return routineIds.stream().sorted().map(id -> complete(new CompleteExecutionCommand(
+        return routineIds.stream().sorted().map(id -> completeAfterChallengeCheck(new CompleteExecutionCommand(
                 id, userId, date, null, null, null, null))).toList();
     }
 
@@ -246,6 +265,64 @@ public class RoutineExecutionServiceImpl implements RoutineExecutionService {
         if (beforeStart || afterEnd) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED, "루틴 수행 기간이 아닙니다.");
         }
+    }
+
+    /**
+     * 챌린지 루틴은 챌린지 기간이 고정이라 ended_at이 반드시 있어야 한다(ADR-0041은 개인 루틴만 무기한).
+     * 비어 있으면 사용자 잘못이 아니라 데이터 이상이다 — 상한 검사를 건너뛰고 통과시키지 않고 막는다.
+     * {@code challenge.started} 소비(#157)가 종료일을 채우지 않은 회귀를 여기서 드러낸다.
+     */
+    private void ensureEndDate(Routine routine) {
+        if (routine.hasNoEndDate()) {
+            log.error("챌린지 루틴의 ended_at이 비어 있습니다 — 인증을 거부합니다. routineId={}, challengeId={}",
+                    routine.getId(), routine.getChallengeId());
+            throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * 챌린지 루틴 백필 창 검증 (#58 결정 ②). 오늘 + 지난 {@code backfillDays}일까지만 인증할 수 있다.
+     * 미래 날짜·수행 기간은 앞에서 이미 걸렀으므로 여기서는 "너무 오래된 과거"만 본다.
+     */
+    private void validateBackfillWindow(LocalDate date, LocalDate today) {
+        if (!isWithinBackfillWindow(date, today)) {
+            throw new BusinessException(ErrorCode.EXECUTION_BACKFILL_WINDOW_EXCEEDED, String.format(
+                    "챌린지 루틴은 지난 %d일까지만 인증할 수 있습니다.", backfillProperties.backfillDays()));
+        }
+    }
+
+    /**
+     * 백필 창 규칙의 단일 출처 — 완료 검증({@link #validateBackfillWindow})과 조회 응답의
+     * {@code backfillable}(결정 ⑤)이 같이 쓴다. 둘이 다르게 계산하면 버튼은 켜졌는데 400이 난다.
+     * 미래 날짜는 판정하지 않는다 — 두 호출부가 먼저 거른다(validateNotFuture · isBackfillable).
+     */
+    private boolean isWithinBackfillWindow(LocalDate date, LocalDate today) {
+        return !date.isBefore(today.minusDays(backfillProperties.backfillDays()));
+    }
+
+    /**
+     * 조회 응답의 {@code backfillable} (#58 결정 ⑤) — "이 날짜를 지금 인증할 수 있는가".
+     * 미래 날짜 · 중단한 루틴은 false, 챌린지 루틴은 백필 창 밖이면 false, 개인 루틴은 창 제한이 없다.
+     * 수행 기간·요일은 파생 단계에서 이미 걸러져 행 자체가 없으므로 여기서 다시 보지 않는다.
+     */
+    private boolean isBackfillable(Routine routine, LocalDate date, LocalDate today) {
+        if (date.isAfter(today) || !routine.isActive()) {
+            return false;
+        }
+        if (!routine.isChallengeRoutine()) {
+            return true;
+        }
+        return !isChallengeEnded(routine, today) && isWithinBackfillWindow(date, today);
+    }
+
+    /**
+     * 완료 API는 gRPC로 챌린지 종료(409 CHALLENGE_ALREADY_ENDED)를 확인하지만 조회는 원격을 부르지 않는다.
+     * challenge-service는 {@code endedAt < today}인 챌린지를 ENDED로 바꾸고 루틴은 그 종료일을 복사해 가지므로,
+     * 같은 식으로 로컬 판정한다. 자정 전이 직전의 짧은 틈은 "꺼져 있지만 실제로는 가능" 쪽이라 감수한다.
+     * 종료일이 비어 있으면 완료 API가 거부하므로(ensureEndDate) 종료로 본다.
+     */
+    private boolean isChallengeEnded(Routine routine, LocalDate today) {
+        return routine.hasNoEndDate() || routine.getEndedAt().isBefore(today);
     }
 
     /**

@@ -1,4 +1,9 @@
 spring:
+  grpc:
+    client:
+      channels:
+        challenge-service:
+          address: "static://${CHALLENGE_SERVICE_HOST:localhost}:${CHALLENGE_SERVICE_GRPC_PORT:9083}"
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/routine_db
     password: ${DB_PASSWORD:localpassword}

@@ -1121,6 +1121,14 @@ public class ApiResponse<T> {
 - Query: `date` (YYYY-MM-DD) **또는** `startDate`+`endDate` (둘 중 하나 필수, 함께 사용 불가, 최대 366일),
   `routineId`(선택), `status`(선택: `PENDING`/`COMPLETED`/`MISSED`)
 - `executionId`/`feedCardId`/`completedAt`/`photoUrl`/`memo`는 저장된 완료 기록에만 있고, 파생 PENDING/MISSED에서는 `null`
+- `backfillable` (#58) — **이 날짜를 지금 인증할 수 있는가.** 프론트는 이 값으로 인증 버튼만 켜고 끄며 날짜 계산을 하지 않는다.
+  기준 "오늘"은 서버 시계(`Asia/Seoul`)다.
+  - 미래 날짜 · 중단한 루틴 → `false`
+  - 챌린지 루틴 → 백필 창(오늘 + 지난 3일, `date >= today - 3`) 안이면 `true`
+    단, 챌린지가 종료됐으면(루틴 종료일 < 오늘) 창 안이어도 `false` — 완료 API가 `409 CHALLENGE_ALREADY_ENDED`로 거부하기 때문
+  - 개인 루틴 → 창 제한 없음(수행 기간 안의 행이면 `true`)
+  - `COMPLETED` 행도 같은 규칙으로 계산한다 — 취소 후 다시 인증할 수 있는지를 뜻한다.
+    **완료 취소 가능 여부와는 무관하다**(취소는 날짜 제한이 없다)
 
 **Response** `200`
 ```json
@@ -1137,7 +1145,8 @@ public class ApiResponse<T> {
       "status": "COMPLETED",
       "completedAt": "2026-07-24T07:30:00Z",
       "photoUrl": "https://s3.../photo.jpg",
-      "memo": "오늘도 완료!"
+      "memo": "오늘도 완료!",
+      "backfillable": true
     },
     {
       "executionId": null,
@@ -1148,7 +1157,8 @@ public class ApiResponse<T> {
       "status": "PENDING",
       "completedAt": null,
       "photoUrl": null,
-      "memo": null
+      "memo": null,
+      "backfillable": true
     }
   ]
 }
@@ -1162,6 +1172,22 @@ public class ApiResponse<T> {
 - `{date}`는 **미래가 아니어야** 하고(지난 날짜 허용 — 백필), 루틴 수행 기간 내·수행 가능 요일이어야 하며,
   이미 완료면 `409 EXECUTION_ALREADY_COMPLETED`
 - 중단한 루틴은 완료할 수 없다 (`400 VALIDATION_FAILED`)
+- **챌린지 루틴** (#58) — 백필은 **오늘 + 지난 3일**(`date >= today - 3`, `Asia/Seoul`)까지만. 개인 루틴은 제한 없음.
+  먼저 challenge-service `GetChallengeContext`로 챌린지가 ACTIVE이고 사용자가 활성 멤버인지 확인한 뒤(트랜잭션 밖) 날짜·중복 검증을 한다.
+  그래서 챌린지 상태 오류가 날짜 오류보다 먼저 난다 — 예: 챌린지가 끝난 뒤의 날짜는 `409 CHALLENGE_ALREADY_ENDED`.
+  challenge-service 장애 시 **인증을 막는다(Fail Closed)** — 지난 날짜는 창 안에서 다시 인증할 수 있다.
+  거부된 요청은 사진 업로드·실행 기록·피드 카드·Outbox 어느 것도 남기지 않는다.
+
+  | 상황 | 응답 |
+  |---|---|
+  | 백필 창 밖 (지난 4일 이상) | `400 EXECUTION_BACKFILL_WINDOW_EXCEEDED` |
+  | 챌린지 종료일 이후 날짜 | 챌린지가 `ENDED`면 `409 CHALLENGE_ALREADY_ENDED`. 아직 `ACTIVE`로 남아 있으면 `400 VALIDATION_FAILED` "루틴 수행 기간이 아닙니다." (창 검사보다 먼저) |
+  | 챌린지 시작 전 (`WAITING`) | `409 CHALLENGE_NOT_STARTED` |
+  | 챌린지 종료 (`ENDED`) | `409 CHALLENGE_ALREADY_ENDED` |
+  | 활성 멤버가 아님 (탈퇴) | `403 NOT_CHALLENGE_MEMBER` |
+  | 챌린지 없음 | `404 CHALLENGE_NOT_FOUND` |
+  | challenge-service 장애 · 서킷 OPEN | `503 SERVICE_UNAVAILABLE` (날짜 검증보다 먼저) |
+  | 챌린지 루틴인데 종료일이 비어 있음 (데이터 이상) | `500 INTERNAL_SERVER_ERROR` |
 - 메모: 최대 500자. 사진·메모는 `feed_cards`에서 읽으며 완료 사실에는 중복 저장하지 않는다.
 - 사진: `image/jpeg`·`image/png`·`image/webp`, 5MB 이하, 매직넘버 검증. multipart 전체 요청은 헤더·메모를 포함해 6MB 이하.
 
@@ -1219,6 +1245,8 @@ public class ApiResponse<T> {
 
 - 사진·메모 없이 루틴마다 실행 1건과 카드 1장을 같은 트랜잭션으로 생성한다.
 - 단건과 같은 소유권·수행 기간·스케줄·중단·중복 완료 검증을 적용한다. 한 건이라도 실패하면 전체 롤백.
+  챌린지 루틴의 백필 창·`GetChallengeContext` 검증(#58)도 루틴마다 같다. 챌린지 확인은 저장 전에 챌린지 루틴마다 한 번씩 먼저 끝내고,
+  하나라도 거부되면 아무것도 저장하지 않는다(한 요청 안의 챌린지 루틴은 모두 다른 챌린지라 결과를 재사용하지 않는다).
 - ID는 중복 없는 양수 목록. 빈 목록은 200, `createdCount: 0`으로 정상 응답한다.
 - ID 오름차순으로 처리·응답한다. 생성 수는 응답의 `createdCount`이며 스트릭 계산은 포함하지 않는다.
 

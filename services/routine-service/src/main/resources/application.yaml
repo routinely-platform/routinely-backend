@@ -7,6 +7,10 @@ spring:
   grpc:
     server:
       port: 9082
+    client:
+      channels:
+        challenge-service:
+          address: "static://${CHALLENGE_SERVICE_HOST:challenge-service}:${CHALLENGE_SERVICE_GRPC_PORT:9083}"
   servlet:
     multipart:
       max-file-size: 5MB
@@ -57,8 +61,35 @@ eureka:
   instance:
     prefer-ip-address: true
 
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+    instances:
+      # routine → challenge 챌린지 루틴 인증 전 GetChallengeContext 호출 보호 (#58)
+      challenge-service-cb:
+        baseConfig: default
+  timelimiter:
+    configs:
+      default:
+        # gRPC deadline(3s)이 먼저 끊도록 backstop은 더 길게 둔다
+        timeoutDuration: 5s
+    instances:
+      challenge-service-cb:
+        baseConfig: default
+
 # 파일 저장(S3) — 루틴 수행 인증 사진 업로드 (#57). local 프로파일은 LocalStack을 사용한다.
 routinely:
+  # 챌린지 루틴은 오늘 + 지난 N일까지만 인증할 수 있다 (#58 · ADR-0038). 개인 루틴은 제한 없음
+  challenge:
+    backfill-days: 3
   storage:
     s3:
       enabled: true

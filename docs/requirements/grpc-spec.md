@@ -201,10 +201,26 @@ RoutineService (루틴 실행 완료 요청 수신)
     │   ├── challenge_id IS NULL → 개인 루틴으로 처리 (gRPC 호출 불필요)
     │   └── challenge_id IS NOT NULL → 챌린지 루틴
     │       └── ChallengeGrpcService.GetChallengeContext(challengeId, userId)
-    │           ├── challenge_status != "ACTIVE" → FORBIDDEN (CHALLENGE_ALREADY_ENDED 등)
-    │           ├── is_member_active == false    → FORBIDDEN (NOT_CHALLENGE_MEMBER)
+    │           ├── WAITING                   → 409 CHALLENGE_NOT_STARTED
+    │           ├── ENDED                     → 409 CHALLENGE_ALREADY_ENDED
+    │           ├── is_member_active == false → 403 NOT_CHALLENGE_MEMBER
+    │           ├── NOT_FOUND                 → 404 CHALLENGE_NOT_FOUND (+ log.error, 데이터 이상)
     │           └── 모두 통과 → 실행 완료 처리
 ```
+
+**호출 측 구현** (#58 ✅) — `routine-service` `infrastructure/grpc/ChallengeServiceGrpcClient`
+
+- deadline 3s + 서킷 브레이커 `challenge-service-cb`(COUNT_BASED 10 · 최소 5 · 실패율 50% · OPEN 10s · timelimiter 5s)
+- **Fail Closed** — 호출 실패·서킷 OPEN이면 `503 SERVICE_UNAVAILABLE`로 인증을 막는다
+- **`NOT_FOUND`는 장애로 세지 않는다** — supplier 안에서 잡아 "없음" 결과로 바꾼다. 밖으로 던지면 서킷이 실패로 세어 503이 된다
+- `challenge_status`가 `UNSPECIFIED`/모르는 값이면 판단 근거가 없으므로 장애로 보고 막는다
+- 호출 위치는 **트랜잭션 밖 파사드** `RoutineExecutionCompletionService`다 — 루틴을 잠금 없이 읽어 챌린지 루틴이면 확인하고,
+  통과해야 `@Transactional` 서비스(잠금 → 미래·활성·종료일·기간·백필 창·요일·중복 → 업로드 → 저장 → Outbox)로 넘긴다.
+  챌린지 생성의 `ChallengeCreationService`와 같은 구조로, 원격 응답을 기다리는 동안 DB 커넥션·루틴 잠금을 쥐지 않는다
+- 원격 확인이 로컬 검증보다 앞이라 챌린지 루틴에서는 **챌린지 상태 오류가 먼저** 난다(종료 후 날짜 → `ENDED`, 장애 중이면 창 밖 날짜도 503).
+  확인과 잠금 사이에 탈퇴하면 그 한 건은 통과한다 — 트랜잭션 밖으로 뺀 대가로 받아들인다
+- 일괄 완료는 파사드가 챌린지 루틴마다 한 번씩 확인하고, 하나라도 거부되면 서비스를 부르지 않는다
+- 완료 취소에는 호출하지 않는다
 
 **응답 케이스**:
 
@@ -227,9 +243,9 @@ gRPC 호출 실패 시 gRPC Status Code를 사용한다.
 | 상황 | gRPC Status | 호출자 처리 |
 |------|-------------|-------------|
 | 정상 | `OK` | 응답 값으로 비즈니스 로직 처리 |
-| 챌린지 없음 | `NOT_FOUND` | HTTP 404 반환 |
-| 내부 오류 | `INTERNAL` | HTTP 500 반환 |
-| 타임아웃 | `DEADLINE_EXCEEDED` | HTTP 503 또는 재시도 |
+| 챌린지 없음 | `NOT_FOUND` | HTTP 404 반환 (서킷 실패로 세지 않는다) |
+| 내부 오류 | `INTERNAL` | `GetChallengeContext`: HTTP 503 (Fail Closed, 서킷 실패로 센다) |
+| 타임아웃 | `DEADLINE_EXCEEDED` | HTTP 503 (Fail Closed, 서킷 실패로 센다) |
 
 > 비즈니스 판단(멤버 아님, 챌린지 종료 등)은 gRPC Status가 아닌
 > 응답 필드(`is_active_member`, `challenge_status`)로 전달한다.

@@ -55,7 +55,7 @@ graph LR
 
   C -. "gRPC ListCategories ✅" .-> R
   R -. "gRPC CheckMembership 🟡" .-> C
-  R -. "gRPC GetChallengeContext 🟡" .-> C
+  R -. "gRPC GetChallengeContext ✅" .-> C
   C -. "gRPC 사용자 배치조회 ⬜ #153" .-> U
 
   classDef shell fill:#f5f4ef,stroke:#b8b3a6,stroke-dasharray:4 3
@@ -117,7 +117,7 @@ graph LR
 
   C -->|"ListCategories ✅"| R
   R -->|"CheckMembership 🟡"| C
-  R -->|"GetChallengeContext 🟡"| C
+  R -->|"GetChallengeContext ✅"| C
   C -->|"사용자 배치조회 ⬜"| U
   N -->|"CheckNotificationDue ⬜🆕"| R
 ```
@@ -125,13 +125,15 @@ graph LR
 | 호출 | 방향 | 용도 | 상태 |
 |---|---|---|:---:|
 | `ListCategories` | Challenge → Routine | 챌린지 생성 시 카테고리 코드 검증 (Redis 캐시 TTL 24h) | ✅ |
-| `CheckMembership` | Routine → Challenge | 챌린지 루틴 완료 시 멤버십 검증 (#58) | 🟡 서버만 |
-| `GetChallengeContext` | Routine → Challenge | 챌린지 기간·상태 조회 | 🟡 서버만 |
+| `CheckMembership` | Routine → Challenge | 멤버십 검증 — #58은 `GetChallengeContext`가 멤버 활성 여부까지 돌려줘 쓰지 않는다 | 🟡 서버만 |
+| `GetChallengeContext` | Routine → Challenge | 챌린지 루틴 완료 전 챌린지 상태·멤버 활성 확인. Fail Closed, `NOT_FOUND`는 서킷 실패로 세지 않음 (#58) | ✅ |
 | 사용자 배치 조회 | Challenge → User | 랭킹·멤버 목록의 닉네임 채우기 (#153) | ⬜ |
 | **`CheckNotificationDue`** 🆕 | Notification → Routine | **발송 직전 판정** — 빈도형 목표 달성 · 마감 대상 여부. 사용자 단위 배치 (ADR-0045, #69) | ⬜ |
 
-> **트랜잭션 안에서 gRPC를 호출하지 않는다.** 검증은 트랜잭션 시작 전에 파사드에서 끝낸다
-> (`tech-story.md` "트랜잭션 경계와 원격 호출 분리" 참고).
+> **트랜잭션 경계와 원격 호출** — 원칙은 트랜잭션 밖에서 부르는 것이다(`tech-story.md` "트랜잭션 경계와 원격 호출 분리").
+> `GetChallengeContext`(#58)도 챌린지 생성의 `ChallengeCreationService`와 같이 **트랜잭션 밖 파사드**
+> (`RoutineExecutionCompletionService`)에서 부르고, 통과하면 `@Transactional` 서비스가 잠금 뒤 로컬 검증·저장을 한다.
+> 근거는 `grpc-spec.md` §`GetChallengeContext`.
 
 ---
 
