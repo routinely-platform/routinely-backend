@@ -309,7 +309,20 @@ public class RoutineExecutionServiceImpl implements RoutineExecutionService {
         if (date.isAfter(today) || !routine.isActive()) {
             return false;
         }
-        return !routine.isChallengeRoutine() || isWithinBackfillWindow(date, today);
+        if (!routine.isChallengeRoutine()) {
+            return true;
+        }
+        return !isChallengeEnded(routine, today) && isWithinBackfillWindow(date, today);
+    }
+
+    /**
+     * 완료 API는 gRPC로 챌린지 종료(409 CHALLENGE_ALREADY_ENDED)를 확인하지만 조회는 원격을 부르지 않는다.
+     * challenge-service는 {@code endedAt < today}인 챌린지를 ENDED로 바꾸고 루틴은 그 종료일을 복사해 가지므로,
+     * 같은 식으로 로컬 판정한다. 자정 전이 직전의 짧은 틈은 "꺼져 있지만 실제로는 가능" 쪽이라 감수한다.
+     * 종료일이 비어 있으면 완료 API가 거부하므로(ensureEndDate) 종료로 본다.
+     */
+    private boolean isChallengeEnded(Routine routine, LocalDate today) {
+        return routine.hasNoEndDate() || routine.getEndedAt().isBefore(today);
     }
 
     /**

@@ -263,6 +263,29 @@ class RoutineExecutionChallengeTest {
         }
 
         @Test
+        @DisplayName("챌린지가종료되면_창안날짜도false_COMPLETED행포함")
+        void getMyExecutions_backfillable_endedChallengeFalse() {
+            Map<LocalDate, Boolean> result = backfillableByDate(
+                    challengeRoutine(ROUTINE_ID, CHALLENGE_ID, STARTED, TODAY.minusDays(1)),
+                    TODAY.minusDays(3), TODAY, List.of(completedOn(TODAY.minusDays(2))));
+
+            assertThat(result).containsEntry(TODAY.minusDays(1), false)
+                    .containsEntry(TODAY.minusDays(2), false)
+                    .containsEntry(TODAY.minusDays(3), false);
+        }
+
+        @Test
+        @DisplayName("종료일이오늘이면_아직진행중이라_창안true")
+        void getMyExecutions_backfillable_endsTodayStillOpen() {
+            Map<LocalDate, Boolean> result = backfillableByDate(
+                    challengeRoutine(ROUTINE_ID, CHALLENGE_ID, STARTED, TODAY),
+                    TODAY.minusDays(3), TODAY, List.of());
+
+            assertThat(result).containsEntry(TODAY, true)
+                    .containsEntry(TODAY.minusDays(3), true);
+        }
+
+        @Test
         @DisplayName("중단한루틴의_완료이력은false")
         void getMyExecutions_backfillable_inactiveRoutineFalse() {
             Routine routine = personalRoutine(ROUTINE_ID, STARTED, ENDED);
