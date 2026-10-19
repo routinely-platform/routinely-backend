@@ -294,13 +294,10 @@ public class RoutineExecutionServiceImpl implements RoutineExecutionService {
     /**
      * 백필 창 규칙의 단일 출처 — 완료 검증({@link #validateBackfillWindow})과 조회 응답의
      * {@code backfillable}(결정 ⑤)이 같이 쓴다. 둘이 다르게 계산하면 버튼은 켜졌는데 400이 난다.
+     * 미래 날짜는 판정하지 않는다 — 두 호출부가 먼저 거른다(validateNotFuture · isBackfillable).
      */
     private boolean isWithinBackfillWindow(LocalDate date, LocalDate today) {
-        // TODO(human): date가 백필 창(오늘 + 지난 backfillProperties.backfillDays()일) 안이면 true를 돌려준다.
-        // HINT: 경계는 date >= today - backfillDays 가 "허용"이다. backfillDays=3, today=7/24면 7/21은 허용, 7/20은 거부.
-        //       "포함/미포함"을 한 글자 틀리면 complete_challenge_backfillWindow_* · getMyExecutions_backfillable_* 테스트가 알려 준다.
-        // REFERENCE: WORKPLAN.md 결정 ② · docs/decisions ADR-0038 (3일 창) · validateWithinPeriod()
-        return true;
+        return !date.isBefore(today.minusDays(backfillProperties.backfillDays()));
     }
 
     /**
