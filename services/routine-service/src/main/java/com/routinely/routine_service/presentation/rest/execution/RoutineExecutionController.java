@@ -4,6 +4,7 @@ import com.routinely.core.constant.HeaderConstants;
 import com.routinely.core.exception.BusinessException;
 import com.routinely.core.exception.ErrorCode;
 import com.routinely.core.response.ApiResponse;
+import com.routinely.routine_service.application.execution.RoutineExecutionCompletionService;
 import com.routinely.routine_service.application.execution.RoutineExecutionService;
 import com.routinely.routine_service.application.execution.dto.CompleteExecutionCommand;
 import com.routinely.routine_service.application.execution.dto.ExecutionCompleteResult;
@@ -44,9 +45,12 @@ public class RoutineExecutionController {
 
     private static final long MAX_QUERY_RANGE_DAYS = 366;
 
+    private final RoutineExecutionCompletionService completionService;
     private final RoutineExecutionService routineExecutionService;
 
-    public RoutineExecutionController(RoutineExecutionService routineExecutionService) {
+    public RoutineExecutionController(RoutineExecutionCompletionService completionService,
+                                      RoutineExecutionService routineExecutionService) {
+        this.completionService = completionService;
         this.routineExecutionService = routineExecutionService;
     }
 
@@ -62,7 +66,7 @@ public class RoutineExecutionController {
         LocalDate scheduledDate = parseRequiredDate(date);
         CompleteExecutionCommand command = toCommand(routineId, userId, scheduledDate, photo, memo);
         new ExecutionInputValidator().validate(command);
-        ExecutionCompleteResult result = routineExecutionService.complete(command);
+        ExecutionCompleteResult result = completionService.complete(command);
         return ResponseEntity.ok(
                 ApiResponse.ok("루틴이 완료 처리되었습니다.", ExecutionCompleteResponse.from(result)));
     }
@@ -72,7 +76,7 @@ public class RoutineExecutionController {
             @RequestHeader(HeaderConstants.USER_ID) Long userId,
             @RequestBody @Valid
             ExecutionDto.BulkCompleteRequest request) {
-        var results = routineExecutionService.bulkComplete(userId, request.getScheduledDate(), request.getRoutineIds())
+        var results = completionService.bulkComplete(userId, request.getScheduledDate(), request.getRoutineIds())
                 .stream().map(ExecutionCompleteResponse::from).toList();
         return ResponseEntity.ok(ApiResponse.ok("루틴이 완료 처리되었습니다.",
                 ExecutionDto.BulkCompleteResponse.builder()

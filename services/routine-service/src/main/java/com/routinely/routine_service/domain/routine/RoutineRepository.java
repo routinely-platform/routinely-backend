@@ -17,6 +17,9 @@ public interface RoutineRepository extends JpaRepository<Routine, Long> {
 
     Optional<Routine> findByIdAndUserId(Long id, Long userId);
 
+    /** 일괄 완료 전 챌린지 확인용 — 잠그지 않는다. 잠금은 트랜잭션 안의 서비스가 루틴마다 건다 (#58). */
+    List<Routine> findAllByIdInAndUserId(List<Long> ids, Long userId);
+
     /**
      * 내 루틴 목록 — 활성 여부(isActive)와 챌린지(challengeId)로 선택 필터링한다.
      * 각 파라미터가 NULL이면 해당 조건을 건너뛴다. 최신 생성 순(id 내림차순) —

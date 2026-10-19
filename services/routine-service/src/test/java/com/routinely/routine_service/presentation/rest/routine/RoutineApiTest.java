@@ -2,6 +2,7 @@ package com.routinely.routine_service.presentation.rest.routine;
 
 import com.routinely.routine_service.application.routine.RoutineService;
 import com.routinely.routine_service.application.routine.dto.RoutineResult;
+import com.routinely.routine_service.application.execution.RoutineExecutionCompletionService;
 import com.routinely.routine_service.application.execution.RoutineExecutionService;
 import com.routinely.routine_service.presentation.rest.execution.RoutineExecutionController;
 import com.routinely.web.handler.GlobalExceptionHandler;
@@ -31,6 +32,7 @@ class RoutineApiTest {
     @Autowired MockMvc mvc;
     @MockitoBean RoutineService routines;
     @MockitoBean RoutineExecutionService executions;
+    @MockitoBean RoutineExecutionCompletionService completions;
     private static final LocalDate TODAY = LocalDate.now(ZoneId.of("Asia/Seoul"));
 
     private RoutineResult result() {
@@ -85,7 +87,7 @@ class RoutineApiTest {
 
     @Test @DisplayName("다중 완료의 빈 목록은 생성 건수 0으로 응답한다")
     void bulk_emptyReturnsZero() throws Exception {
-        when(executions.bulkComplete(1L, TODAY, List.of())).thenReturn(List.of());
+        when(completions.bulkComplete(1L, TODAY, List.of())).thenReturn(List.of());
         mvc.perform(post("/api/v1/routine-executions/bulk-complete").header("X-User-Id", 1)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"scheduledDate\":\"" + TODAY + "\",\"routineIds\":[]}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.createdCount").value(0));

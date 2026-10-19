@@ -62,7 +62,6 @@ class RoutineExecutionServiceTest {
     private final RoutineExecutionService service = new RoutineExecutionServiceImpl(
             executionRepository, routineRepository, fileStorage, CLOCK, feedCardRepository,
             new AcceptedCountCalculator(executionRepository, CLOCK), mock(com.routinely.routine_service.application.event.RoutineEventPublisher.class),
-            mock(com.routinely.routine_service.infrastructure.grpc.ChallengeServiceGrpcClient.class),
             new ChallengeBackfillProperties(3));
 
     private static Routine routine(LocalDate started, LocalDate ended) {
@@ -106,7 +105,7 @@ class RoutineExecutionServiceTest {
             when(executionRepository.saveAndFlush(any(RoutineExecution.class)))
                     .thenAnswer(invocation -> invocation.getArgument(0));
 
-            ExecutionCompleteResult result = service.complete(command(TODAY, null, null, null));
+            ExecutionCompleteResult result = service.completeAfterChallengeCheck(command(TODAY, null, null, null));
 
             assertThat(result.status()).isEqualTo(ExecutionStatus.COMPLETED);
         }
@@ -118,7 +117,7 @@ class RoutineExecutionServiceTest {
             when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID))
                     .thenReturn(Optional.of(routine(started, null)));
 
-            assertThatThrownBy(() -> service.complete(command(started.minusDays(1), null, null, null)))
+            assertThatThrownBy(() -> service.completeAfterChallengeCheck(command(started.minusDays(1), null, null, null)))
                     .isInstanceOfSatisfying(BusinessException.class, e ->
                             assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
         }
@@ -154,7 +153,7 @@ class RoutineExecutionServiceTest {
             when(executionRepository.saveAndFlush(any(RoutineExecution.class)))
                     .thenAnswer(invocation -> invocation.getArgument(0));
 
-            ExecutionCompleteResult result = service.complete(command(TODAY, null, null, "완료!"));
+            ExecutionCompleteResult result = service.completeAfterChallengeCheck(command(TODAY, null, null, "완료!"));
 
             assertThat(result.status()).isEqualTo(ExecutionStatus.COMPLETED);
             assertThat(result.scheduledDate()).isEqualTo(TODAY);
@@ -170,7 +169,7 @@ class RoutineExecutionServiceTest {
             when(executionRepository.findByRoutineIdAndScheduledDate(ROUTINE_ID, TODAY))
                     .thenReturn(Optional.of(mock(RoutineExecution.class)));
 
-            assertThatThrownBy(() -> service.complete(command(TODAY, null, null, null)))
+            assertThatThrownBy(() -> service.completeAfterChallengeCheck(command(TODAY, null, null, null)))
                     .isInstanceOfSatisfying(BusinessException.class, e ->
                             assertThat(e.getErrorCode()).isEqualTo(ErrorCode.EXECUTION_ALREADY_COMPLETED));
             verify(executionRepository, never()).saveAndFlush(any());
@@ -187,7 +186,7 @@ class RoutineExecutionServiceTest {
             when(executionRepository.saveAndFlush(any(RoutineExecution.class)))
                     .thenAnswer(invocation -> invocation.getArgument(0));
 
-            ExecutionCompleteResult result = service.complete(command(past, null, null, "깜빡했던 날"));
+            ExecutionCompleteResult result = service.completeAfterChallengeCheck(command(past, null, null, "깜빡했던 날"));
 
             assertThat(result.status()).isEqualTo(ExecutionStatus.COMPLETED);
             assertThat(result.scheduledDate()).isEqualTo(past);
@@ -199,7 +198,7 @@ class RoutineExecutionServiceTest {
             when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID))
                     .thenReturn(Optional.of(routine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1))));
 
-            assertThatThrownBy(() -> service.complete(command(TODAY.plusDays(1), null, null, null)))
+            assertThatThrownBy(() -> service.completeAfterChallengeCheck(command(TODAY.plusDays(1), null, null, null)))
                     .isInstanceOfSatisfying(BusinessException.class, e ->
                             assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
             verify(executionRepository, never()).saveAndFlush(any());
@@ -211,7 +210,7 @@ class RoutineExecutionServiceTest {
             when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID))
                     .thenReturn(Optional.of(inactiveRoutine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1))));
 
-            assertThatThrownBy(() -> service.complete(command(TODAY, null, null, null)))
+            assertThatThrownBy(() -> service.completeAfterChallengeCheck(command(TODAY, null, null, null)))
                     .isInstanceOfSatisfying(BusinessException.class, e ->
                             assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
             verify(executionRepository, never()).saveAndFlush(any());
@@ -223,7 +222,7 @@ class RoutineExecutionServiceTest {
             when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID))
                     .thenReturn(Optional.of(routine(TODAY.plusDays(1), TODAY.plusDays(10))));
 
-            assertThatThrownBy(() -> service.complete(command(TODAY, null, null, null)))
+            assertThatThrownBy(() -> service.completeAfterChallengeCheck(command(TODAY, null, null, null)))
                     .isInstanceOfSatisfying(BusinessException.class, e ->
                             assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
             verify(executionRepository, never()).saveAndFlush(any());
@@ -237,7 +236,7 @@ class RoutineExecutionServiceTest {
                     .thenReturn(Optional.of(routine(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 8, 1),
                             ScheduleType.SPECIFIC_DAYS, offDayMask, null)));
 
-            assertThatThrownBy(() -> service.complete(command(TODAY, null, null, null)))
+            assertThatThrownBy(() -> service.completeAfterChallengeCheck(command(TODAY, null, null, null)))
                     .isInstanceOfSatisfying(BusinessException.class, e ->
                             assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
             verify(executionRepository, never()).saveAndFlush(any());
@@ -248,7 +247,7 @@ class RoutineExecutionServiceTest {
         void complete_whenNotOwned_throwsNotFound() {
             when(routineRepository.findLockedByIdAndUserId(ROUTINE_ID, USER_ID)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> service.complete(command(TODAY, null, null, null)))
+            assertThatThrownBy(() -> service.completeAfterChallengeCheck(command(TODAY, null, null, null)))
                     .isInstanceOfSatisfying(BusinessException.class, e ->
                             assertThat(e.getErrorCode()).isEqualTo(ErrorCode.ROUTINE_NOT_FOUND));
         }
@@ -265,7 +264,7 @@ class RoutineExecutionServiceTest {
             when(executionRepository.saveAndFlush(any(RoutineExecution.class)))
                     .thenAnswer(invocation -> invocation.getArgument(0));
 
-            ExecutionCompleteResult result = service.complete(command(TODAY, jpeg, "image/jpeg", null));
+            ExecutionCompleteResult result = service.completeAfterChallengeCheck(command(TODAY, jpeg, "image/jpeg", null));
 
             assertThat(result.status()).isEqualTo(ExecutionStatus.COMPLETED);
             assertThat(result.photoUrl()).isEqualTo("https://cdn/abc.jpg");
@@ -282,7 +281,7 @@ class RoutineExecutionServiceTest {
             when(executionRepository.saveAndFlush(any(RoutineExecution.class)))
                     .thenThrow(new DataIntegrityViolationException("uq_re_routine_date"));
 
-            assertThatThrownBy(() -> service.complete(command(TODAY, null, null, null)))
+            assertThatThrownBy(() -> service.completeAfterChallengeCheck(command(TODAY, null, null, null)))
                     .isInstanceOfSatisfying(BusinessException.class, e ->
                             assertThat(e.getErrorCode()).isEqualTo(ErrorCode.EXECUTION_ALREADY_COMPLETED));
         }

@@ -2,7 +2,6 @@ package com.routinely.routine_service.application.execution;
 
 import com.routinely.core.exception.BusinessException;
 import com.routinely.core.exception.ErrorCode;
-import com.routinely.routine_service.application.challenge.ChallengeContext;
 import com.routinely.routine_service.application.event.RoutineEventPublisher;
 import com.routinely.routine_service.application.execution.dto.CompleteExecutionCommand;
 import com.routinely.routine_service.application.execution.dto.ExecutionCompleteResult;
@@ -15,7 +14,6 @@ import com.routinely.routine_service.domain.feed.FeedCardRepository;
 import com.routinely.routine_service.domain.routine.Routine;
 import com.routinely.routine_service.domain.routine.RoutineRepository;
 import com.routinely.routine_service.domain.template.ScheduleType;
-import com.routinely.routine_service.infrastructure.grpc.ChallengeServiceGrpcClient;
 import com.routinely.storage.FileStorage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -39,14 +37,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * 챌린지 루틴 인증 검증 (#58) — 백필 창 · ended_at NULL 가드 · challenge-service 컨텍스트 확인.
- * 검증 순서는 RoutineExecutionServiceImpl#complete 주석과 WORKPLAN 결정 ③을 따른다.
+ * 챌린지 루틴 인증 검증 (#58) — 트랜잭션 안의 로컬 검증: 백필 창 · ended_at NULL 가드 · 완료 취소 · backfillable.
+ * challenge-service 컨텍스트 확인은 트랜잭션 밖 파사드의 몫이라 RoutineExecutionCompletionServiceTest가 본다(결정 ③ C).
  */
 @DisplayName("RoutineExecutionService — 챌린지 루틴 인증")
 class RoutineExecutionChallengeTest {
@@ -67,12 +63,11 @@ class RoutineExecutionChallengeTest {
     private final FeedCardRepository feedCardRepository = mock(FeedCardRepository.class);
     private final FileStorage fileStorage = mock(FileStorage.class);
     private final RoutineEventPublisher eventPublisher = mock(RoutineEventPublisher.class);
-    private final ChallengeServiceGrpcClient challengeClient = mock(ChallengeServiceGrpcClient.class);
 
     private final RoutineExecutionService service = new RoutineExecutionServiceImpl(
             executionRepository, routineRepository, fileStorage, CLOCK, feedCardRepository,
             new AcceptedCountCalculator(executionRepository, CLOCK), eventPublisher,
-            challengeClient, new ChallengeBackfillProperties(3));
+            new ChallengeBackfillProperties(3));
 
     @BeforeEach
     void setUp() {
@@ -99,10 +94,6 @@ class RoutineExecutionChallengeTest {
         when(routineRepository.findLockedByIdAndUserId(routine.getId(), USER_ID)).thenReturn(Optional.of(routine));
     }
 
-    private void givenContext(ChallengeContext context) {
-        when(challengeClient.getChallengeContext(CHALLENGE_ID, USER_ID)).thenReturn(context);
-    }
-
     private static CompleteExecutionCommand command(LocalDate date) {
         return new CompleteExecutionCommand(ROUTINE_ID, USER_ID, date, null, null, null, null);
     }
@@ -126,110 +117,6 @@ class RoutineExecutionChallengeTest {
     }
 
     @Nested
-    @DisplayName("challenge-service 컨텍스트 확인")
-    class ChallengeContextCheck {
-
-        @Test
-        @DisplayName("개인루틴은_gRPC를호출하지않는다")
-        void complete_personal_doesNotCallGrpc() {
-            givenRoutine(personalRoutine(ROUTINE_ID, STARTED, ENDED));
-
-            service.complete(command(TODAY));
-
-            verifyNoInteractions(challengeClient);
-        }
-
-        @Test
-        @DisplayName("ACTIVE챌린지의_활성멤버면_완료하고_이벤트를발행한다")
-        void complete_challengeActiveMember_success() {
-            givenRoutine(challengeRoutine(ROUTINE_ID, CHALLENGE_ID, STARTED, ENDED));
-            givenContext(ChallengeContext.of(ChallengeContext.Status.ACTIVE, true));
-
-            ExecutionCompleteResult result = service.complete(command(TODAY));
-
-            assertThat(result.status()).isEqualTo(ExecutionStatus.COMPLETED);
-            verify(challengeClient).getChallengeContext(CHALLENGE_ID, USER_ID);
-            verify(eventPublisher).publishCompleted(any(), any(), any(), any());
-        }
-
-        @Test
-        @DisplayName("WAITING이면_409_CHALLENGE_NOT_STARTED_이고_아무것도남기지않는다")
-        void complete_challengeWaiting_throwsNotStarted() {
-            givenRoutine(challengeRoutine(ROUTINE_ID, CHALLENGE_ID, STARTED, ENDED));
-            givenContext(ChallengeContext.of(ChallengeContext.Status.WAITING, true));
-
-            assertErrorCode(() -> service.complete(photoCommand(TODAY)), ErrorCode.CHALLENGE_NOT_STARTED);
-            verifyNothingPersisted();
-        }
-
-        @Test
-        @DisplayName("ENDED면_409_CHALLENGE_ALREADY_ENDED_이고_아무것도남기지않는다")
-        void complete_challengeEnded_throwsAlreadyEnded() {
-            givenRoutine(challengeRoutine(ROUTINE_ID, CHALLENGE_ID, STARTED, ENDED));
-            givenContext(ChallengeContext.of(ChallengeContext.Status.ENDED, true));
-
-            assertErrorCode(() -> service.complete(photoCommand(TODAY)), ErrorCode.CHALLENGE_ALREADY_ENDED);
-            verifyNothingPersisted();
-        }
-
-        @Test
-        @DisplayName("멤버가비활성이면_403_NOT_CHALLENGE_MEMBER_이고_아무것도남기지않는다")
-        void complete_inactiveMember_throwsNotMember() {
-            givenRoutine(challengeRoutine(ROUTINE_ID, CHALLENGE_ID, STARTED, ENDED));
-            givenContext(ChallengeContext.of(ChallengeContext.Status.ACTIVE, false));
-
-            assertErrorCode(() -> service.complete(photoCommand(TODAY)), ErrorCode.NOT_CHALLENGE_MEMBER);
-            verifyNothingPersisted();
-        }
-
-        @Test
-        @DisplayName("챌린지가없으면_404_CHALLENGE_NOT_FOUND")
-        void complete_challengeNotFound_throwsNotFound() {
-            givenRoutine(challengeRoutine(ROUTINE_ID, CHALLENGE_ID, STARTED, ENDED));
-            givenContext(ChallengeContext.notFound());
-
-            assertErrorCode(() -> service.complete(photoCommand(TODAY)), ErrorCode.CHALLENGE_NOT_FOUND);
-            verifyNothingPersisted();
-        }
-
-        @Test
-        @DisplayName("challenge-service장애면_503_SERVICE_UNAVAILABLE_로차단하고_재인증안내를담는다")
-        void complete_challengeServiceDown_failsClosed() {
-            givenRoutine(challengeRoutine(ROUTINE_ID, CHALLENGE_ID, STARTED, ENDED));
-            when(challengeClient.getChallengeContext(CHALLENGE_ID, USER_ID))
-                    .thenThrow(new BusinessException(ErrorCode.SERVICE_UNAVAILABLE));
-
-            assertThatThrownBy(() -> service.complete(photoCommand(TODAY)))
-                    .isInstanceOfSatisfying(BusinessException.class, e -> {
-                        assertThat(e.getErrorCode()).isEqualTo(ErrorCode.SERVICE_UNAVAILABLE);
-                        assertThat(e.getMessage()).contains("3일");
-                    });
-            verifyNothingPersisted();
-        }
-
-        @Test
-        @DisplayName("이미완료한날의재요청은_gRPC없이_409로끝난다")
-        void complete_alreadyCompleted_doesNotCallGrpc() {
-            givenRoutine(challengeRoutine(ROUTINE_ID, CHALLENGE_ID, STARTED, ENDED));
-            when(executionRepository.findByRoutineIdAndScheduledDate(ROUTINE_ID, TODAY))
-                    .thenReturn(Optional.of(mock(RoutineExecution.class)));
-
-            assertErrorCode(() -> service.complete(command(TODAY)), ErrorCode.EXECUTION_ALREADY_COMPLETED);
-            verifyNoInteractions(challengeClient);
-        }
-
-        @Test
-        @DisplayName("챌린지가어제종료됐고_그저께를백필하면_기간·창안이어도_ENDED로거부된다")
-        void complete_endedYesterday_backfillDayBefore_rejectedByGrpc() {
-            givenRoutine(challengeRoutine(ROUTINE_ID, CHALLENGE_ID, STARTED, TODAY.minusDays(1)));
-            givenContext(ChallengeContext.of(ChallengeContext.Status.ENDED, true));
-
-            assertErrorCode(() -> service.complete(command(TODAY.minusDays(2))), ErrorCode.CHALLENGE_ALREADY_ENDED);
-            verify(challengeClient).getChallengeContext(CHALLENGE_ID, USER_ID);
-        }
-    }
-
-    @Nested
     @DisplayName("백필 창 — 오늘 + 지난 3일 (결정 ②)")
     class BackfillWindow {
 
@@ -237,21 +124,19 @@ class RoutineExecutionChallengeTest {
         @DisplayName("챌린지루틴은_지난3일째까지_인증할수있다")
         void complete_challenge_backfillWindow_allowsThreeDaysAgo() {
             givenRoutine(challengeRoutine(ROUTINE_ID, CHALLENGE_ID, STARTED, ENDED));
-            givenContext(ChallengeContext.of(ChallengeContext.Status.ACTIVE, true));
 
-            ExecutionCompleteResult result = service.complete(command(TODAY.minusDays(3)));
+            ExecutionCompleteResult result = service.completeAfterChallengeCheck(command(TODAY.minusDays(3)));
 
             assertThat(result.scheduledDate()).isEqualTo(TODAY.minusDays(3));
         }
 
         @Test
-        @DisplayName("챌린지루틴은_지난4일째부터_EXECUTION_BACKFILL_WINDOW_EXCEEDED_이고_gRPC를부르지않는다")
+        @DisplayName("챌린지루틴은_지난4일째부터_EXECUTION_BACKFILL_WINDOW_EXCEEDED_이고_아무것도남기지않는다")
         void complete_challenge_backfillWindow_rejectsFourDaysAgo() {
             givenRoutine(challengeRoutine(ROUTINE_ID, CHALLENGE_ID, STARTED, ENDED));
 
-            assertErrorCode(() -> service.complete(command(TODAY.minusDays(4))),
+            assertErrorCode(() -> service.completeAfterChallengeCheck(command(TODAY.minusDays(4))),
                     ErrorCode.EXECUTION_BACKFILL_WINDOW_EXCEEDED);
-            verifyNoInteractions(challengeClient);
             verifyNothingPersisted();
         }
 
@@ -260,7 +145,7 @@ class RoutineExecutionChallengeTest {
         void complete_personal_allowsThirtyDaysAgo() {
             givenRoutine(personalRoutine(ROUTINE_ID, TODAY.minusDays(60), null));
 
-            ExecutionCompleteResult result = service.complete(command(TODAY.minusDays(30)));
+            ExecutionCompleteResult result = service.completeAfterChallengeCheck(command(TODAY.minusDays(30)));
 
             assertThat(result.scheduledDate()).isEqualTo(TODAY.minusDays(30));
         }
@@ -270,12 +155,11 @@ class RoutineExecutionChallengeTest {
         void complete_afterChallengeEnd_rejectedByPeriodFirst() {
             givenRoutine(challengeRoutine(ROUTINE_ID, CHALLENGE_ID, STARTED, TODAY.minusDays(2)));
 
-            assertThatThrownBy(() -> service.complete(command(TODAY.minusDays(1))))
+            assertThatThrownBy(() -> service.completeAfterChallengeCheck(command(TODAY.minusDays(1))))
                     .isInstanceOfSatisfying(BusinessException.class, e -> {
                         assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
                         assertThat(e.getMessage()).isEqualTo("루틴 수행 기간이 아닙니다.");
                     });
-            verifyNoInteractions(challengeClient);
         }
     }
 
@@ -284,48 +168,28 @@ class RoutineExecutionChallengeTest {
     class EndDateGuard {
 
         @Test
-        @DisplayName("챌린지루틴인데_ended_at이NULL이면_INTERNAL_SERVER_ERROR_이고_저장·업로드·gRPC가없다")
+        @DisplayName("챌린지루틴인데_ended_at이NULL이면_INTERNAL_SERVER_ERROR_이고_저장·업로드가없다")
         void complete_challengeWithoutEndDate_rejected() {
             givenRoutine(challengeRoutine(ROUTINE_ID, CHALLENGE_ID, STARTED, null));
 
-            assertErrorCode(() -> service.complete(photoCommand(TODAY)), ErrorCode.INTERNAL_SERVER_ERROR);
+            assertErrorCode(() -> service.completeAfterChallengeCheck(photoCommand(TODAY)), ErrorCode.INTERNAL_SERVER_ERROR);
             verifyNothingPersisted();
-            verifyNoInteractions(challengeClient);
         }
     }
 
     @Nested
-    @DisplayName("bulkComplete · cancelComplete")
+    @DisplayName("bulkCompleteAfterChallengeCheck · cancelComplete")
     class BulkAndCancel {
-
-        @Test
-        @DisplayName("개인1·챌린지2건이면_gRPC를챌린지루틴마다한번씩_2회부른다")
-        void bulkComplete_callsGrpcPerChallengeRoutine() {
-            givenRoutine(personalRoutine(101L, STARTED, ENDED));
-            givenRoutine(challengeRoutine(102L, CHALLENGE_ID, STARTED, ENDED));
-            givenRoutine(challengeRoutine(103L, 51L, STARTED, ENDED));
-            givenContext(ChallengeContext.of(ChallengeContext.Status.ACTIVE, true));
-            when(challengeClient.getChallengeContext(51L, USER_ID))
-                    .thenReturn(ChallengeContext.of(ChallengeContext.Status.ACTIVE, true));
-
-            List<ExecutionCompleteResult> results = service.bulkComplete(USER_ID, TODAY, List.of(103L, 101L, 102L));
-
-            assertThat(results).hasSize(3);
-            verify(challengeClient).getChallengeContext(CHALLENGE_ID, USER_ID);
-            verify(challengeClient).getChallengeContext(51L, USER_ID);
-            verify(challengeClient, times(2)).getChallengeContext(anyLong(), anyLong());
-        }
 
         @Test
         @DisplayName("하나라도거부되면_예외가전파되어_전체가롤백된다")
         void bulkComplete_oneRejected_propagates() {
             givenRoutine(personalRoutine(101L, STARTED, ENDED));
-            givenRoutine(challengeRoutine(102L, CHALLENGE_ID, STARTED, ENDED));
-            givenContext(ChallengeContext.of(ChallengeContext.Status.ENDED, true));
+            givenRoutine(challengeRoutine(102L, CHALLENGE_ID, STARTED, null));
 
             // @Transactional 경계 안이라 앞서 저장한 개인 루틴 완료도 함께 롤백된다 (단위 테스트는 전파만 확인)
-            assertErrorCode(() -> service.bulkComplete(USER_ID, TODAY, List.of(101L, 102L)),
-                    ErrorCode.CHALLENGE_ALREADY_ENDED);
+            assertErrorCode(() -> service.bulkCompleteAfterChallengeCheck(USER_ID, TODAY, List.of(101L, 102L)),
+                    ErrorCode.INTERNAL_SERVER_ERROR);
         }
 
         @Test
@@ -340,18 +204,6 @@ class RoutineExecutionChallengeTest {
 
             assertThat(result.status()).isEqualTo(ExecutionStatus.PENDING);
             verify(executionRepository).delete(any(RoutineExecution.class));
-        }
-
-        @Test
-        @DisplayName("완료취소는_챌린지루틴이어도_gRPC를부르지않는다")
-        void cancelComplete_challenge_doesNotCallGrpc() {
-            givenRoutine(challengeRoutine(ROUTINE_ID, CHALLENGE_ID, STARTED, ENDED));
-            when(executionRepository.findByRoutineIdAndScheduledDate(ROUTINE_ID, TODAY))
-                    .thenReturn(Optional.of(RoutineExecution.completed(ROUTINE_ID, USER_ID, TODAY, LocalDateTime.now(CLOCK))));
-
-            service.cancelComplete(ROUTINE_ID, USER_ID, TODAY);
-
-            verifyNoInteractions(challengeClient);
         }
     }
 

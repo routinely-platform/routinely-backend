@@ -2,7 +2,6 @@ package com.routinely.routine_service.application.execution;
 
 import com.routinely.core.exception.BusinessException;
 import com.routinely.core.exception.ErrorCode;
-import com.routinely.routine_service.application.challenge.ChallengeContext;
 import com.routinely.routine_service.application.event.RoutineEventPublisher;
 import com.routinely.routine_service.application.execution.dto.CompleteExecutionCommand;
 import com.routinely.routine_service.application.execution.dto.ExecutionCompleteResult;
@@ -15,7 +14,6 @@ import com.routinely.routine_service.domain.feed.FeedCard;
 import com.routinely.routine_service.domain.feed.FeedCardRepository;
 import com.routinely.routine_service.domain.routine.Routine;
 import com.routinely.routine_service.domain.routine.RoutineRepository;
-import com.routinely.routine_service.infrastructure.grpc.ChallengeServiceGrpcClient;
 import com.routinely.storage.FileStorage;
 import com.routinely.storage.FileUploadCommand;
 import com.routinely.storage.StoredFile;
@@ -48,9 +46,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * 가능하다. 깜빡한 하루가 영구히 MISSED로 굳지 않게 하려는 정책이며, MISSED는 저장된 사실이 아니라
  * 완료 기록이 없어서 계산된 값이라 백필하면 자동으로 사라진다.
  *
- * <p><b>챌린지 루틴</b>(#58): 백필은 오늘 + 지난 {@link ChallengeBackfillProperties#backfillDays()}일로 제한하고,
- * 로컬 검증을 모두 통과한 뒤 challenge-service {@code GetChallengeContext}로 챌린지가 ACTIVE이고 사용자가 활성
- * 멤버인지 확인한다(Fail Closed). 원격 호출은 사진 업로드·저장·Outbox 적재보다 앞이라 거부된 요청은 흔적을 남기지 않는다.
+ * <p><b>챌린지 루틴</b>(#58): 백필은 오늘 + 지난 {@link ChallengeBackfillProperties#backfillDays()}일로 제한한다.
+ * 챌린지가 ACTIVE이고 사용자가 활성 멤버인지는 트랜잭션 밖의 {@link RoutineExecutionCompletionService}가 먼저
+ * 확인하고 넘긴다(결정 ③ C) — 이 클래스는 원격 호출을 하지 않는다.
  *
  * <p>인증 사진은 공통 모듈 {@link FileStorage}(S3)에 위임해 저장하고, MIME/크기/시그니처 검증은 요청 계층에서 수행한다. 완료 취소 시 사진 오브젝트는 커밋 이후 삭제하고, 업로드 후 트랜잭션이
  * 롤백되면 새 오브젝트를 보상 삭제해 DB 참조와 저장소 실체의 불일치를 방지한다. (#95/#142 패턴)
@@ -69,19 +67,18 @@ public class RoutineExecutionServiceImpl implements RoutineExecutionService {
     private final FeedCardRepository feedCardRepository;
     private final AcceptedCountCalculator acceptedCountCalculator;
     private final RoutineEventPublisher eventPublisher;
-    private final ChallengeServiceGrpcClient challengeClient;
     private final ChallengeBackfillProperties backfillProperties;
 
     /**
      * 완료 처리 — 지난 날짜를 포함해 수행 기간 내 날짜에 COMPLETED 행을 새로 만든다(sparse, 백필 허용).
      * 아직 오지 않은 날짜, 중단한 루틴은 거부하고, 이미 완료된 날이면 409.
      *
-     * <p>검증 순서(#58 결정 ③): 잠금 → 미래 날짜 → 활성 → ended_at NULL 가드 → 수행 기간 → 백필 창 → 수행 요일
-     * → 중복 → gRPC(챌린지만) → 업로드 → 저장 → Outbox. 싼 로컬 검증을 먼저 하고 원격 호출은 마지막에 둔다.
-     * 수행 기간이 백필 창보다 앞이라 챌린지 종료 후 날짜는 "수행 기간이 아닙니다"로 거부된다.
+     * <p>검증 순서(#58 결정 ③ C): [트랜잭션 밖 챌린지 확인] → 잠금 → 미래 날짜 → 활성 → ended_at NULL 가드 → 수행 기간
+     * → 백필 창 → 수행 요일 → 중복 → 업로드 → 저장 → Outbox. 수행 기간이 백필 창보다 앞이라, 이 메서드 안에서는
+     * 챌린지 종료 후 날짜가 "수행 기간이 아닙니다"로 거부된다(API로 오면 앞의 챌린지 확인이 ENDED로 먼저 막는다).
      */
     @Transactional
-    public ExecutionCompleteResult complete(CompleteExecutionCommand command) {
+    public ExecutionCompleteResult completeAfterChallengeCheck(CompleteExecutionCommand command) {
         Routine routine = getOwnedRoutineOrThrow(command.routineId(), command.userId());
         LocalDate date = command.scheduledDate();
         LocalDate today = LocalDate.now(clock);
@@ -102,9 +99,6 @@ public class RoutineExecutionServiceImpl implements RoutineExecutionService {
                 .ifPresent(existing -> {
                     throw new BusinessException(ErrorCode.EXECUTION_ALREADY_COMPLETED);
                 });
-        if (routine.isChallengeRoutine()) {
-            ensureChallengeOpen(routine, command.userId());
-        }
 
         String photoUrl = null;
         String photoObjectKey = null;
@@ -225,9 +219,10 @@ public class RoutineExecutionServiceImpl implements RoutineExecutionService {
     }
 
     @Transactional
-    public List<ExecutionCompleteResult> bulkComplete(Long userId, LocalDate date, List<Long> routineIds) {
+    public List<ExecutionCompleteResult> bulkCompleteAfterChallengeCheck(Long userId, LocalDate date,
+                                                                         List<Long> routineIds) {
         // ID 순으로 잠가 겹치는 다중 요청의 교착을 방지한다. 한 건 실패하면 전체 롤백한다.
-        return routineIds.stream().sorted().map(id -> complete(new CompleteExecutionCommand(
+        return routineIds.stream().sorted().map(id -> completeAfterChallengeCheck(new CompleteExecutionCommand(
                 id, userId, date, null, null, null, null))).toList();
     }
 
@@ -318,40 +313,6 @@ public class RoutineExecutionServiceImpl implements RoutineExecutionService {
             return false;
         }
         return !routine.isChallengeRoutine() || isWithinBackfillWindow(date, today);
-    }
-
-    /**
-     * challenge-service에 챌린지 상태와 멤버 활성 여부를 묻고 #58 결정 ① 표대로 거부한다.
-     * 장애·서킷 OPEN은 클라이언트가 SERVICE_UNAVAILABLE로 끊는다(Fail Closed) — 여기서는 안내 문구만 바꾼다.
-     */
-    private void ensureChallengeOpen(Routine routine, Long userId) {
-        ChallengeContext context;
-        try {
-            context = challengeClient.getChallengeContext(routine.getChallengeId(), userId);
-        } catch (BusinessException e) {
-            if (e.getErrorCode() == ErrorCode.SERVICE_UNAVAILABLE) {
-                throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, String.format(
-                        "일시적인 서버 문제로 인증할 수 없습니다. 지난 날짜는 %d일 안에 다시 인증할 수 있습니다.",
-                        backfillProperties.backfillDays()), e);
-            }
-            throw e;
-        }
-
-        if (!context.exists()) {
-            // 루틴은 있는데 챌린지가 없다 — 데이터 이상이므로 크게 남긴다.
-            log.error("챌린지 루틴이 가리키는 챌린지가 없습니다. routineId={}, challengeId={}",
-                    routine.getId(), routine.getChallengeId());
-            throw new BusinessException(ErrorCode.CHALLENGE_NOT_FOUND);
-        }
-        switch (context.status()) {
-            case WAITING -> throw new BusinessException(ErrorCode.CHALLENGE_NOT_STARTED);
-            case ENDED -> throw new BusinessException(ErrorCode.CHALLENGE_ALREADY_ENDED);
-            case ACTIVE -> {
-            }
-        }
-        if (!context.memberActive()) {
-            throw new BusinessException(ErrorCode.NOT_CHALLENGE_MEMBER);
-        }
     }
 
     /**

@@ -3,6 +3,7 @@ package com.routinely.routine_service.presentation.rest.execution;
 import com.routinely.core.exception.BusinessException;
 import com.routinely.core.exception.ErrorCode;
 import com.routinely.core.response.ApiResponse;
+import com.routinely.routine_service.application.execution.RoutineExecutionCompletionService;
 import com.routinely.routine_service.application.execution.RoutineExecutionService;
 import com.routinely.routine_service.application.execution.dto.ExecutionCompleteResult;
 import com.routinely.routine_service.application.execution.dto.ExecutionResult;
@@ -34,8 +35,9 @@ class RoutineExecutionControllerTest {
 
     private static final LocalDate TODAY = LocalDate.of(2026, 7, 24);
 
+    private final RoutineExecutionCompletionService completionService = mock(RoutineExecutionCompletionService.class);
     private final RoutineExecutionService service = mock(RoutineExecutionService.class);
-    private final RoutineExecutionController controller = new RoutineExecutionController(service);
+    private final RoutineExecutionController controller = new RoutineExecutionController(completionService, service);
 
     private static ExecutionCompleteResult completeResult() {
         return new ExecutionCompleteResult(500L, 100L, TODAY, ExecutionStatus.COMPLETED,
@@ -45,7 +47,7 @@ class RoutineExecutionControllerTest {
     @Test
     @DisplayName("완료처리하면_200과완료메시지를반환한다")
     void completeExecution_returnsOk() {
-        when(service.complete(any())).thenReturn(completeResult());
+        when(completionService.complete(any())).thenReturn(completeResult());
 
         ResponseEntity<ApiResponse<ExecutionCompleteResponse>> response =
                 controller.completeExecution(1L, 100L, "2026-07-24", null, "메모");
@@ -59,13 +61,13 @@ class RoutineExecutionControllerTest {
     @Test
     @DisplayName("사진을함께보내면_바이트를커맨드에담아서비스에위임한다")
     void completeExecution_withPhoto_delegates() {
-        when(service.complete(any())).thenReturn(completeResult());
+        when(completionService.complete(any())).thenReturn(completeResult());
         MockMultipartFile photo = new MockMultipartFile(
                 "photo", "p.jpg", "image/jpeg", new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF});
 
         controller.completeExecution(1L, 100L, "2026-07-24", photo, null);
 
-        verify(service).complete(any());
+        verify(completionService).complete(any());
     }
 
     @Test
@@ -74,7 +76,7 @@ class RoutineExecutionControllerTest {
         assertThatThrownBy(() -> controller.completeExecution(1L, 100L, "not-a-date", null, null))
                 .isInstanceOfSatisfying(BusinessException.class, e ->
                         assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED));
-        verify(service, never()).complete(any());
+        verify(completionService, never()).complete(any());
     }
 
     @Test
@@ -85,7 +87,7 @@ class RoutineExecutionControllerTest {
         assertThatThrownBy(() -> controller.completeExecution(1L, 100L, "2026-07-24", empty, null))
                 .isInstanceOfSatisfying(BusinessException.class, e ->
                         assertThat(e.getErrorCode()).isEqualTo(ErrorCode.EMPTY_FILE));
-        verify(service, never()).complete(any());
+        verify(completionService, never()).complete(any());
     }
 
     @Test
