@@ -8,7 +8,7 @@ import com.routinely.routine_service.domain.inbox.RoutineInbox;
 import com.routinely.routine_service.domain.inbox.RoutineInboxRepository;
 import com.routinely.routine_service.domain.definition.RoutineDefinition;
 import com.routinely.routine_service.domain.template.RoutineTemplate;
-import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.core.schedule.ScheduleType;
 import com.routinely.routine_service.domain.template.RoutineTemplateRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

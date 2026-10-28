@@ -3,7 +3,7 @@ package com.routinely.routine_service.presentation.rest.template;
 import com.routinely.core.response.ApiResponse;
 import com.routinely.routine_service.application.template.RoutineTemplateService;
 import com.routinely.routine_service.application.template.dto.RoutineTemplateResult;
-import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.core.schedule.ScheduleType;
 import com.routinely.routine_service.presentation.rest.template.dto.request.CreateRoutineTemplateRequest;
 import com.routinely.routine_service.presentation.rest.template.dto.response.RoutineTemplateResponse;
 import org.junit.jupiter.api.DisplayName;

@@ -2,7 +2,7 @@ package com.routinely.routine_service.application.execution;
 
 import com.routinely.routine_service.domain.execution.ExecutionStatus;
 import com.routinely.routine_service.domain.definition.RoutineDefinition;
-import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.core.schedule.ScheduleType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

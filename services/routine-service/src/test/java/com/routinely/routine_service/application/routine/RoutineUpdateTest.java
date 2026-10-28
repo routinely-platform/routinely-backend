@@ -11,7 +11,7 @@ import com.routinely.routine_service.domain.execution.RoutineExecutionRepository
 import com.routinely.routine_service.domain.routine.Routine;
 import com.routinely.routine_service.domain.routine.RoutineRepository;
 import com.routinely.routine_service.domain.template.RoutineTemplateRepository;
-import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.core.schedule.ScheduleType;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;

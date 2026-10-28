@@ -2,7 +2,7 @@ package com.routinely.routine_service.domain.definition;
 
 import com.routinely.core.exception.BusinessException;
 import com.routinely.core.exception.ErrorCode;
-import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.core.schedule.ScheduleType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

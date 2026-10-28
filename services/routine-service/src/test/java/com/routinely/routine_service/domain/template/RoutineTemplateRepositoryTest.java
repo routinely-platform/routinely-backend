@@ -1,5 +1,6 @@
 package com.routinely.routine_service.domain.template;
 
+import com.routinely.core.schedule.ScheduleType;
 import com.routinely.jpa.config.JpaAuditingConfig;
 import com.routinely.routine_service.domain.definition.RoutineDefinition;
 import org.springframework.context.annotation.Import;

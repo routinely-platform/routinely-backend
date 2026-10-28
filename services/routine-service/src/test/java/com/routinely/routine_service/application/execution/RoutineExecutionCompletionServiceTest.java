@@ -7,7 +7,7 @@ import com.routinely.routine_service.application.execution.dto.CompleteExecution
 import com.routinely.routine_service.domain.definition.RoutineDefinition;
 import com.routinely.routine_service.domain.routine.Routine;
 import com.routinely.routine_service.domain.routine.RoutineRepository;
-import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.core.schedule.ScheduleType;
 import com.routinely.routine_service.infrastructure.grpc.ChallengeServiceGrpcClient;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

@@ -1,4 +1,4 @@
-package com.routinely.routine_service.domain.template;
+package com.routinely.core.schedule;
 
 import java.time.DayOfWeek;
 import java.util.ArrayList;
@@ -10,6 +10,9 @@ import java.util.List;
  * 예: 월·수·금 = {@code 0b0010101 = 21}.
  *
  * <p>API에서는 사람이 읽기 쉬운 코드(MON~SUN) 리스트로 주고받고, 저장/도메인에서는 비트마스크를 쓴다.
+ *
+ * <p>routine-service와 challenge-service가 같은 비트 규칙을 써야 해서 common-core에 둔다.
+ * 비트 순서가 서비스마다 갈라지면 컴파일은 되고 데이터만 틀어진다.
  */
 public final class Weekdays {
 

@@ -5,7 +5,7 @@ import com.routinely.routine_service.domain.execution.CompletionMark;
 import com.routinely.routine_service.domain.execution.RoutineExecutionRepository;
 import com.routinely.routine_service.domain.routine.Routine;
 import com.routinely.routine_service.domain.schedule.WeekBoundary;
-import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.core.schedule.ScheduleType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import java.time.*;

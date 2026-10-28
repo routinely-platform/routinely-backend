@@ -2,7 +2,7 @@ package com.routinely.routine_service.application.execution;
 
 import com.routinely.routine_service.domain.execution.ExecutionStatus;
 import com.routinely.routine_service.domain.definition.RoutineDefinition;
-import com.routinely.routine_service.domain.template.Weekdays;
+import com.routinely.core.schedule.Weekdays;
 
 import java.time.LocalDate;
 import java.util.Optional;

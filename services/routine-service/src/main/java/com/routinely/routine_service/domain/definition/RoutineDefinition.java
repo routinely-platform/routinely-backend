@@ -1,7 +1,7 @@
 package com.routinely.routine_service.domain.definition;
 
 import com.routinely.core.exception.BusinessException;
-import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.core.schedule.ScheduleType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.persistence.EnumType;

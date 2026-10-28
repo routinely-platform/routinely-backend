@@ -2,7 +2,7 @@ package com.routinely.routine_service.presentation.rest.routine.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.routinely.routine_service.application.routine.dto.UpdateRoutineCommand;
-import com.routinely.routine_service.domain.template.Weekdays;
+import com.routinely.core.schedule.Weekdays;
 import com.routinely.routine_service.presentation.rest.common.ScheduleValidation;
 import jakarta.validation.constraints.*;
 import java.time.LocalDate;

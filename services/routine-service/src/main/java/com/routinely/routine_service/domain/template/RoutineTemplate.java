@@ -1,5 +1,6 @@
 package com.routinely.routine_service.domain.template;
 
+import com.routinely.core.schedule.ScheduleType;
 import com.routinely.jpa.entity.BaseEntity;
 import com.routinely.routine_service.domain.definition.RoutineDefinition;
 import jakarta.persistence.Column;

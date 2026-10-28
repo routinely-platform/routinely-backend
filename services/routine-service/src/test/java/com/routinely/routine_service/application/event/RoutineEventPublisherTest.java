@@ -6,7 +6,7 @@ import com.routinely.routine_service.domain.definition.RoutineDefinition;
 import com.routinely.routine_service.domain.outbox.RoutineOutbox;
 import com.routinely.routine_service.domain.outbox.RoutineOutboxRepository;
 import com.routinely.routine_service.domain.routine.Routine;
-import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.core.schedule.ScheduleType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

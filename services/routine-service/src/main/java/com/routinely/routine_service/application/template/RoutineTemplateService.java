@@ -8,7 +8,7 @@ import com.routinely.routine_service.domain.category.CategoryRepository;
 import com.routinely.routine_service.domain.definition.RoutineDefinition;
 import com.routinely.routine_service.domain.template.RoutineTemplate;
 import com.routinely.routine_service.domain.template.RoutineTemplateRepository;
-import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.core.schedule.ScheduleType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

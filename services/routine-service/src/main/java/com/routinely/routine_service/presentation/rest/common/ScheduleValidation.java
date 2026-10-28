@@ -2,8 +2,8 @@ package com.routinely.routine_service.presentation.rest.common;
 
 import com.routinely.core.exception.BusinessException;
 import com.routinely.routine_service.domain.definition.RoutineDefinition;
-import com.routinely.routine_service.domain.template.ScheduleType;
-import com.routinely.routine_service.domain.template.Weekdays;
+import com.routinely.core.schedule.ScheduleType;
+import com.routinely.core.schedule.Weekdays;
 import java.util.List;
 
 /**

@@ -1,4 +1,4 @@
-package com.routinely.routine_service.domain.template;
+package com.routinely.core.schedule;
 
 /**
  * 루틴 반복 스케줄 유형 (ADR-0039).

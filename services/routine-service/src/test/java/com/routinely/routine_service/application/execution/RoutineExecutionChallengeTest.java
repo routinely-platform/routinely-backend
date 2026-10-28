@@ -13,7 +13,7 @@ import com.routinely.routine_service.domain.execution.RoutineExecutionRepository
 import com.routinely.routine_service.domain.feed.FeedCardRepository;
 import com.routinely.routine_service.domain.routine.Routine;
 import com.routinely.routine_service.domain.routine.RoutineRepository;
-import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.core.schedule.ScheduleType;
 import com.routinely.storage.FileStorage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
