@@ -38,7 +38,7 @@ graph LR
     H1[" "]
   end
 
-  C -- "challenge.started(정의 포함) ⬜🆕" --> R
+  C -- "challenge.started(정의·멤버 포함) 🟡" --> R
   C -- "challenge.started 🟡" --> N
   C -- "challenge.started 🟡" --> H
   C -- "challenge.ended ⬜" --> N
@@ -72,8 +72,8 @@ graph LR
 
 | 토픽 | Publisher | Subscriber | 파티션 키 | 상태 |
 |---|---|---|---|:---:|
-| ~~`challenge.created`~~ | ~~Challenge~~ | ~~Routine~~ | — | ⛔ **폐지** (ADR-0044) |
-| `challenge.started` | Challenge | Routine · Notification · Chat | `challengeId` | 🟡 발행만 · **정의 필드 추가 예정** 🆕 |
+| ~~`challenge.created`~~ | ~~Challenge~~ | ~~Routine~~ | — | ⛔ **제거** — 발행·소비 코드 삭제 (ADR-0044 · #167) |
+| `challenge.started` | Challenge | Routine · Notification · Chat | `challengeId` | 🟡 발행만 — 루틴 정의 · `members` · `leaderUserId` 포함(#167). 소비는 Routine #157 |
 | `challenge.ended` | Challenge | Notification · Chat | `challengeId` | ⬜ **미발행** — 코드는 전이만 한다 · 페이로드에 `members` 추가 🆕 |
 | `challenge.member.joined` | Challenge | **Challenge**(랭킹) · 🔵 v2: Routine · Chat (#118) | `challengeId` | 🟡 부분 |
 | `challenge.member.left` | Challenge | Chat · **Routine** 🆕 · **Challenge**(랭킹 제외) 🆕 · **Notification**(방장 승계) 🆕 | `challengeId` | 🟡 부분 |
@@ -92,10 +92,13 @@ graph LR
 completed/cancelled는 같은 스냅샷 계약이며 개인 이벤트는 랭킹 필드를 생략한다.
 `routine.notification.scheduled`도 같은 시퀀스의 `revision`을 싣는다 — 소비자가 옛 스냅샷을 거르는 기준이다.
 #183: `challenge.member.joined`는 챌린지 생성 시 **방장 참여(`role: LEADER`)로도 발행**된다 — 방장도 같은 경로로 0회 랭킹 행을 받는다.
+#167: 챌린지가 루틴 정의를 소유하면서 `challenge.created`를 없애고, 정의는 `challenge.started`로 시작 시점에 한 번 보낸다.
 
 | | 무엇 | 왜 |
 |---|---|---|
 | ✅ #61 | **`routine.execution.cancelled`** | 완료 이벤트만 있어 **랭킹이 오르는 경로만 있고 내려가는 경로가 없었다.** 캡 때문에 단순 감소는 틀린다 — **재계산은 routine-service가 한다.** 누적 인정 횟수를 싣고 소비 측은 `revision`을 비교해 덮어쓴다(S33 · 2026-09-10) |
+| ⛔ #167 | ~~`challenge.created`~~ | **발행·소비 제거.** 챌린지 템플릿을 만들 이유가 사라졌다(ADR-0044). routine-service의 소비 토픽은 0개가 된다 — Inbox `eventType` 라우팅은 #157/#158에서 넣는다 |
+| 🔧 #167 | `challenge.started` **페이로드** | 루틴 정의 5개(`routineTitle` · `categoryCode` · `scheduleType` · `daysOfWeek` · `targetCount`) + `members[{userId, joinedAt}]`(시작 시점 `ACTIVE`) + `leaderUserId` — 소비자가 추가 RPC 없이 루틴·채팅방을 만든다 |
 | ⛔ | ~~`challenge.deleted`~~ | **2026-09-13 철회.** 정리할 챌린지 템플릿이 ADR-0044로 사라졌고, `WAITING` 챌린지는 다른 서비스에 남기는 것이 없다 |
 | 🔧 | `challenge.member.left` **페이로드** | `newLeaderUserId` 추가 — 승계당한 사람이 자기가 방장이 된 걸 알 방법이 없었다 |
 | 🔧 | `challenge.member.left` **구독자** | **Routine 추가**(챌린지 루틴 비활성화) · **Challenge 추가**(랭킹 제외 + ZSET `ZREM`) |
@@ -151,11 +154,11 @@ sequenceDiagram
   L->>C: POST /challenges
   C->>R: gRPC ListCategories ✅
   R-->>C: 카테고리 코드 목록
-  Note over C: 트랜잭션 — challenges INSERT + Outbox
-  Note over C: 루틴 정의도 challenges에 저장 (ADR-0044)<br/>챌린지 템플릿을 만들지 않는다
+  Note over C: 트랜잭션 — challenges INSERT(루틴 정의 포함) + 방장 joined Outbox
+  Note over C: challenge.created는 없다 (ADR-0044 · #167)<br/>챌린지 템플릿을 만들지 않는다
 
   Note over C: 매일 00:00 KST 스케줄러 (ShedLock)
-  C-->>R: challenge.started(루틴 정의 포함) ⬜🆕
+  C-->>R: challenge.started(정의 · members · leaderUserId) 🟡 소비 #157
   Note over R: 멤버별 routines 인스턴스 생성<br/>페이로드 정의를 복사 · routine_template_id = NULL
 
   actor M as 멤버

@@ -6,9 +6,14 @@ import com.routinely.challenge_service.application.dto.CreateChallengeCommand;
 import com.routinely.challenge_service.domain.challenge.Challenge;
 import com.routinely.challenge_service.domain.challenge.ChallengeLifecycleStatus;
 import com.routinely.challenge_service.domain.challenge.ChallengeRepository;
+import com.routinely.challenge_service.domain.challenge.ChallengeRoutineDefinition;
+import com.routinely.challenge_service.domain.member.ChallengeMember;
+import com.routinely.challenge_service.domain.member.ChallengeMemberRepository;
+import com.routinely.challenge_service.domain.member.MembershipStatus;
 import com.routinely.challenge_service.domain.outbox.ChallengeOutbox;
 import com.routinely.challenge_service.domain.outbox.ChallengeOutboxRepository;
 import com.routinely.challenge_service.infrastructure.kafka.KafkaTopic;
+import com.routinely.core.schedule.ScheduleType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,6 +23,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 
@@ -36,6 +42,7 @@ class ChallengeStatusTransitionSchedulerTest {
             Clock.fixed(Instant.parse("2026-06-07T15:00:00Z"), ZoneId.of("Asia/Seoul"));
 
     private ChallengeRepository challengeRepository;
+    private ChallengeMemberRepository challengeMemberRepository;
     private ChallengeOutboxRepository challengeOutboxRepository;
     private ObjectMapper objectMapper;
     private ChallengeStatusTransitionScheduler scheduler;
@@ -43,10 +50,12 @@ class ChallengeStatusTransitionSchedulerTest {
     @BeforeEach
     void setUp() {
         challengeRepository = mock(ChallengeRepository.class);
+        challengeMemberRepository = mock(ChallengeMemberRepository.class);
         challengeOutboxRepository = mock(ChallengeOutboxRepository.class);
         objectMapper = new ObjectMapper();
         scheduler = new ChallengeStatusTransitionScheduler(
                 challengeRepository,
+                challengeMemberRepository,
                 challengeOutboxRepository,
                 objectMapper,
                 FIXED_KST_MIDNIGHT_CLOCK
@@ -88,6 +97,46 @@ class ChallengeStatusTransitionSchedulerTest {
         assertThat(payload.get("challengeName").asText()).isEqualTo("30일 러닝 챌린지");
         assertThat(payload.get("startedAt").asText()).isEqualTo("2026-06-08");
         assertThat(payload.get("endedAt").asText()).isEqualTo("2026-07-07");
+        assertThat(payload.get("routineTitle").asText()).isEqualTo("아침 러닝 30분");
+        assertThat(payload.get("categoryCode").asText()).isEqualTo("EXERCISE");
+        assertThat(payload.get("scheduleType").asText()).isEqualTo("DAILY");
+        assertThat(payload.get("daysOfWeek").isNull()).isTrue();
+        assertThat(payload.get("targetCount").isNull()).isTrue();
+        assertThat(payload.has("routineTemplateId")).isFalse();
+    }
+
+    @Test
+    @DisplayName("started_페이로드에_요일코드리스트와_시작시점ACTIVE멤버의참여일_방장을싣는다")
+    void transitionChallengeStatus_startedPayloadCarriesDefinitionMembersAndLeader() throws Exception {
+        LocalDate today = LocalDate.of(2026, 6, 8);
+        Challenge challenge = challenge(3L, "월수금 러닝", ChallengeLifecycleStatus.WAITING,
+                today, LocalDate.of(2026, 7, 7));
+        ReflectionTestUtils.setField(challenge, "routineDefinition",
+                ChallengeRoutineDefinition.of("저녁 러닝", ScheduleType.SPECIFIC_DAYS, (short) 21, null));
+        ChallengeMember leader = ChallengeMember.createLeader(challenge, 100L, LocalDateTime.of(2026, 6, 1, 23, 30));
+        ChallengeMember member = ChallengeMember.createMember(challenge, 200L, LocalDateTime.of(2026, 6, 5, 8, 0));
+        when(challengeRepository.findWaitingToActivate(today)).thenReturn(List.of(challenge));
+        when(challengeRepository.findActiveToEnd(today)).thenReturn(List.of());
+        when(challengeMemberRepository.findAllByChallengeIdAndStatusOrderByJoinedAtAscIdAsc(3L, MembershipStatus.ACTIVE))
+                .thenReturn(List.of(leader, member));
+
+        scheduler.transitionChallengeStatus();
+
+        ArgumentCaptor<ChallengeOutbox> outboxCaptor = ArgumentCaptor.forClass(ChallengeOutbox.class);
+        verify(challengeOutboxRepository).save(outboxCaptor.capture());
+        JsonNode payload = objectMapper.readTree(outboxCaptor.getValue().getPayload());
+        assertThat(payload.get("routineTitle").asText()).isEqualTo("저녁 러닝");
+        assertThat(payload.get("scheduleType").asText()).isEqualTo("SPECIFIC_DAYS");
+        assertThat(payload.get("daysOfWeek")).extracting(JsonNode::asText).containsExactly("MON", "WED", "FRI");
+        assertThat(payload.get("targetCount").isNull()).isTrue();
+        assertThat(payload.get("leaderUserId").asLong()).isEqualTo(100L);
+
+        JsonNode members = payload.get("members");
+        assertThat(members).hasSize(2);
+        assertThat(members.get(0).get("userId").asLong()).isEqualTo(100L);
+        assertThat(members.get(0).get("joinedAt").asText()).isEqualTo("2026-06-01");
+        assertThat(members.get(1).get("userId").asLong()).isEqualTo(200L);
+        assertThat(members.get(1).get("joinedAt").asText()).isEqualTo("2026-06-05");
     }
 
     @Test

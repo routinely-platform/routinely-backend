@@ -126,6 +126,9 @@ Routine 서비스는 이벤트 수신 즉시 비즈니스 로직을 처리하지
 > `routineTemplateId`를 **루틴 정의 필드로 교체**한다. 챌린지 템플릿이 없어지기 때문이다.
 > 아래 원칙("추가 RPC 없이 자기 완결적")은 그대로이며, 오히려 문자 그대로 지켜진다 —
 > 템플릿 ID를 담으면 결국 조회를 해야 자기완결이 됐다.
+>
+> 🔄 **구현 (2026-10-29, #167)** — 챌린지 `SPECIFIC_DAYS` 허용(ADR-0039 §2.3 개정)으로 `daysOfWeek`를,
+> 채팅방 방장 지정(ADR-0046)을 위해 `leaderUserId`를 더했다. `members`는 시작 시점 `ACTIVE` 멤버만 싣는다.
 
 Routine 서비스가 추가 RPC 없이 자기 완결적으로 처리할 수 있도록 필요한 모든 정보를 담는다.
 
@@ -134,12 +137,15 @@ Routine 서비스가 추가 RPC 없이 자기 완결적으로 처리할 수 있�
   "eventId": "550e8400-e29b-41d4-a716-446655440005",
   "occurredAt": "2026-03-01T00:00:00Z",
   "challengeId": 10,
+  "challengeName": "3월 러닝",
   "startedAt": "2026-03-01",
   "endedAt": "2026-03-31",
   "routineTitle": "아침 러닝 3km",
   "categoryCode": "EXERCISE",
-  "scheduleType": "DAILY",
+  "scheduleType": "SPECIFIC_DAYS",
+  "daysOfWeek": ["MON", "WED", "FRI"],
   "targetCount": null,
+  "leaderUserId": 1,
   "members": [
     { "userId": 1, "joinedAt": "2026-02-25" },
     { "userId": 2, "joinedAt": "2026-02-26" }
@@ -149,6 +155,7 @@ Routine 서비스가 추가 RPC 없이 자기 완결적으로 처리할 수 있�
 
 routine-service는 이 페이로드만으로 멤버별 `routines`를 만든다.
 `routine_template_id`는 **NULL**이다 — ADR-0040이 nullable로 만들었다.
+`daysOfWeek`는 코드 리스트(`SPECIFIC_DAYS` 외 `null`)이고, 소비자가 비트마스크로 바꿔 `days_of_week`에 복사한다.
 
 <details><summary>개정 전 (routineTemplateId 방식)</summary>
 

@@ -7,7 +7,6 @@ import com.routinely.challenge_service.application.dto.ChallengeMemberResult;
 import com.routinely.challenge_service.application.dto.ChallengeResult;
 import com.routinely.challenge_service.application.dto.CreateChallengeCommand;
 import com.routinely.challenge_service.application.dto.UpdateChallengeCommand;
-import com.routinely.challenge_service.application.event.ChallengeCreatedEvent;
 import com.routinely.challenge_service.application.event.ChallengeMemberJoinedEvent;
 import com.routinely.challenge_service.application.event.ChallengeMemberLeftEvent;
 import com.routinely.challenge_service.domain.challenge.Challenge;
@@ -87,12 +86,9 @@ public class ChallengeService {
         ChallengeMember leader = ChallengeMember.createLeader(savedChallenge, creatorUserId, now());
         challengeMemberRepository.save(leader);
 
-        // 두 이벤트가 같은 시각을 쓴다 — joined의 idempotencyKey에 occurredAt이 들어가 now()를 두 번 부르면 키가 흔들린다.
-        String occurredAt = toEventOccurredAt(now());
-        saveCreatedOutbox(savedChallenge, creatorUserId, command, occurredAt);
         // 방장도 참여 이벤트를 낸다 — 일반 멤버와 같은 경로(Inbox → processMemberJoined)로 0회 랭킹 행이 생긴다. (#183)
-        // created 다음에 적재해 폴러의 (created_at, id) 순서대로 created → joined로 나간다.
-        saveJoinedOutbox(savedChallenge, creatorUserId, ChallengeMemberRole.LEADER, occurredAt);
+        // 루틴 정의는 challenges에 저장하고 시작 시 challenge.started로 보낸다 — 생성 이벤트는 없다 (ADR-0044, #167).
+        saveJoinedOutbox(savedChallenge, creatorUserId, ChallengeMemberRole.LEADER, toEventOccurredAt(now()));
 
         return ChallengeResult.from(
                 savedChallenge,
@@ -252,30 +248,6 @@ public class ChallengeService {
         if (cond.hasEndedStatusWithEndImminentSort()) {
             throw new BusinessException(VALIDATION_FAILED, "종료 임박순은 종료된 챌린지와 함께 조회할 수 없습니다.");
         }
-    }
-
-    private void saveCreatedOutbox(Challenge challenge, Long creatorUserId, CreateChallengeCommand command, String occurredAt) {
-        // routine-service가 추가 RPC 없이 루틴 템플릿을 생성할 수 있도록 self-contained payload를 구성한다.
-        // 루틴 필드(routineTitle/scheduleType/targetCount)는 challenge-service가 저장하지 않고 그대로 전달한다.
-        // 선호 시각/요일은 챌린지 템플릿이 정하지 않으며, 멤버별 routine 인스턴스에서 개별 설정한다 (ADR-0035).
-        ChallengeCreatedEvent event = new ChallengeCreatedEvent(
-                UUID.randomUUID().toString(),
-                occurredAt,
-                challenge.getId(),
-                creatorUserId,
-                challenge.getCategoryCode(),
-                command.routineTitle(),
-                command.scheduleType(),
-                command.targetCount(),
-                challenge.getStartedAt().toString(),
-                challenge.getEndedAt().toString()
-        );
-        String payload = serializeEvent(event);
-        // 챌린지는 한 번만 생성되므로 challengeId만으로 유일성을 보장한다.
-        String idempotencyKey = KafkaTopic.CHALLENGE_CREATED + ":" + challenge.getId();
-        challengeOutboxRepository.save(
-                ChallengeOutbox.create(AGGREGATE_TYPE, challenge.getId(), KafkaTopic.CHALLENGE_CREATED, payload, idempotencyKey)
-        );
     }
 
     private void saveJoinedOutbox(Challenge challenge, Long userId, ChallengeMemberRole role, String occurredAt) {

@@ -190,8 +190,8 @@ class ChallengeServiceTest {
     }
 
     @Test
-    @DisplayName("챌린지생성_challenge.created와_방장의challenge.member.joined를_같은시각으로_Outbox에저장한다")
-    void createChallenge_savesChallengeCreatedOutbox() {
+    @DisplayName("챌린지생성_challenge.created는_발행하지않고_방장의challenge.member.joined만_Outbox에저장한다")
+    void createChallenge_savesOnlyLeaderJoinedOutbox() {
         when(challengeRepository.save(any(Challenge.class))).thenAnswer(invocation -> {
             Challenge challenge = invocation.getArgument(0);
             ReflectionTestUtils.setField(challenge, "id", 1L);
@@ -217,34 +217,19 @@ class ChallengeServiceTest {
 
         // 방장도 일반 멤버와 같은 참여 이벤트로 랭킹 시드(0회 summary + ZADD 0)를 받는다 (#183)
         ArgumentCaptor<ChallengeOutbox> outboxCaptor = ArgumentCaptor.forClass(ChallengeOutbox.class);
-        verify(challengeOutboxRepository, times(2)).save(outboxCaptor.capture());
+        verify(challengeOutboxRepository, times(1)).save(outboxCaptor.capture());
+        // 루틴 정의는 challenges에 저장하고 시작 시 challenge.started로 보낸다 (ADR-0044, #167)
         assertThat(outboxCaptor.getAllValues()).extracting(ChallengeOutbox::getEventType)
-                .containsExactly("challenge.created", "challenge.member.joined");
+                .containsExactly("challenge.member.joined");
 
-        ChallengeOutbox leaderJoined = outboxCaptor.getAllValues().get(1);
+        ChallengeOutbox leaderJoined = outboxCaptor.getValue();
         assertThat(leaderJoined.getAggregateId()).isEqualTo(1L);
         assertThat(leaderJoined.getIdempotencyKey()).isEqualTo("challenge.member.joined:1:100:2026-05-24T00:00:00Z");
         assertThat(leaderJoined.getPayload())
                 .contains("\"occurredAt\":\"2026-05-24T00:00:00Z\"")
                 .contains("\"userId\":100")
                 .contains("\"role\":\"LEADER\"");
-
-        ChallengeOutbox outbox = outboxCaptor.getAllValues().get(0);
-        assertThat(outbox.getEventType()).isEqualTo("challenge.created");
-        assertThat(outbox.getAggregateType()).isEqualTo("challenge");
-        assertThat(outbox.getAggregateId()).isEqualTo(1L);
-        assertThat(outbox.getIdempotencyKey()).isEqualTo("challenge.created:1");
-        assertThat(outbox.getPayload())
-                .contains("\"occurredAt\":\"2026-05-24T00:00:00Z\"")
-                .contains("\"challengeId\":1")
-                .contains("\"creatorUserId\":100")
-                .contains("\"categoryCode\":\"EXERCISE\"")
-                .contains("\"routineTitle\":\"아침 러닝 30분\"")
-                .contains("\"scheduleType\":\"WEEKLY_COUNT\"")
-                .contains("\"targetCount\":3")
-                .doesNotContain("preferredTime")
-                .contains("\"startedAt\":\"2026-05-25\"")
-                .contains("\"endedAt\":\"2026-06-24\"");
+        assertThat(leaderJoined.getAggregateType()).isEqualTo("challenge");
     }
 
     @Test

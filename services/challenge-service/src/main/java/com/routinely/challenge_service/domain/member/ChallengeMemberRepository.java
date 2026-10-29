@@ -19,6 +19,8 @@ public interface ChallengeMemberRepository extends JpaRepository<ChallengeMember
     Optional<ChallengeMember> findLockedByChallengeIdAndUserId(
             @Param("challengeId") Long challengeId, @Param("userId") Long userId);
 
+    List<ChallengeMember> findAllByChallengeIdAndStatusOrderByJoinedAtAscIdAsc(Long challengeId, MembershipStatus status);
+
     int countByChallengeIdAndStatus(Long challengeId, MembershipStatus status);
 
     @EntityGraph(attributePaths = "challenge")
