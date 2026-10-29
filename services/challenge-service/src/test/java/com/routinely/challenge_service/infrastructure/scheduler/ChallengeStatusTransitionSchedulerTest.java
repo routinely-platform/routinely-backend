@@ -139,6 +139,7 @@ class ChallengeStatusTransitionSchedulerTest {
                         endedAt,
                         "아침 러닝 30분",
                         "DAILY",
+                        null,
                         null
                 ),
                 100L,

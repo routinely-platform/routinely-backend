@@ -85,7 +85,7 @@ public class Challenge extends BaseEntity {
                 .routineDefinition(ChallengeRoutineDefinition.of(
                         command.routineTitle(),
                         ScheduleType.valueOf(command.scheduleType()),
-                        null,
+                        command.daysOfWeek(),
                         command.targetCount()))
                 .build();
     }

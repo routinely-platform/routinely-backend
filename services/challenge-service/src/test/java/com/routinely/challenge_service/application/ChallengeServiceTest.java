@@ -26,6 +26,8 @@ import com.routinely.core.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.ParameterizedTest;
 import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -93,6 +95,7 @@ class ChallengeServiceTest {
                 LocalDate.of(2026, 6, 24),
                 "아침 러닝 30분",
                 "DAILY",
+                null,
                 null
         );
 
@@ -109,6 +112,8 @@ class ChallengeServiceTest {
         assertThat(challengeCaptor.getValue().getCategoryCode()).isEqualTo("EXERCISE");
         assertThat(challengeCaptor.getValue().getStartedAt()).isEqualTo(LocalDate.of(2026, 5, 25));
         assertThat(challengeCaptor.getValue().getEndedAt()).isEqualTo(LocalDate.of(2026, 6, 24));
+        assertThat(challengeCaptor.getValue().getRoutineDefinition().getRoutineTitle()).isEqualTo("아침 러닝 30분");
+        assertThat(challengeCaptor.getValue().getRoutineDefinition().getScheduleType()).isEqualTo(ScheduleType.DAILY);
 
         ArgumentCaptor<ChallengeMember> memberCaptor = ArgumentCaptor.forClass(ChallengeMember.class);
         verify(challengeMemberRepository).save(memberCaptor.capture());
@@ -122,6 +127,33 @@ class ChallengeServiceTest {
         assertThat(result.inviteCode()).hasSize(20);
         assertThat(result.currentMembers()).isEqualTo(1);
         assertThat(result.myRole()).isEqualTo(ChallengeMemberRole.LEADER);
+    }
+
+    @Test
+    @DisplayName("챌린지생성_SPECIFIC_DAYS이면_요일비트마스크를_챌린지에저장한다")
+    void createChallenge_whenSpecificDays_savesDaysOfWeek() {
+        when(challengeRepository.save(any(Challenge.class))).thenAnswer(invocation -> {
+            Challenge challenge = invocation.getArgument(0);
+            ReflectionTestUtils.setField(challenge, "id", 1L);
+            ReflectionTestUtils.setField(challenge, "createdAt", LocalDateTime.now(FIXED_CLOCK));
+            return challenge;
+        });
+
+        CreateChallengeCommand command = new CreateChallengeCommand(
+                "주 3일 러닝", "월수금 달리기", true, 10, "EXERCISE",
+                LocalDate.of(2026, 5, 25), LocalDate.of(2026, 6, 24),
+                "아침 러닝 30분", "SPECIFIC_DAYS", (short) 21, null);
+
+        ChallengeResult result = challengeService.createChallengeAfterCategoryValidation(100L, command);
+
+        ArgumentCaptor<Challenge> challengeCaptor = ArgumentCaptor.forClass(Challenge.class);
+        verify(challengeRepository).save(challengeCaptor.capture());
+        ChallengeRoutineDefinition saved = challengeCaptor.getValue().getRoutineDefinition();
+        assertThat(saved.getScheduleType()).isEqualTo(ScheduleType.SPECIFIC_DAYS);
+        assertThat(saved.getDaysOfWeek()).isEqualTo((short) 21);
+        assertThat(saved.getTargetCount()).isNull();
+        assertThat(result.scheduleType()).isEqualTo(ScheduleType.SPECIFIC_DAYS);
+        assertThat(result.daysOfWeek()).isEqualTo((short) 21);
     }
 
     @Test
@@ -144,6 +176,7 @@ class ChallengeServiceTest {
                 LocalDate.of(2026, 6, 24),
                 "아침 러닝 30분",
                 "DAILY",
+                null,
                 null
         );
 
@@ -176,6 +209,7 @@ class ChallengeServiceTest {
                 LocalDate.of(2026, 6, 24),
                 "아침 러닝 30분",
                 "WEEKLY_COUNT",
+                null,
                 3
         );
 
@@ -505,31 +539,68 @@ class ChallengeServiceTest {
     }
 
     @Test
-    @DisplayName("챌린지수정_루틴정보수정요청이면_아직지원하지않는다는예외를던진다")
-    void updateChallenge_whenRoutineFieldsProvided_throwsException() {
+    @DisplayName("챌린지수정_방장혼자인WAITING이면_루틴제목만바뀌고_스케줄은그대로다")
+    void updateChallenge_soloLeaderWaiting_changesRoutineTitle() {
+        Challenge challenge = createChallenge(1L, "대기 챌린지", true, null, ChallengeLifecycleStatus.WAITING);
+        ReflectionTestUtils.setField(challenge, "routineDefinition",
+                ChallengeRoutineDefinition.of("아침 러닝", ScheduleType.SPECIFIC_DAYS, (short) 21, null));
+        ChallengeMember leader = createMember(challenge, 100L, ChallengeMemberRole.LEADER);
+        when(challengeRepository.findById(1L)).thenReturn(Optional.of(challenge));
+        when(challengeMemberRepository.findByChallengeIdAndUserIdAndStatus(1L, 100L, MembershipStatus.ACTIVE))
+                .thenReturn(Optional.of(leader));
+        when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
+                .thenReturn(1);
+
+        UpdateChallengeCommand command = updateCommand(null, null, null, null, null, null, "저녁 러닝");
+
+        ChallengeResult result = challengeService.updateChallenge(1L, 100L, command);
+
+        assertThat(challenge.getRoutineDefinition().getRoutineTitle()).isEqualTo("저녁 러닝");
+        assertThat(challenge.getRoutineDefinition().getScheduleType()).isEqualTo(ScheduleType.SPECIFIC_DAYS);
+        assertThat(challenge.getRoutineDefinition().getDaysOfWeek()).isEqualTo((short) 21);
+        assertThat(result.routineTitle()).isEqualTo("저녁 러닝");
+        assertThat(result.daysOfWeek()).isEqualTo((short) 21);
+    }
+
+    @Test
+    @DisplayName("챌린지수정_멤버가2명이상이면_루틴제목변경시_예외를던진다")
+    void updateChallenge_withMultipleMembers_whenRoutineTitleChanged_throwsException() {
         Challenge challenge = createChallenge(1L, "대기 챌린지", true, null, ChallengeLifecycleStatus.WAITING);
         ChallengeMember leader = createMember(challenge, 100L, ChallengeMemberRole.LEADER);
         when(challengeRepository.findById(1L)).thenReturn(Optional.of(challenge));
         when(challengeMemberRepository.findByChallengeIdAndUserIdAndStatus(1L, 100L, MembershipStatus.ACTIVE))
                 .thenReturn(Optional.of(leader));
+        when(challengeMemberRepository.countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE))
+                .thenReturn(2);
 
-        UpdateChallengeCommand command = updateCommand(
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                "아침 달리기"
-        );
+        UpdateChallengeCommand command = updateCommand(null, null, null, null, null, null, "저녁 러닝");
 
         assertThatThrownBy(() -> challengeService.updateChallenge(1L, 100L, command))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
                     assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
-                    assertThat(exception.getMessage()).isEqualTo("루틴 정보 수정은 아직 지원하지 않습니다.");
+                    assertThat(exception.getMessage()).isEqualTo("다른 멤버가 있어 루틴 제목을 변경할 수 없습니다.");
                 });
+        assertThat(challenge.getRoutineDefinition().getRoutineTitle()).isEqualTo("루틴");
+    }
 
-        verify(challengeMemberRepository, never()).countByChallengeIdAndStatus(1L, MembershipStatus.ACTIVE);
+    @ParameterizedTest
+    @EnumSource(value = ChallengeLifecycleStatus.class, names = {"ACTIVE", "ENDED"})
+    @DisplayName("챌린지수정_WAITING이아니면_루틴제목변경시_예외를던진다")
+    void updateChallenge_whenNotWaiting_routineTitleChange_throwsException(ChallengeLifecycleStatus status) {
+        Challenge challenge = createChallenge(1L, "챌린지", true, null, status);
+        ChallengeMember leader = createMember(challenge, 100L, ChallengeMemberRole.LEADER);
+        when(challengeRepository.findById(1L)).thenReturn(Optional.of(challenge));
+        when(challengeMemberRepository.findByChallengeIdAndUserIdAndStatus(1L, 100L, MembershipStatus.ACTIVE))
+                .thenReturn(Optional.of(leader));
+
+        UpdateChallengeCommand command = updateCommand(null, null, null, null, null, null, "저녁 러닝");
+
+        assertThatThrownBy(() -> challengeService.updateChallenge(1L, 100L, command))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED);
+                    assertThat(exception.getMessage()).isEqualTo("대기 중인 챌린지만 수정할 수 있습니다.");
+                });
+        assertThat(challenge.getRoutineDefinition().getRoutineTitle()).isEqualTo("루틴");
     }
 
     @Test

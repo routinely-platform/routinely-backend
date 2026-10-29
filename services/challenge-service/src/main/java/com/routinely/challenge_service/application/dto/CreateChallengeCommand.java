@@ -10,12 +10,11 @@ public record CreateChallengeCommand(
         String categoryCode,
         LocalDate startedAt,
         LocalDate endedAt,
-        // 루틴 정보 — challenge-service는 저장하지 않고 challenge.created 이벤트로 전달한다 (소유권은 routine-service). #132
-        // 선호 시각/요일은 챌린지가 정하지 않는다 — 멤버 각자가 본인 routine 인스턴스에서 설정한다 (ADR-0035).
-        // 챌린지 루틴은 SPECIFIC_DAYS 불가 → scheduleType은 DAILY/WEEKLY_COUNT/MONTHLY_COUNT (ADR-0039).
+        // 루틴 정의 — challenge-service가 소유하고 challenge.started 페이로드로 전달한다 (ADR-0044, #167).
+        // 선호 시각은 챌린지가 정하지 않는다 — 멤버 각자가 본인 routine 인스턴스에서 설정한다 (ADR-0035).
         String routineTitle,
         String scheduleType,
+        // 지정 요일 비트마스크(bit0=월 … bit6=일). SPECIFIC_DAYS 전용, 그 외 null.
+        Short daysOfWeek,
         Integer targetCount) {
-
-    // TODO: #48 - inviteeUserIds(List<Long>) 필드 추가 — ChallengeCreatedEvent payload에 포함, 초대 알림 발송에 사용
 }

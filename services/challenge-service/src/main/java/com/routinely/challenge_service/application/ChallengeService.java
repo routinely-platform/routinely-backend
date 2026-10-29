@@ -106,7 +106,6 @@ public class ChallengeService {
     public ChallengeResult updateChallenge(Long challengeId, Long requestUserId, UpdateChallengeCommand command) {
         Challenge challenge = findChallengeByIdOrThrow(challengeId);
         validateLeader(challengeId, requestUserId);
-        validateRoutineUpdateNotSupported(command);
 
         boolean hasNonVisibilityChange = hasNonVisibilityFields(command);
         if (hasNonVisibilityChange) {
@@ -355,19 +354,13 @@ public class ChallengeService {
         }
     }
 
-    private void validateRoutineUpdateNotSupported(UpdateChallengeCommand command) {
-        if (command.routineTitle() != null) {
-            // TODO: routine-service 개발 이후 gRPC 통신으로 루틴 템플릿 수정 처리
-            throw new BusinessException(VALIDATION_FAILED, "루틴 정보 수정은 아직 지원하지 않습니다.");
-        }
-    }
-
     private boolean hasNonVisibilityFields(UpdateChallengeCommand command) {
         return command.title() != null
                 || command.description() != null
                 || command.maxMembers() != null
                 || command.startedAt() != null
-                || command.endedAt() != null;
+                || command.endedAt() != null
+                || command.routineTitle() != null;
     }
 
     private void validateActiveMemberCount(int memberCount) {
@@ -416,6 +409,10 @@ public class ChallengeService {
         if (command.title() != null) {
             throw new BusinessException(VALIDATION_FAILED, "다른 멤버가 있어 제목을 변경할 수 없습니다.");
         }
+        if (command.routineTitle() != null) {
+            // 참여 결정의 근거라 다른 멤버가 동의한 뒤에는 바꾸지 않는다 (ADR-0044)
+            throw new BusinessException(VALIDATION_FAILED, "다른 멤버가 있어 루틴 제목을 변경할 수 없습니다.");
+        }
         if (command.startedAt() != null) {
             throw new BusinessException(VALIDATION_FAILED, "다른 멤버가 있어 시작일을 변경할 수 없습니다.");
         }
@@ -442,6 +439,9 @@ public class ChallengeService {
         }
         if (command.endedAt() != null) {
             challenge.updateEndedAt(command.endedAt());
+        }
+        if (command.routineTitle() != null) {
+            challenge.changeRoutineTitle(command.routineTitle());
         }
     }
 
