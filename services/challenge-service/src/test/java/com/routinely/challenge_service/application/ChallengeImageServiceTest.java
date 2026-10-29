@@ -10,6 +10,8 @@ import static org.mockito.Mockito.when;
 
 import com.routinely.challenge_service.application.dto.ChallengeImageUploadCommand;
 import com.routinely.challenge_service.domain.challenge.Challenge;
+import com.routinely.challenge_service.domain.challenge.ChallengeRoutineDefinition;
+import com.routinely.core.schedule.ScheduleType;
 import com.routinely.challenge_service.domain.challenge.ChallengeImage;
 import com.routinely.challenge_service.domain.challenge.ChallengeRepository;
 import com.routinely.challenge_service.domain.member.ChallengeMember;
@@ -272,6 +274,7 @@ class ChallengeImageServiceTest {
 
     private Challenge challenge(ChallengeImage image) {
         return Challenge.builder()
+                .routineDefinition(ChallengeRoutineDefinition.of("루틴", ScheduleType.DAILY, null, null))
                 .id(CHALLENGE_ID)
                 .creatorUserId(LEADER_ID)
                 .title("매일 30분 독서")

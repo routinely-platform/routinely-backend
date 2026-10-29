@@ -1,6 +1,8 @@
 package com.routinely.challenge_service.infrastructure.persistence;
 
 import com.routinely.challenge_service.domain.challenge.Challenge;
+import com.routinely.challenge_service.domain.challenge.ChallengeRoutineDefinition;
+import com.routinely.core.schedule.ScheduleType;
 import com.routinely.challenge_service.domain.challenge.ChallengeImage;
 import com.routinely.challenge_service.domain.challenge.ChallengeRepository;
 import com.routinely.jpa.config.JpaAuditingConfig;
@@ -84,6 +86,7 @@ class ChallengeImagePersistenceTest {
 
     private Challenge challenge() {
         return Challenge.builder()
+                .routineDefinition(ChallengeRoutineDefinition.of("루틴", ScheduleType.DAILY, null, null))
                 .creatorUserId(1L)
                 .title("매일 30분 독서")
                 .maxMembers(10)

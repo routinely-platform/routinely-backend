@@ -6,6 +6,8 @@ import com.routinely.challenge_service.application.dto.ChallengeResult;
 import com.routinely.challenge_service.application.dto.CreateChallengeCommand;
 import com.routinely.challenge_service.application.dto.UpdateChallengeCommand;
 import com.routinely.challenge_service.domain.challenge.Challenge;
+import com.routinely.challenge_service.domain.challenge.ChallengeRoutineDefinition;
+import com.routinely.core.schedule.ScheduleType;
 import com.routinely.challenge_service.domain.challenge.ChallengeLifecycleStatus;
 import com.routinely.challenge_service.domain.challenge.ChallengeQueryRepository;
 import com.routinely.challenge_service.domain.challenge.ChallengeRepository;
@@ -1315,6 +1317,7 @@ class ChallengeServiceTest {
                                       String inviteCode,
                                       ChallengeLifecycleStatus status) {
         Challenge challenge = Challenge.builder()
+                .routineDefinition(ChallengeRoutineDefinition.of("루틴", ScheduleType.DAILY, null, null))
                 .creatorUserId(100L)
                 .title(title)
                 .description("설명")

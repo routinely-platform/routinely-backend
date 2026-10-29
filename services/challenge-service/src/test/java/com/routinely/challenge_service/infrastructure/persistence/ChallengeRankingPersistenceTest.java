@@ -1,6 +1,8 @@
 package com.routinely.challenge_service.infrastructure.persistence;
 
 import com.routinely.challenge_service.domain.challenge.Challenge;
+import com.routinely.challenge_service.domain.challenge.ChallengeRoutineDefinition;
+import com.routinely.core.schedule.ScheduleType;
 import com.routinely.challenge_service.domain.challenge.ChallengeRepository;
 import com.routinely.challenge_service.domain.member.ChallengeMember;
 import com.routinely.challenge_service.domain.member.ChallengeMemberRepository;
@@ -36,7 +38,8 @@ class ChallengeRankingPersistenceTest {
 
     @Test @DisplayName("V5 스키마는 100회 초과 저장을 허용하고 탈퇴 멤버 제외 및 동점 시간 정렬을 적용한다")
     void ranking_migrationAndFallback_matchContract() {
-        var challenge = challenges.saveAndFlush(Challenge.builder().creatorUserId(1L).title("걷기")
+        var challenge = challenges.saveAndFlush(Challenge.builder()
+                .routineDefinition(ChallengeRoutineDefinition.of("루틴", ScheduleType.DAILY, null, null)).creatorUserId(1L).title("걷기")
                 .maxMembers(10).categoryCode("HEALTH")
                 .startedAt(LocalDate.of(2026, 9, 1)).endedAt(LocalDate.of(2026, 9, 30)).build());
         var time = LocalDateTime.of(2026, 9, 1, 0, 0);
@@ -58,7 +61,8 @@ class ChallengeRankingPersistenceTest {
 
     @Test @DisplayName("방장의 0회 시드 행이 있으면 첫 인증 전에도 DB 랭킹과 활성 인원에 방장이 포함된다")
     void ranking_leaderSeedBeforeFirstCompletion_included() {
-        var challenge = challenges.saveAndFlush(Challenge.builder().creatorUserId(1L).title("독서")
+        var challenge = challenges.saveAndFlush(Challenge.builder()
+                .routineDefinition(ChallengeRoutineDefinition.of("루틴", ScheduleType.DAILY, null, null)).creatorUserId(1L).title("독서")
                 .maxMembers(10).categoryCode("HEALTH")
                 .startedAt(LocalDate.of(2026, 9, 1)).endedAt(LocalDate.of(2026, 9, 30)).build());
         var time = LocalDateTime.of(2026, 9, 1, 0, 0);

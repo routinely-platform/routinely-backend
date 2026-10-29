@@ -3,6 +3,8 @@ package com.routinely.challenge_service.application;
 import com.routinely.challenge_service.application.dto.ChallengeContextResult;
 import com.routinely.challenge_service.application.dto.MembershipCheckResult;
 import com.routinely.challenge_service.domain.challenge.Challenge;
+import com.routinely.challenge_service.domain.challenge.ChallengeRoutineDefinition;
+import com.routinely.core.schedule.ScheduleType;
 import com.routinely.challenge_service.domain.challenge.ChallengeLifecycleStatus;
 import com.routinely.challenge_service.domain.challenge.ChallengeRepository;
 import com.routinely.challenge_service.domain.member.ChallengeMember;
@@ -121,6 +123,7 @@ class ChallengeMembershipQueryServiceTest {
 
     private Challenge createChallenge(ChallengeLifecycleStatus status) {
         return Challenge.builder()
+                .routineDefinition(ChallengeRoutineDefinition.of("루틴", ScheduleType.DAILY, null, null))
                 .id(1L)
                 .creatorUserId(100L)
                 .title("30일 러닝 챌린지")

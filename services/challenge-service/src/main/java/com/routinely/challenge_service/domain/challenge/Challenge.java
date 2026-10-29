@@ -1,6 +1,7 @@
 package com.routinely.challenge_service.domain.challenge;
 
 import com.routinely.challenge_service.application.dto.CreateChallengeCommand;
+import com.routinely.core.schedule.ScheduleType;
 import com.routinely.jpa.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
@@ -65,6 +66,9 @@ public class Challenge extends BaseEntity {
     private LocalDate endedAt;
 
     @Embedded
+    private ChallengeRoutineDefinition routineDefinition;
+
+    @Embedded
     private ChallengeImage image;
 
     public static Challenge create(CreateChallengeCommand command, Long creatorUserId, String inviteCode) {
@@ -78,11 +82,21 @@ public class Challenge extends BaseEntity {
                 .categoryCode(command.categoryCode())
                 .startedAt(command.startedAt())
                 .endedAt(command.endedAt())
+                .routineDefinition(ChallengeRoutineDefinition.of(
+                        command.routineTitle(),
+                        ScheduleType.valueOf(command.scheduleType()),
+                        null,
+                        command.targetCount()))
                 .build();
     }
 
     public void updateTitle(String title) {
         this.title = title;
+    }
+
+    /** 루틴 정의 중 제목만 바꿀 수 있다 — 반복 유형·요일·목표 횟수는 생성 후 불변이다(ADR-0044). */
+    public void changeRoutineTitle(String routineTitle) {
+        this.routineDefinition = routineDefinition.withRoutineTitle(routineTitle);
     }
 
     public void updateDescription(String description) {
