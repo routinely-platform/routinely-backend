@@ -7,7 +7,6 @@
 CREATE TABLE routine_templates (
                                    id             BIGINT       GENERATED ALWAYS AS IDENTITY,
                                    user_id        BIGINT                                NOT NULL,
-                                   challenge_id   BIGINT                                NULL,
                                    title          VARCHAR(100)                          NOT NULL,
                                    category_code  VARCHAR(30)                           NOT NULL,
                                    schedule_type  VARCHAR(20)                           NOT NULL,
@@ -19,32 +18,32 @@ CREATE TABLE routine_templates (
                                    updated_at     TIMESTAMPTZ  DEFAULT now()            NOT NULL,
 
                                    CONSTRAINT pk_routine_templates PRIMARY KEY (id),
-                                   CONSTRAINT uq_rt_challenge_id   UNIQUE (challenge_id),
                                    CONSTRAINT ck_rt_schedule   CHECK (
                                        (schedule_type = 'DAILY'          AND days_of_week IS NULL AND target_count IS NULL)
                                            OR
                                        (schedule_type = 'SPECIFIC_DAYS'  AND days_of_week IS NOT NULL AND days_of_week BETWEEN 1 AND 127 AND target_count IS NULL)
                                            OR
-                                       (schedule_type IN ('WEEKLY_COUNT', 'MONTHLY_COUNT') AND target_count IS NOT NULL AND target_count >= 1 AND days_of_week IS NULL)
+                                       (schedule_type = 'WEEKLY_COUNT'   AND target_count IS NOT NULL AND target_count BETWEEN 1 AND 6 AND days_of_week IS NULL)
+                                           OR
+                                       (schedule_type = 'MONTHLY_COUNT'  AND target_count IS NOT NULL AND target_count BETWEEN 1 AND 28 AND days_of_week IS NULL)
                                        )
+    -- ⚠️ ck_rt_schedule · ck_routines_schedule · challenge-service ck_challenges_schedule은 짝이다 (ADR-0044)
 );
 
-COMMENT ON TABLE  routine_templates                IS '루틴 설정 정보 템플릿 — 루틴의 틀을 정의';
+COMMENT ON TABLE  routine_templates                IS '루틴 템플릿 — 사용자가 저장한 루틴의 틀. 챌린지 루틴 정의는 challenge-service가 소유한다 (ADR-0044)';
 COMMENT ON COLUMN routine_templates.id             IS '루틴 템플릿 고유 식별자 (PK)';
-COMMENT ON COLUMN routine_templates.user_id        IS '템플릿 생성자 사용자 ID (개인/챌린지 모두 항상 존재)';
-COMMENT ON COLUMN routine_templates.challenge_id   IS '챌린지 템플릿인 경우 챌린지 ID (challenge-service 참조 — FK 불가). 개인 템플릿이면 NULL. UNIQUE 제약으로 챌린지당 1개 보장 (ADR-0037)';
+COMMENT ON COLUMN routine_templates.user_id        IS '템플릿 소유자 사용자 ID';
 COMMENT ON COLUMN routine_templates.title          IS '루틴명 (예: 아침 러닝 30분)';
 COMMENT ON COLUMN routine_templates.category_code  IS '카테고리 코드 — categories.code 참조 (서버 검증)';
 COMMENT ON COLUMN routine_templates.schedule_type  IS '반복 유형 — DAILY(매일)/SPECIFIC_DAYS(요일 지정·강제)/WEEKLY_COUNT(주 N회)/MONTHLY_COUNT(월 N회). (ADR-0039)';
 COMMENT ON COLUMN routine_templates.days_of_week   IS '지정 요일 비트마스크(bit0=월 … bit6=일, 1~127) — SPECIFIC_DAYS 전용, 그 외 NULL. 예: 월수금 = 21';
-COMMENT ON COLUMN routine_templates.target_count   IS '기간당 목표 횟수 — WEEKLY_COUNT/MONTHLY_COUNT 전용, 그 외 NULL';
+COMMENT ON COLUMN routine_templates.target_count   IS '기간당 목표 횟수 — WEEKLY_COUNT 1~6 · MONTHLY_COUNT 1~28 전용, 그 외 NULL';
 COMMENT ON COLUMN routine_templates.is_deleted     IS '소프트 딜리트 여부 — 물리 삭제 없이 false→true 처리';
 COMMENT ON COLUMN routine_templates.deleted_at     IS '소프트 딜리트 처리 시각';
 COMMENT ON COLUMN routine_templates.created_at     IS '템플릿 생성일시';
 COMMENT ON COLUMN routine_templates.updated_at     IS '템플릿 최종 수정일시 — 애플리케이션 레벨에서 갱신';
 
 CREATE INDEX idx_rt_user_id      ON routine_templates (user_id) WHERE is_deleted = false;
-CREATE INDEX idx_rt_challenge_id ON routine_templates (challenge_id) WHERE challenge_id IS NOT NULL;
 
 
 -- 2. routines

@@ -42,8 +42,6 @@ class RoutineTemplateRepositoryTest {
 
         assertThat(found).isPresent();
         assertThat(found.get().getUserId()).isEqualTo(1L);
-        assertThat(found.get().getChallengeId()).isNull();
-        assertThat(found.get().isChallengeLinked()).isFalse();
     }
 
     @Test
@@ -59,18 +57,17 @@ class RoutineTemplateRepositoryTest {
     }
 
     @Test
-    @DisplayName("개인템플릿목록은_본인것만_챌린지연결과삭제분을제외하고_id내림차순으로조회된다")
-    void findAllPersonal_excludesChallengeLinkedAndDeletedAndOthers() {
+    @DisplayName("개인템플릿목록은_본인것만_삭제분을제외하고_id내림차순으로조회된다")
+    void findAllPersonal_excludesDeletedAndOthers() {
         RoutineTemplate first = savePersonal(1L, "EXERCISE");
         RoutineTemplate second = savePersonal(1L, "READING");
         savePersonal(2L, "EXERCISE"); // 다른 사용자
-        routineTemplateRepository.saveAndFlush(RoutineTemplate.forChallenge(1L, 42L, RoutineDefinition.of("아침 러닝 30분", "EXERCISE", ScheduleType.WEEKLY_COUNT, null, 3))); // 챌린지 연결
         RoutineTemplate deleted = savePersonal(1L, "EXERCISE");
         deleted.softDelete(LocalDateTime.of(2026, 7, 16, 0, 0));
         routineTemplateRepository.saveAndFlush(deleted);
 
         List<RoutineTemplate> results = routineTemplateRepository
-                .findAllByUserIdAndChallengeIdIsNullAndIsDeletedFalseOrderByIdDesc(1L);
+                .findAllByUserIdAndIsDeletedFalseOrderByIdDesc(1L);
 
         assertThat(results).extracting(RoutineTemplate::getId)
                 .containsExactly(second.getId(), first.getId());
@@ -83,7 +80,7 @@ class RoutineTemplateRepositoryTest {
         RoutineTemplate reading = savePersonal(1L, "READING");
 
         List<RoutineTemplate> results = routineTemplateRepository
-                .findAllByUserIdAndChallengeIdIsNullAndDefinitionCategoryCodeAndIsDeletedFalseOrderByIdDesc(
+                .findAllByUserIdAndDefinitionCategoryCodeAndIsDeletedFalseOrderByIdDesc(
                         1L, "READING");
 
         assertThat(results).extracting(RoutineTemplate::getId).containsExactly(reading.getId());

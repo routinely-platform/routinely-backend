@@ -26,7 +26,7 @@ class RoutineTemplateControllerTest {
     private final RoutineTemplateController controller = new RoutineTemplateController(routineTemplateService);
 
     private static final RoutineTemplateResult RESULT =
-            new RoutineTemplateResult(10L, "아침 러닝 30분", "EXERCISE", ScheduleType.WEEKLY_COUNT, null, 3, null);
+            new RoutineTemplateResult(10L, "아침 러닝 30분", "EXERCISE", ScheduleType.WEEKLY_COUNT, null, 3);
 
     @Test
     @DisplayName("생성하면_201과생성메시지를반환한다")

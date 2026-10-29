@@ -61,12 +61,6 @@ class RoutineTemplateServiceTest {
         return template;
     }
 
-    private RoutineTemplate challengeTemplate() {
-        RoutineTemplate template = RoutineTemplate.forChallenge(OWNER_ID, 42L, RoutineDefinition.of("아침 러닝 30분", "EXERCISE", ScheduleType.WEEKLY_COUNT, null, 3));
-        ReflectionTestUtils.setField(template, "id", TEMPLATE_ID);
-        return template;
-    }
-
     @Nested
     @DisplayName("create")
     class Create {
@@ -85,14 +79,12 @@ class RoutineTemplateServiceTest {
             verify(templateRepository).save(captor.capture());
             RoutineTemplate saved = captor.getValue();
             assertThat(saved.getUserId()).isEqualTo(OWNER_ID);
-            assertThat(saved.getChallengeId()).isNull();
             assertThat(saved.isDeleted()).isFalse();
 
             assertThat(result.title()).isEqualTo("아침 러닝 30분");
             assertThat(result.scheduleType()).isEqualTo(ScheduleType.WEEKLY_COUNT);
             assertThat(result.targetCount()).isEqualTo(3);
             assertThat(result.daysOfWeek()).isNull();
-            assertThat(result.challengeId()).isNull();
         }
 
         @Test
@@ -211,7 +203,7 @@ class RoutineTemplateServiceTest {
         @Test
         @DisplayName("카테고리필터가없으면_전체개인템플릿을조회한다")
         void getMyTemplates_withoutFilter_queriesAll() {
-            when(templateRepository.findAllByUserIdAndChallengeIdIsNullAndIsDeletedFalseOrderByIdDesc(OWNER_ID))
+            when(templateRepository.findAllByUserIdAndIsDeletedFalseOrderByIdDesc(OWNER_ID))
                     .thenReturn(List.of(personalTemplate()));
 
             List<RoutineTemplateResult> results = service.getMyTemplates(OWNER_ID, null);
@@ -219,7 +211,7 @@ class RoutineTemplateServiceTest {
             assertThat(results).hasSize(1);
             assertThat(results.getFirst().templateId()).isEqualTo(TEMPLATE_ID);
             verify(templateRepository, never())
-                    .findAllByUserIdAndChallengeIdIsNullAndDefinitionCategoryCodeAndIsDeletedFalseOrderByIdDesc(
+                    .findAllByUserIdAndDefinitionCategoryCodeAndIsDeletedFalseOrderByIdDesc(
                             any(), anyString());
         }
 
@@ -227,7 +219,7 @@ class RoutineTemplateServiceTest {
         @DisplayName("카테고리필터가있으면_해당카테고리만조회한다")
         void getMyTemplates_withFilter_queriesByCategory() {
             when(templateRepository
-                    .findAllByUserIdAndChallengeIdIsNullAndDefinitionCategoryCodeAndIsDeletedFalseOrderByIdDesc(
+                    .findAllByUserIdAndDefinitionCategoryCodeAndIsDeletedFalseOrderByIdDesc(
                             OWNER_ID, "EXERCISE"))
                     .thenReturn(List.of(personalTemplate()));
 
@@ -235,7 +227,7 @@ class RoutineTemplateServiceTest {
 
             assertThat(results).hasSize(1);
             verify(templateRepository, never())
-                    .findAllByUserIdAndChallengeIdIsNullAndIsDeletedFalseOrderByIdDesc(any());
+                    .findAllByUserIdAndIsDeletedFalseOrderByIdDesc(any());
         }
     }
 
@@ -278,19 +270,6 @@ class RoutineTemplateServiceTest {
                     });
         }
 
-        @Test
-        @DisplayName("챌린지연결템플릿이면_소유자여도_FORBIDDEN예외를던진다")
-        void getTemplate_whenChallengeLinked_throwsForbidden() {
-            when(templateRepository.findByIdAndIsDeletedFalse(TEMPLATE_ID))
-                    .thenReturn(Optional.of(challengeTemplate()));
-
-            assertThatThrownBy(() -> service.getTemplate(TEMPLATE_ID, OWNER_ID))
-                    .isInstanceOfSatisfying(BusinessException.class, exception -> {
-                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
-                        assertThat(exception.getMessage())
-                                .isEqualTo("챌린지 루틴 템플릿은 개인 루틴 템플릿 API로 접근할 수 없습니다.");
-                    });
-        }
     }
 
     @Nested
@@ -382,20 +361,6 @@ class RoutineTemplateServiceTest {
                             assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN));
         }
 
-        @Test
-        @DisplayName("챌린지연결템플릿이면_FORBIDDEN예외를던진다")
-        void update_whenChallengeLinked_throwsForbidden() {
-            when(templateRepository.findByIdAndIsDeletedFalse(TEMPLATE_ID))
-                    .thenReturn(Optional.of(challengeTemplate()));
-
-            assertThatThrownBy(() -> service.update(new UpdateRoutineTemplateCommand(
-                    TEMPLATE_ID, OWNER_ID, "저녁 러닝 30분", null, null, null, null)))
-                    .isInstanceOfSatisfying(BusinessException.class, exception -> {
-                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
-                        assertThat(exception.getMessage())
-                                .isEqualTo("챌린지 루틴 템플릿은 개인 루틴 템플릿 API로 접근할 수 없습니다.");
-                    });
-        }
     }
 
     @Nested
@@ -438,17 +403,5 @@ class RoutineTemplateServiceTest {
             assertThat(template.isDeleted()).isFalse();
         }
 
-        @Test
-        @DisplayName("챌린지연결템플릿이면_FORBIDDEN예외를던지고삭제하지않는다")
-        void delete_whenChallengeLinked_throwsForbidden() {
-            RoutineTemplate template = challengeTemplate();
-            when(templateRepository.findByIdAndIsDeletedFalse(TEMPLATE_ID)).thenReturn(Optional.of(template));
-
-            assertThatThrownBy(() -> service.delete(TEMPLATE_ID, OWNER_ID))
-                    .isInstanceOfSatisfying(BusinessException.class, exception ->
-                            assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN));
-
-            assertThat(template.isDeleted()).isFalse();
-        }
     }
 }

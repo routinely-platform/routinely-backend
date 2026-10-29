@@ -161,7 +161,7 @@ COMMENT ON TABLE  challenge_outbox                 IS 'Outbox 패턴 — Kafka �
 COMMENT ON COLUMN challenge_outbox.id              IS '레코드 고유 식별자 (PK)';
 COMMENT ON COLUMN challenge_outbox.aggregate_type  IS '이벤트 발생 엔티티 유형 (예: CHALLENGE, CHALLENGE_MEMBER)';
 COMMENT ON COLUMN challenge_outbox.aggregate_id    IS '이벤트 발생 엔티티의 PK';
-COMMENT ON COLUMN challenge_outbox.event_type      IS 'Kafka 토픽 이벤트 유형 (예: challenge.created, challenge.member.joined)';
+COMMENT ON COLUMN challenge_outbox.event_type      IS 'Kafka 토픽 이벤트 유형 (예: challenge.started, challenge.member.joined)';
 COMMENT ON COLUMN challenge_outbox.payload         IS 'Kafka에 발행할 이벤트 JSON 데이터';
 COMMENT ON COLUMN challenge_outbox.status          IS '발행 상태 — PENDING: 대기 / PUBLISHED: 발행 완료 / FAILED: 실패';
 COMMENT ON COLUMN challenge_outbox.created_at      IS '이벤트 생성일시';

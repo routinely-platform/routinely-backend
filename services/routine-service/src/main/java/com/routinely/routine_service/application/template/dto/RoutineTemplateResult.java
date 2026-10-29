@@ -10,8 +10,7 @@ public record RoutineTemplateResult(
         String categoryCode,
         ScheduleType scheduleType,
         Short daysOfWeek,
-        Integer targetCount,
-        Long challengeId) {
+        Integer targetCount) {
 
     public static RoutineTemplateResult from(RoutineTemplate template) {
         RoutineDefinition definition = template.getDefinition();
@@ -21,8 +20,7 @@ public record RoutineTemplateResult(
                 definition.getCategoryCode(),
                 definition.getScheduleType(),
                 definition.getDaysOfWeek(),
-                definition.getTargetCount(),
-                template.getChallengeId()
+                definition.getTargetCount()
         );
     }
 }

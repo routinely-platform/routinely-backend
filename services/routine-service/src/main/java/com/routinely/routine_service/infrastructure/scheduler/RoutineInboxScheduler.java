@@ -1,6 +1,6 @@
 package com.routinely.routine_service.infrastructure.scheduler;
 
-import com.routinely.routine_service.application.challenge.ChallengeRoutineTemplateService;
+import com.routinely.routine_service.application.inbox.RoutineInboxProcessor;
 import com.routinely.routine_service.domain.inbox.InboxStatus;
 import com.routinely.routine_service.domain.inbox.RoutineInboxRepository;
 import lombok.RequiredArgsConstructor;
@@ -13,9 +13,12 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * routine_inbox의 RECEIVED 건을 폴링해 챌린지 루틴 템플릿 생성을 트리거하는 스케줄러.
+ * routine_inbox의 RECEIVED 건을 폴링해 처리하는 스케줄러.
  *
- * <p>각 메시지는 {@link ChallengeRoutineTemplateService}의 독립 트랜잭션으로 처리되며,
+ * <p>지금은 구독 토픽이 없어 처리할 메시지가 없다 — {@code challenge.created} 소비를 제거했다(ADR-0044, #167).
+ * {@code challenge.started}(#157) · {@code challenge.member.left}(#158) 소비가 이 경로를 다시 쓴다.
+ *
+ * <p>각 메시지는 {@link RoutineInboxProcessor}의 독립 트랜잭션으로 처리되며,
  * 한 건의 실패가 다른 건에 영향을 주지 않도록 try-catch로 격리한다.
  * 멀티 인스턴스 중복 실행은 {@link SchedulerLock} (Redis 기반)으로 방지한다. (ADR-0033)
  */
@@ -27,7 +30,7 @@ public class RoutineInboxScheduler {
     private static final int BATCH_SIZE = 100;
 
     private final RoutineInboxRepository inboxRepository;
-    private final ChallengeRoutineTemplateService templateService;
+    private final RoutineInboxProcessor inboxProcessor;
 
     @Scheduled(fixedDelay = 5000)
     @SchedulerLock(
@@ -46,7 +49,7 @@ public class RoutineInboxScheduler {
         int failed = 0;
         for (Long inboxId : targetIds) {
             try {
-                templateService.processInbox(inboxId);
+                inboxProcessor.processInbox(inboxId);
                 processed++;
             } catch (Exception e) {
                 failed++;
@@ -64,7 +67,7 @@ public class RoutineInboxScheduler {
      */
     private void safeRecordFailure(Long inboxId, Exception cause) {
         try {
-            templateService.recordFailure(inboxId, cause.getMessage());
+            inboxProcessor.recordFailure(inboxId, cause.getMessage());
         } catch (Exception e) {
             log.error("[Inbox] 실패 상태 기록에 실패했습니다 - inboxId: {}", inboxId, e);
         }

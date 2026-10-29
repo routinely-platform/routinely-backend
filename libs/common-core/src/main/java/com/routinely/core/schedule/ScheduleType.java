@@ -15,7 +15,8 @@ package com.routinely.core.schedule;
  * {@code WEEKLY_COUNT/MONTHLY_COUNT}는 {@code target_count}. routine_templates의
  * {@code ck_rt_schedule} CHECK 제약과 동일한 규칙이다.
  *
- * <p>챌린지 루틴은 멤버 생활 패턴이 달라 특정 요일 강제가 부적절하므로 {@code SPECIFIC_DAYS}를 쓸 수 없다. (ADR-0035)
+ * <p>챌린지 루틴도 네 유형을 모두 쓸 수 있다 — 시작 전 참여가 사전 동의다 (ADR-0039 §2.3, 2026-08-29 개정).
+ * challenges의 {@code ck_challenges_schedule}도 같은 규칙이다.
  */
 public enum ScheduleType {
     DAILY,
@@ -31,10 +32,5 @@ public enum ScheduleType {
     /** 목표 횟수(target_count)가 필요한 유형인지 여부. */
     public boolean requiresTargetCount() {
         return this == WEEKLY_COUNT || this == MONTHLY_COUNT;
-    }
-
-    /** 챌린지 루틴에서 허용되는 유형인지 여부 — 특정 요일 지정형은 불가. */
-    public boolean allowedForChallenge() {
-        return this != SPECIFIC_DAYS;
     }
 }
