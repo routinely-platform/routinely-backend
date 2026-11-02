@@ -74,7 +74,9 @@ class ChallengeScheduleCheckConstraintTest {
         if (allowed) {
             assertThatCode(insert::run).doesNotThrowAnyException();
         } else {
-            assertThatThrownBy(insert::run).isInstanceOf(DataIntegrityViolationException.class);
+            assertThatThrownBy(insert::run)
+                    .isInstanceOf(DataIntegrityViolationException.class)
+                    .hasMessageContaining("ck_challenges_schedule");
         }
     }
 }

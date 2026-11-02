@@ -294,7 +294,7 @@ public void handleDlt(RoutineCompletedEvent event, @Header(KafkaHeaders.ORIGINAL
 
 | 서비스 | Consumer (저장 전용) | Scheduler (처리) | 소비 이벤트 |
 |---|---|---|---|
-| routine-service | `ChallengeCreatedConsumer` | `RoutineInboxScheduler` | `challenge.created` |
+| routine-service | 없음 (`challenge.created` 소비 제거, ADR-0044 · #167) | `RoutineInboxScheduler` | 없음 — #157 · #158이 `challenge.started` · `challenge.member.left`를 붙인다 |
 | challenge-service (#48) | `ChallengeRankingInboxConsumer` | `ChallengeInboxScheduler` | `challenge.member.joined`, `routine.execution.completed` |
 
 - 멱등성(수신 중복 `message_id` UNIQUE, 처리 중복 UNIQUE/멱등 연산) 세부는 ADR-0013 참고.

@@ -14,7 +14,8 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * {@code ck_rt_schedule}이 challenge-service {@code ck_challenges_schedule}과 같은 입력을 같게 판정하는지 고정한다.
+ * {@code ck_rt_schedule} · {@code ck_routines_schedule}이 challenge-service {@code ck_challenges_schedule}과
+ * 같은 입력을 같게 판정하는지 고정한다.
  *
  * <p>⚠️ 입력 목록은 challenge-service {@code ChallengeScheduleCheckConstraintTest}와 <b>글자 그대로 같아야</b> 한다.
  * 세 CHECK 제약은 짝인데 컴파일러가 결합을 잡지 못한다 — 이 두 테스트가 유일한 안전망이다.
@@ -28,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         "spring.jpa.hibernate.ddl-auto=none",
         "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect"
 })
-@DisplayName("ck_rt_schedule — 스케줄 CHECK 제약")
+@DisplayName("ck_rt_schedule · ck_routines_schedule — 스케줄 CHECK 제약")
 class RoutineTemplateScheduleCheckConstraintTest {
 
     @Autowired
@@ -64,15 +65,27 @@ class RoutineTemplateScheduleCheckConstraintTest {
     @DisplayName("유형별 요일·목표 횟수 조합을 challenge-service 제약과 같게 판정한다")
     void insert_scheduleCombination_judgedLikeChallenge(String scheduleType, Short daysOfWeek,
                                                        Integer targetCount, boolean allowed) {
-        Runnable insert = () -> jdbcTemplate.update("""
+        assertJudged("ck_rt_schedule", allowed, () -> jdbcTemplate.update("""
                 INSERT INTO routine_templates (user_id, title, category_code, schedule_type, days_of_week, target_count)
                 VALUES (1, '루틴', 'HEALTH', ?, ?, ?)
-                """, scheduleType, daysOfWeek, targetCount);
+                """, scheduleType, daysOfWeek, targetCount));
 
+        assertJudged("ck_routines_schedule", allowed, () -> jdbcTemplate.update("""
+                INSERT INTO routines (user_id, started_at, title, category_code, schedule_type, days_of_week, target_count)
+                VALUES (1, DATE '2026-11-01', '루틴', 'HEALTH', ?, ?, ?)
+                """, scheduleType, daysOfWeek, targetCount));
+    }
+
+    private void assertJudged(String constraint, boolean allowed, Runnable insert) {
+        // 거부되면 PostgreSQL이 트랜잭션을 중단시켜 다음 INSERT까지 실패하므로 세이브포인트로 되돌린다.
+        jdbcTemplate.execute("SAVEPOINT judged");
         if (allowed) {
             assertThatCode(insert::run).doesNotThrowAnyException();
         } else {
-            assertThatThrownBy(insert::run).isInstanceOf(DataIntegrityViolationException.class);
+            assertThatThrownBy(insert::run)
+                    .isInstanceOf(DataIntegrityViolationException.class)
+                    .hasMessageContaining(constraint);
         }
+        jdbcTemplate.execute("ROLLBACK TO SAVEPOINT judged");
     }
 }
