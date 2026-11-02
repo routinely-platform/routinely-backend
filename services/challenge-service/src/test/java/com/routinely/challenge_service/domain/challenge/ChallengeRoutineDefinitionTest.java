@@ -2,7 +2,6 @@ package com.routinely.challenge_service.domain.challenge;
 
 import com.routinely.core.exception.BusinessException;
 import com.routinely.core.schedule.ScheduleType;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -36,7 +35,6 @@ class ChallengeRoutineDefinitionTest {
         assertThat(definition.getTargetCount()).isEqualTo(targetCount);
     }
 
-    @Disabled("TODO(human) validateSchedule 구현 후 활성화")
     @ParameterizedTest(name = "{0} / days={1} / count={2}")
     @CsvSource({
             "DAILY,        1,   ",
@@ -61,7 +59,6 @@ class ChallengeRoutineDefinitionTest {
                 .isInstanceOf(BusinessException.class);
     }
 
-    @Disabled("TODO(human) validateSchedule 구현 후 활성화")
     @Test
     @DisplayName("반복 유형이 없으면 정의가 만들어지지 않는다")
     void of_nullScheduleType_throwsException() {
