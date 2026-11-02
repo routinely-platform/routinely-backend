@@ -100,7 +100,8 @@ public class ChallengeService {
 
     @Transactional
     public ChallengeResult updateChallenge(Long challengeId, Long requestUserId, UpdateChallengeCommand command) {
-        Challenge challenge = findChallengeByIdOrThrow(challengeId);
+        // 멤버 수 · 상태 검사가 참여 · 시작 전이와 겹치지 않도록 챌린지 행을 잠근다.
+        Challenge challenge = findChallengeByIdForUpdateOrThrow(challengeId);
         validateLeader(challengeId, requestUserId);
 
         boolean hasNonVisibilityChange = hasNonVisibilityFields(command);
@@ -211,7 +212,8 @@ public class ChallengeService {
 
     @Transactional
     public void leaveChallenge(Long challengeId, Long userId) {
-        Challenge challenge = findChallengeByIdOrThrow(challengeId);
+        // 시작 전이의 멤버 스냅샷과 겹치지 않도록 챌린지 행을 잠근다.
+        Challenge challenge = findChallengeByIdForUpdateOrThrow(challengeId);
 
         ChallengeMember member = challengeMemberRepository
                 .findByChallengeIdAndUserIdAndStatus(challengeId, userId, MembershipStatus.ACTIVE)

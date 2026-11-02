@@ -75,6 +75,7 @@ class ChallengeStatusTransitionSchedulerTest {
         );
         when(challengeRepository.findWaitingToActivate(today)).thenReturn(List.of(challenge));
         when(challengeRepository.findActiveToEnd(today)).thenReturn(List.of());
+        stubActiveMembers(challenge, ChallengeMember.createLeader(challenge, 100L, LocalDateTime.of(2026, 6, 1, 23, 30)));
 
         scheduler.transitionChallengeStatus();
 
@@ -170,6 +171,31 @@ class ChallengeStatusTransitionSchedulerTest {
 
         verify(challengeRepository).findWaitingToActivate(eq(koreanToday));
         verify(challengeRepository).findActiveToEnd(eq(koreanToday));
+    }
+
+    @Test
+    @DisplayName("활성_방장이_없는_챌린지만_건너뛰고_다른_챌린지는_시작한다")
+    void transitionChallengeStatus_noActiveLeader_skipsOnlyThatChallenge() {
+        LocalDate today = LocalDate.of(2026, 6, 8);
+        Challenge leaderless = challenge(1L, "방장 없음", ChallengeLifecycleStatus.WAITING, today, today.plusDays(29));
+        Challenge normal = challenge(2L, "정상", ChallengeLifecycleStatus.WAITING, today, today.plusDays(29));
+        when(challengeRepository.findWaitingToActivate(today)).thenReturn(List.of(leaderless, normal));
+        when(challengeRepository.findActiveToEnd(today)).thenReturn(List.of());
+        stubActiveMembers(leaderless, ChallengeMember.createMember(leaderless, 200L, today.atStartOfDay()));
+        stubActiveMembers(normal, ChallengeMember.createLeader(normal, 100L, today.atStartOfDay()));
+
+        scheduler.transitionChallengeStatus();
+
+        assertThat(leaderless.getStatus()).isEqualTo(ChallengeLifecycleStatus.WAITING);
+        assertThat(normal.getStatus()).isEqualTo(ChallengeLifecycleStatus.ACTIVE);
+        ArgumentCaptor<ChallengeOutbox> outboxCaptor = ArgumentCaptor.forClass(ChallengeOutbox.class);
+        verify(challengeOutboxRepository).save(outboxCaptor.capture());
+        assertThat(outboxCaptor.getValue().getAggregateId()).isEqualTo(2L);
+    }
+
+    private void stubActiveMembers(Challenge challenge, ChallengeMember... members) {
+        when(challengeMemberRepository.findAllByChallengeIdAndStatusOrderByJoinedAtAscIdAsc(
+                challenge.getId(), MembershipStatus.ACTIVE)).thenReturn(List.of(members));
     }
 
     private Challenge challenge(Long id,

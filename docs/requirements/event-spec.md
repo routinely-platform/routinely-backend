@@ -245,7 +245,7 @@ NotificationService도 구독하지 않는다. 발송 직전 gRPC CheckNotificat
 | `scheduleType` | string | ✅ | `DAILY` \| `SPECIFIC_DAYS` \| `WEEKLY_COUNT` \| `MONTHLY_COUNT` |
 | `daysOfWeek` | string[] | ❌ | MON~SUN 코드 리스트. `SPECIFIC_DAYS`일 때만 존재, 그 외 `null` → 비트마스크로 바꿔 `routines.days_of_week` |
 | `targetCount` | int | ❌ | `WEEKLY_COUNT`(1~6) / `MONTHLY_COUNT`(1~28)일 때만 존재, 그 외 `null` |
-| `leaderUserId` | long | ✅ | 시작 시점 방장 — 채팅방 `OWNER` (ADR-0046) |
+| `leaderUserId` | long | ✅ | 시작 시점 방장 — 채팅방 `OWNER` (ADR-0046). 활성 방장이 없으면 챌린지를 시작하지 않고 건너뛴다 |
 | `members` | object[] | ✅ | **시작 시점 `ACTIVE` 멤버만**, 참여 순. 방장 포함 |
 | `members[].userId` | long | ✅ | 멤버 사용자 ID |
 | `members[].joinedAt` | string (yyyy-MM-dd) | ✅ | 참여일(Asia/Seoul). 재참여면 마지막 참여일 |
