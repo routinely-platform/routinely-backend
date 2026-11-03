@@ -1,6 +1,6 @@
 package com.routinely.routine_service.application.template.dto;
 
-import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.core.schedule.ScheduleType;
 
 /**
  * 루틴 템플릿 부분 수정 커맨드 — null 필드는 변경하지 않는다.

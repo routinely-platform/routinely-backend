@@ -3,7 +3,7 @@ package com.routinely.routine_service.presentation.rest.template;
 import com.routinely.core.response.ApiResponse;
 import com.routinely.routine_service.application.template.RoutineTemplateService;
 import com.routinely.routine_service.application.template.dto.RoutineTemplateResult;
-import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.core.schedule.ScheduleType;
 import com.routinely.routine_service.presentation.rest.template.dto.request.CreateRoutineTemplateRequest;
 import com.routinely.routine_service.presentation.rest.template.dto.response.RoutineTemplateResponse;
 import org.junit.jupiter.api.DisplayName;
@@ -26,7 +26,7 @@ class RoutineTemplateControllerTest {
     private final RoutineTemplateController controller = new RoutineTemplateController(routineTemplateService);
 
     private static final RoutineTemplateResult RESULT =
-            new RoutineTemplateResult(10L, "아침 러닝 30분", "EXERCISE", ScheduleType.WEEKLY_COUNT, null, 3, null);
+            new RoutineTemplateResult(10L, "아침 러닝 30분", "EXERCISE", ScheduleType.WEEKLY_COUNT, null, 3);
 
     @Test
     @DisplayName("생성하면_201과생성메시지를반환한다")

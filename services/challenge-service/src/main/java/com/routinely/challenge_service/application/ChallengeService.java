@@ -7,7 +7,6 @@ import com.routinely.challenge_service.application.dto.ChallengeMemberResult;
 import com.routinely.challenge_service.application.dto.ChallengeResult;
 import com.routinely.challenge_service.application.dto.CreateChallengeCommand;
 import com.routinely.challenge_service.application.dto.UpdateChallengeCommand;
-import com.routinely.challenge_service.application.event.ChallengeCreatedEvent;
 import com.routinely.challenge_service.application.event.ChallengeMemberJoinedEvent;
 import com.routinely.challenge_service.application.event.ChallengeMemberLeftEvent;
 import com.routinely.challenge_service.domain.challenge.Challenge;
@@ -87,12 +86,9 @@ public class ChallengeService {
         ChallengeMember leader = ChallengeMember.createLeader(savedChallenge, creatorUserId, now());
         challengeMemberRepository.save(leader);
 
-        // 두 이벤트가 같은 시각을 쓴다 — joined의 idempotencyKey에 occurredAt이 들어가 now()를 두 번 부르면 키가 흔들린다.
-        String occurredAt = toEventOccurredAt(now());
-        saveCreatedOutbox(savedChallenge, creatorUserId, command, occurredAt);
         // 방장도 참여 이벤트를 낸다 — 일반 멤버와 같은 경로(Inbox → processMemberJoined)로 0회 랭킹 행이 생긴다. (#183)
-        // created 다음에 적재해 폴러의 (created_at, id) 순서대로 created → joined로 나간다.
-        saveJoinedOutbox(savedChallenge, creatorUserId, ChallengeMemberRole.LEADER, occurredAt);
+        // 루틴 정의는 challenges에 저장하고 시작 시 challenge.started로 보낸다 — 생성 이벤트는 없다 (ADR-0044, #167).
+        saveJoinedOutbox(savedChallenge, creatorUserId, ChallengeMemberRole.LEADER, toEventOccurredAt(now()));
 
         return ChallengeResult.from(
                 savedChallenge,
@@ -104,9 +100,9 @@ public class ChallengeService {
 
     @Transactional
     public ChallengeResult updateChallenge(Long challengeId, Long requestUserId, UpdateChallengeCommand command) {
-        Challenge challenge = findChallengeByIdOrThrow(challengeId);
+        // 멤버 수 · 상태 검사가 참여 · 시작 전이와 겹치지 않도록 챌린지 행을 잠근다.
+        Challenge challenge = findChallengeByIdForUpdateOrThrow(challengeId);
         validateLeader(challengeId, requestUserId);
-        validateRoutineUpdateNotSupported(command);
 
         boolean hasNonVisibilityChange = hasNonVisibilityFields(command);
         if (hasNonVisibilityChange) {
@@ -216,7 +212,8 @@ public class ChallengeService {
 
     @Transactional
     public void leaveChallenge(Long challengeId, Long userId) {
-        Challenge challenge = findChallengeByIdOrThrow(challengeId);
+        // 시작 전이의 멤버 스냅샷과 겹치지 않도록 챌린지 행을 잠근다.
+        Challenge challenge = findChallengeByIdForUpdateOrThrow(challengeId);
 
         ChallengeMember member = challengeMemberRepository
                 .findByChallengeIdAndUserIdAndStatus(challengeId, userId, MembershipStatus.ACTIVE)
@@ -253,30 +250,6 @@ public class ChallengeService {
         if (cond.hasEndedStatusWithEndImminentSort()) {
             throw new BusinessException(VALIDATION_FAILED, "종료 임박순은 종료된 챌린지와 함께 조회할 수 없습니다.");
         }
-    }
-
-    private void saveCreatedOutbox(Challenge challenge, Long creatorUserId, CreateChallengeCommand command, String occurredAt) {
-        // routine-service가 추가 RPC 없이 루틴 템플릿을 생성할 수 있도록 self-contained payload를 구성한다.
-        // 루틴 필드(routineTitle/scheduleType/targetCount)는 challenge-service가 저장하지 않고 그대로 전달한다.
-        // 선호 시각/요일은 챌린지 템플릿이 정하지 않으며, 멤버별 routine 인스턴스에서 개별 설정한다 (ADR-0035).
-        ChallengeCreatedEvent event = new ChallengeCreatedEvent(
-                UUID.randomUUID().toString(),
-                occurredAt,
-                challenge.getId(),
-                creatorUserId,
-                challenge.getCategoryCode(),
-                command.routineTitle(),
-                command.scheduleType(),
-                command.targetCount(),
-                challenge.getStartedAt().toString(),
-                challenge.getEndedAt().toString()
-        );
-        String payload = serializeEvent(event);
-        // 챌린지는 한 번만 생성되므로 challengeId만으로 유일성을 보장한다.
-        String idempotencyKey = KafkaTopic.CHALLENGE_CREATED + ":" + challenge.getId();
-        challengeOutboxRepository.save(
-                ChallengeOutbox.create(AGGREGATE_TYPE, challenge.getId(), KafkaTopic.CHALLENGE_CREATED, payload, idempotencyKey)
-        );
     }
 
     private void saveJoinedOutbox(Challenge challenge, Long userId, ChallengeMemberRole role, String occurredAt) {
@@ -355,19 +328,13 @@ public class ChallengeService {
         }
     }
 
-    private void validateRoutineUpdateNotSupported(UpdateChallengeCommand command) {
-        if (command.routineTitle() != null) {
-            // TODO: routine-service 개발 이후 gRPC 통신으로 루틴 템플릿 수정 처리
-            throw new BusinessException(VALIDATION_FAILED, "루틴 정보 수정은 아직 지원하지 않습니다.");
-        }
-    }
-
     private boolean hasNonVisibilityFields(UpdateChallengeCommand command) {
         return command.title() != null
                 || command.description() != null
                 || command.maxMembers() != null
                 || command.startedAt() != null
-                || command.endedAt() != null;
+                || command.endedAt() != null
+                || command.routineTitle() != null;
     }
 
     private void validateActiveMemberCount(int memberCount) {
@@ -416,6 +383,10 @@ public class ChallengeService {
         if (command.title() != null) {
             throw new BusinessException(VALIDATION_FAILED, "다른 멤버가 있어 제목을 변경할 수 없습니다.");
         }
+        if (command.routineTitle() != null) {
+            // 참여 결정의 근거라 다른 멤버가 동의한 뒤에는 바꾸지 않는다 (ADR-0044)
+            throw new BusinessException(VALIDATION_FAILED, "다른 멤버가 있어 루틴 제목을 변경할 수 없습니다.");
+        }
         if (command.startedAt() != null) {
             throw new BusinessException(VALIDATION_FAILED, "다른 멤버가 있어 시작일을 변경할 수 없습니다.");
         }
@@ -442,6 +413,9 @@ public class ChallengeService {
         }
         if (command.endedAt() != null) {
             challenge.updateEndedAt(command.endedAt());
+        }
+        if (command.routineTitle() != null) {
+            challenge.changeRoutineTitle(command.routineTitle());
         }
     }
 

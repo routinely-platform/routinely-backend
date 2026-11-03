@@ -1,6 +1,6 @@
 package com.routinely.routine_service.infrastructure.scheduler;
 
-import com.routinely.routine_service.application.challenge.ChallengeRoutineTemplateService;
+import com.routinely.routine_service.application.inbox.RoutineInboxProcessor;
 import com.routinely.routine_service.domain.inbox.InboxStatus;
 import com.routinely.routine_service.domain.inbox.RoutineInboxRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,14 +23,14 @@ import static org.mockito.Mockito.when;
 class RoutineInboxSchedulerTest {
 
     private RoutineInboxRepository inboxRepository;
-    private ChallengeRoutineTemplateService templateService;
+    private RoutineInboxProcessor inboxProcessor;
     private RoutineInboxScheduler scheduler;
 
     @BeforeEach
     void setUp() {
         inboxRepository = mock(RoutineInboxRepository.class);
-        templateService = mock(ChallengeRoutineTemplateService.class);
-        scheduler = new RoutineInboxScheduler(inboxRepository, templateService);
+        inboxProcessor = mock(RoutineInboxProcessor.class);
+        scheduler = new RoutineInboxScheduler(inboxRepository, inboxProcessor);
     }
 
     @Test
@@ -41,9 +41,9 @@ class RoutineInboxSchedulerTest {
 
         scheduler.processReceivedInbox();
 
-        verify(templateService).processInbox(1L);
-        verify(templateService).processInbox(2L);
-        verify(templateService, never()).recordFailure(anyLong(), any());
+        verify(inboxProcessor).processInbox(1L);
+        verify(inboxProcessor).processInbox(2L);
+        verify(inboxProcessor, never()).recordFailure(anyLong(), any());
     }
 
     @Test
@@ -51,14 +51,14 @@ class RoutineInboxSchedulerTest {
     void processReceivedInbox_recordsFailureOnExceptionAndContinues() {
         when(inboxRepository.findIdsByStatus(eq(InboxStatus.RECEIVED), any(Pageable.class)))
                 .thenReturn(List.of(1L, 2L));
-        doThrow(new RuntimeException("처리 실패")).when(templateService).processInbox(1L);
+        doThrow(new RuntimeException("처리 실패")).when(inboxProcessor).processInbox(1L);
 
         scheduler.processReceivedInbox();
 
-        verify(templateService).processInbox(1L);
-        verify(templateService).recordFailure(1L, "처리 실패");
-        verify(templateService).processInbox(2L);
-        verify(templateService, never()).recordFailure(eq(2L), any());
+        verify(inboxProcessor).processInbox(1L);
+        verify(inboxProcessor).recordFailure(1L, "처리 실패");
+        verify(inboxProcessor).processInbox(2L);
+        verify(inboxProcessor, never()).recordFailure(eq(2L), any());
     }
 
     @Test
@@ -66,13 +66,13 @@ class RoutineInboxSchedulerTest {
     void processReceivedInbox_whenRecordFailureThrows_continuesNextMessage() {
         when(inboxRepository.findIdsByStatus(eq(InboxStatus.RECEIVED), any(Pageable.class)))
                 .thenReturn(List.of(1L, 2L));
-        doThrow(new RuntimeException("처리 실패")).when(templateService).processInbox(1L);
-        doThrow(new RuntimeException("기록 실패")).when(templateService).recordFailure(1L, "처리 실패");
+        doThrow(new RuntimeException("처리 실패")).when(inboxProcessor).processInbox(1L);
+        doThrow(new RuntimeException("기록 실패")).when(inboxProcessor).recordFailure(1L, "처리 실패");
 
         scheduler.processReceivedInbox();
 
-        verify(templateService).recordFailure(1L, "처리 실패");
-        verify(templateService).processInbox(2L);
+        verify(inboxProcessor).recordFailure(1L, "처리 실패");
+        verify(inboxProcessor).processInbox(2L);
     }
 
     @Test
@@ -83,7 +83,7 @@ class RoutineInboxSchedulerTest {
 
         scheduler.processReceivedInbox();
 
-        verify(templateService, never()).processInbox(anyLong());
-        verify(templateService, never()).recordFailure(anyLong(), any());
+        verify(inboxProcessor, never()).processInbox(anyLong());
+        verify(inboxProcessor, never()).recordFailure(anyLong(), any());
     }
 }

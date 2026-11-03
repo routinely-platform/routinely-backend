@@ -10,7 +10,7 @@ import com.routinely.routine_service.domain.routine.Routine;
 import com.routinely.routine_service.domain.routine.RoutineRepository;
 import com.routinely.routine_service.domain.template.RoutineTemplate;
 import com.routinely.routine_service.domain.template.RoutineTemplateRepository;
-import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.core.schedule.ScheduleType;
 import com.routinely.storage.FileStorage;
 import com.routinely.storage.StoredFile;
 import org.junit.jupiter.api.*;

@@ -1,7 +1,7 @@
 package com.routinely.routine_service.presentation.rest.template.dto.response;
 
 import com.routinely.routine_service.application.template.dto.RoutineTemplateResult;
-import com.routinely.routine_service.domain.template.Weekdays;
+import com.routinely.core.schedule.Weekdays;
 
 import java.util.List;
 
@@ -11,8 +11,7 @@ public record RoutineTemplateResponse(
         String categoryCode,
         String scheduleType,
         List<String> daysOfWeek,
-        Integer targetCount,
-        Long challengeId) {
+        Integer targetCount) {
 
     public static RoutineTemplateResponse from(RoutineTemplateResult result) {
         List<String> days = Weekdays.toCodes(result.daysOfWeek());
@@ -22,8 +21,7 @@ public record RoutineTemplateResponse(
                 result.categoryCode(),
                 result.scheduleType().name(),
                 days.isEmpty() ? null : days,
-                result.targetCount(),
-                result.challengeId()
+                result.targetCount()
         );
     }
 }

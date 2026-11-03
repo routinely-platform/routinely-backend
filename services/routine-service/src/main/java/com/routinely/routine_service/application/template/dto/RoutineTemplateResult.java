@@ -2,7 +2,7 @@ package com.routinely.routine_service.application.template.dto;
 
 import com.routinely.routine_service.domain.definition.RoutineDefinition;
 import com.routinely.routine_service.domain.template.RoutineTemplate;
-import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.core.schedule.ScheduleType;
 
 public record RoutineTemplateResult(
         Long templateId,
@@ -10,8 +10,7 @@ public record RoutineTemplateResult(
         String categoryCode,
         ScheduleType scheduleType,
         Short daysOfWeek,
-        Integer targetCount,
-        Long challengeId) {
+        Integer targetCount) {
 
     public static RoutineTemplateResult from(RoutineTemplate template) {
         RoutineDefinition definition = template.getDefinition();
@@ -21,8 +20,7 @@ public record RoutineTemplateResult(
                 definition.getCategoryCode(),
                 definition.getScheduleType(),
                 definition.getDaysOfWeek(),
-                definition.getTargetCount(),
-                template.getChallengeId()
+                definition.getTargetCount()
         );
     }
 }

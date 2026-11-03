@@ -10,6 +10,8 @@ import static org.mockito.Mockito.when;
 
 import com.routinely.challenge_service.application.dto.ChallengeImageUploadCommand;
 import com.routinely.challenge_service.domain.challenge.Challenge;
+import com.routinely.challenge_service.domain.challenge.ChallengeRoutineDefinition;
+import com.routinely.core.schedule.ScheduleType;
 import com.routinely.challenge_service.domain.challenge.ChallengeImage;
 import com.routinely.challenge_service.domain.challenge.ChallengeRepository;
 import com.routinely.challenge_service.domain.member.ChallengeMember;
@@ -26,8 +28,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.TransactionSystemException;
 
 @DisplayName("ChallengeImageService")
 class ChallengeImageServiceTest {
@@ -46,7 +47,8 @@ class ChallengeImageServiceTest {
         challengeRepository = mock(ChallengeRepository.class);
         challengeMemberRepository = mock(ChallengeMemberRepository.class);
         fileStorage = mock(FileStorage.class);
-        service = new ChallengeImageService(challengeRepository, challengeMemberRepository, fileStorage);
+        ChallengeImageWriter writer = new ChallengeImageWriter(challengeRepository, challengeMemberRepository);
+        service = new ChallengeImageService(writer, fileStorage);
     }
 
     @Test
@@ -78,49 +80,55 @@ class ChallengeImageServiceTest {
     }
 
     @Test
-    @DisplayName("업로드_트랜잭션중이면_이전오브젝트는_커밋후삭제한다")
-    void upload_deletesPreviousAfterCommit() {
+    @DisplayName("업로드_DB반영이실패하면_새오브젝트를보상삭제하고_이전오브젝트는남긴다")
+    void upload_writeFails_deletesNewObject() {
         givenChallengeWithLeader(ChallengeImage.of("old-url", OLD_KEY));
+        when(challengeRepository.findByIdForUpdate(CHALLENGE_ID)).thenReturn(Optional.empty());
         when(fileStorage.upload(any(FileUploadCommand.class))).thenReturn(newStored());
 
-        TransactionSynchronizationManager.initSynchronization();
-        try {
-            service.upload(command("image/jpeg", 1024));
-
-            verify(fileStorage, never()).delete(any());
-            triggerCommit();
-
-            verify(fileStorage).delete(OLD_KEY);
-            verify(fileStorage, never()).delete(newStored().key());
-        } finally {
-            TransactionSynchronizationManager.clearSynchronization();
-        }
+        ChallengeImageUploadCommand command = command("image/jpeg", 1024);
+        assertThatThrownBy(() -> service.upload(command))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.CHALLENGE_NOT_FOUND);
+        verify(fileStorage).delete(newStored().key());
+        verify(fileStorage, never()).delete(OLD_KEY);
     }
 
     @Test
-    @DisplayName("업로드_트랜잭션롤백이면_새오브젝트를보상삭제한다")
-    void upload_deletesNewObjectAfterRollback() {
+    @DisplayName("업로드_커밋결과를알수없는예외면_새오브젝트를남긴다")
+    void upload_commitOutcomeUnknown_keepsNewObject() {
         givenChallengeWithLeader(ChallengeImage.of("old-url", OLD_KEY));
+        when(challengeRepository.findByIdForUpdate(CHALLENGE_ID))
+                .thenThrow(new TransactionSystemException("커밋 응답 유실"));
         when(fileStorage.upload(any(FileUploadCommand.class))).thenReturn(newStored());
 
-        TransactionSynchronizationManager.initSynchronization();
-        try {
-            service.upload(command("image/jpeg", 1024));
+        ChallengeImageUploadCommand command = command("image/jpeg", 1024);
+        assertThatThrownBy(() -> service.upload(command))
+                .isInstanceOf(TransactionSystemException.class);
+        verify(fileStorage, never()).delete(any());
+    }
 
-            verify(fileStorage, never()).delete(any());
-            triggerRollback();
+    @Test
+    @DisplayName("업로드_전송중에방장이바뀌면_FORBIDDEN예외를던지고_새오브젝트를보상삭제한다")
+    void upload_leaderChangedDuringTransfer_deletesNewObject() {
+        givenChallengeWithLeader(null);
+        when(fileStorage.upload(any(FileUploadCommand.class))).thenAnswer(invocation -> {
+            when(challengeMemberRepository.findByChallengeIdAndUserIdAndStatus(CHALLENGE_ID, LEADER_ID, MembershipStatus.ACTIVE))
+                    .thenReturn(Optional.of(member(ChallengeMemberRole.MEMBER)));
+            return newStored();
+        });
 
-            verify(fileStorage).delete(newStored().key());
-            verify(fileStorage, never()).delete(OLD_KEY);
-        } finally {
-            TransactionSynchronizationManager.clearSynchronization();
-        }
+        ChallengeImageUploadCommand command = command("image/jpeg", 1024);
+        assertThatThrownBy(() -> service.upload(command))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FORBIDDEN);
+        verify(fileStorage).delete(newStored().key());
     }
 
     @Test
     @DisplayName("업로드_챌린지가없으면_CHALLENGE_NOT_FOUND예외를던지고_저장소를호출하지않는다")
     void upload_challengeNotFound_throws() {
-        when(challengeRepository.findById(CHALLENGE_ID)).thenReturn(Optional.empty());
+        when(challengeRepository.existsById(CHALLENGE_ID)).thenReturn(false);
 
         ChallengeImageUploadCommand command = command("image/jpeg", 1024);
         assertThatThrownBy(() -> service.upload(command))
@@ -132,7 +140,7 @@ class ChallengeImageServiceTest {
     @Test
     @DisplayName("업로드_멤버가아니면_NOT_CHALLENGE_MEMBER예외를던진다")
     void upload_notMember_throws() {
-        when(challengeRepository.findById(CHALLENGE_ID)).thenReturn(Optional.of(challenge(null)));
+        when(challengeRepository.existsById(CHALLENGE_ID)).thenReturn(true);
         when(challengeMemberRepository.findByChallengeIdAndUserIdAndStatus(CHALLENGE_ID, LEADER_ID, MembershipStatus.ACTIVE))
                 .thenReturn(Optional.empty());
 
@@ -146,7 +154,7 @@ class ChallengeImageServiceTest {
     @Test
     @DisplayName("업로드_방장이아니면_FORBIDDEN예외를던진다")
     void upload_notLeader_throws() {
-        when(challengeRepository.findById(CHALLENGE_ID)).thenReturn(Optional.of(challenge(null)));
+        when(challengeRepository.existsById(CHALLENGE_ID)).thenReturn(true);
         when(challengeMemberRepository.findByChallengeIdAndUserIdAndStatus(CHALLENGE_ID, LEADER_ID, MembershipStatus.ACTIVE))
                 .thenReturn(Optional.of(member(ChallengeMemberRole.MEMBER)));
 
@@ -220,26 +228,6 @@ class ChallengeImageServiceTest {
     }
 
     @Test
-    @DisplayName("삭제_트랜잭션중이면_참조를먼저제거하고_커밋후저장소에서삭제한다")
-    void delete_deletesObjectAfterCommit() {
-        Challenge challenge = givenChallengeWithLeader(ChallengeImage.of("url", OLD_KEY));
-
-        TransactionSynchronizationManager.initSynchronization();
-        try {
-            service.delete(CHALLENGE_ID, LEADER_ID);
-
-            assertThat(challenge.getImageObjectKey()).isNull();
-            verify(fileStorage, never()).delete(any());
-
-            triggerCommit();
-
-            verify(fileStorage).delete(OLD_KEY);
-        } finally {
-            TransactionSynchronizationManager.clearSynchronization();
-        }
-    }
-
-    @Test
     @DisplayName("삭제_이미지가없으면_저장소를호출하지않는다")
     void delete_whenNoImage_noOp() {
         givenChallengeWithLeader(null);
@@ -252,7 +240,7 @@ class ChallengeImageServiceTest {
     @Test
     @DisplayName("삭제_방장이아니면_FORBIDDEN예외를던진다")
     void delete_notLeader_throws() {
-        when(challengeRepository.findById(CHALLENGE_ID)).thenReturn(Optional.of(challenge(ChallengeImage.of("url", OLD_KEY))));
+        when(challengeRepository.findByIdForUpdate(CHALLENGE_ID)).thenReturn(Optional.of(challenge(ChallengeImage.of("url", OLD_KEY))));
         when(challengeMemberRepository.findByChallengeIdAndUserIdAndStatus(CHALLENGE_ID, LEADER_ID, MembershipStatus.ACTIVE))
                 .thenReturn(Optional.of(member(ChallengeMemberRole.MEMBER)));
 
@@ -264,7 +252,8 @@ class ChallengeImageServiceTest {
 
     private Challenge givenChallengeWithLeader(ChallengeImage image) {
         Challenge challenge = challenge(image);
-        when(challengeRepository.findById(CHALLENGE_ID)).thenReturn(Optional.of(challenge));
+        when(challengeRepository.existsById(CHALLENGE_ID)).thenReturn(true);
+        when(challengeRepository.findByIdForUpdate(CHALLENGE_ID)).thenReturn(Optional.of(challenge));
         when(challengeMemberRepository.findByChallengeIdAndUserIdAndStatus(CHALLENGE_ID, LEADER_ID, MembershipStatus.ACTIVE))
                 .thenReturn(Optional.of(member(ChallengeMemberRole.LEADER)));
         return challenge;
@@ -272,6 +261,7 @@ class ChallengeImageServiceTest {
 
     private Challenge challenge(ChallengeImage image) {
         return Challenge.builder()
+                .routineDefinition(ChallengeRoutineDefinition.of("루틴", ScheduleType.DAILY, null, null))
                 .id(CHALLENGE_ID)
                 .creatorUserId(LEADER_ID)
                 .title("매일 30분 독서")
@@ -332,20 +322,5 @@ class ChallengeImageServiceTest {
             }
         }
         return bytes;
-    }
-
-    private void triggerCommit() {
-        for (TransactionSynchronization synchronization : TransactionSynchronizationManager.getSynchronizations()) {
-            synchronization.afterCommit();
-        }
-        for (TransactionSynchronization synchronization : TransactionSynchronizationManager.getSynchronizations()) {
-            synchronization.afterCompletion(TransactionSynchronization.STATUS_COMMITTED);
-        }
-    }
-
-    private void triggerRollback() {
-        for (TransactionSynchronization synchronization : TransactionSynchronizationManager.getSynchronizations()) {
-            synchronization.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK);
-        }
     }
 }

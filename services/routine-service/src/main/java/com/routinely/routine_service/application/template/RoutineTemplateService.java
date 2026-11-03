@@ -8,7 +8,7 @@ import com.routinely.routine_service.domain.category.CategoryRepository;
 import com.routinely.routine_service.domain.definition.RoutineDefinition;
 import com.routinely.routine_service.domain.template.RoutineTemplate;
 import com.routinely.routine_service.domain.template.RoutineTemplateRepository;
-import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.core.schedule.ScheduleType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,9 +22,6 @@ import static com.routinely.core.exception.ErrorCode.VALIDATION_FAILED;
 
 /**
  * 개인 루틴 템플릿 CRUD.
- *
- * <p>챌린지 연결 템플릿(challenge_id NOT NULL)은 challenge.created 이벤트 소비로만 생성되며(#133),
- * 이 API로는 조회/수정/삭제 모두 불가하다. 챌린지 루틴은 챌린지/피드 맥락에서 노출한다.
  *
  * <p>스케줄 유형별 필드 정합성(schedule_type / days_of_week / target_count)은 routine_templates의
  * {@code ck_rt_schedule} CHECK 제약을 앱 계층에서 미러링해 저장 전에 검증한다. (ADR-0039)
@@ -64,8 +61,8 @@ public class RoutineTemplateService {
 
     public List<RoutineTemplateResult> getMyTemplates(Long userId, String categoryCode) {
         List<RoutineTemplate> templates = (categoryCode == null || categoryCode.isBlank())
-                ? templateRepository.findAllByUserIdAndChallengeIdIsNullAndIsDeletedFalseOrderByIdDesc(userId)
-                : templateRepository.findAllByUserIdAndChallengeIdIsNullAndDefinitionCategoryCodeAndIsDeletedFalseOrderByIdDesc(
+                ? templateRepository.findAllByUserIdAndIsDeletedFalseOrderByIdDesc(userId)
+                : templateRepository.findAllByUserIdAndDefinitionCategoryCodeAndIsDeletedFalseOrderByIdDesc(
                         userId, categoryCode);
 
         return templates.stream()
@@ -75,7 +72,6 @@ public class RoutineTemplateService {
 
     public RoutineTemplateResult getTemplate(Long templateId, Long userId) {
         RoutineTemplate template = getOwnedTemplateOrThrow(templateId, userId);
-        validateNotChallengeLinked(template);
 
         return RoutineTemplateResult.from(template);
     }
@@ -83,7 +79,6 @@ public class RoutineTemplateService {
     @Transactional
     public RoutineTemplateResult update(UpdateRoutineTemplateCommand command) {
         RoutineTemplate template = getOwnedTemplateOrThrow(command.templateId(), command.userId());
-        validateNotChallengeLinked(template);
 
         if (command.title() != null) {
             template.changeTitle(command.title());
@@ -102,7 +97,6 @@ public class RoutineTemplateService {
     @Transactional
     public void delete(Long templateId, Long userId) {
         RoutineTemplate template = getOwnedTemplateOrThrow(templateId, userId);
-        validateNotChallengeLinked(template);
 
         template.softDelete(LocalDateTime.now(clock));
     }
@@ -115,12 +109,6 @@ public class RoutineTemplateService {
             throw new BusinessException(FORBIDDEN, "본인의 루틴 템플릿만 접근할 수 있습니다.");
         }
         return template;
-    }
-
-    private void validateNotChallengeLinked(RoutineTemplate template) {
-        if (template.isChallengeLinked()) {
-            throw new BusinessException(FORBIDDEN, "챌린지 루틴 템플릿은 개인 루틴 템플릿 API로 접근할 수 없습니다.");
-        }
     }
 
     private void validateCategoryCode(String categoryCode) {

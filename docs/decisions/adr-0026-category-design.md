@@ -47,10 +47,22 @@ categories
 
 ### 2-3. challenges.category_code 비정규화 보유
 
-`challenges` 테이블에 `category_code` 컬럼을 보유한다 (비정규화 사본).
+`challenges` 테이블에 `category_code` 컬럼을 보유한다.
+
+> **2026-11-02 개정** (구현 #167). 챌린지 템플릿이 사라져(ADR-0044) 챌린지의 카테고리를 담는 곳은 `challenges.category_code`뿐이다.
+>
+> - **코드 목록의 원본**: routine-service `categories`. 챌린지 생성 시 이 목록으로 코드를 검증한다(§3)
+> - **이 챌린지가 어느 카테고리인가의 원본**: `challenges.category_code`. 루틴 정의와 함께 `challenge.started`로 전달되고, 멤버 루틴이 `routines.category_code`에 복사한다(ADR-0040)
+>
+> `categories.code`를 복사해 값으로 들고 있다는 점에서 비정규화 사본이라는 설명은 유효하다. 아래 근거도 그대로다.
+
+<details>
+<summary>개정 전 (2026-05-19)</summary>
 
 **Source of truth**: `routine_templates.category_code`
 **비정규화 사본**: `challenges.category_code`
+
+</details>
 
 **근거**: 챌린지 목록의 카테고리 필터링이 가장 빈번한 쿼리인데, 정규화하면:
 - Cross-service JOIN 불가
@@ -99,5 +111,5 @@ GET /api/v1/categories → Gateway → routine-service (직접 REST)
 - 분류 체계의 일관성 보장 (MECE)
 
 ### 부정적 영향
-- `challenges.category_code`와 `routine_templates.category_code`의 비정규화 유지 필요
+- `challenges.category_code`는 `categories.code`의 비정규화 사본이다. `categories`와 FK로 묶이지 않아 정합성은 생성 시 검증에 의존한다
 - 챌린지 생성 시 categoryCode 유효성 검증을 위한 gRPC 호출 (Redis 캐싱으로 완화)

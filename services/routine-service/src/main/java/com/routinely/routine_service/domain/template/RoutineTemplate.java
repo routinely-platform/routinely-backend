@@ -1,5 +1,6 @@
 package com.routinely.routine_service.domain.template;
 
+import com.routinely.core.schedule.ScheduleType;
 import com.routinely.jpa.entity.BaseEntity;
 import com.routinely.routine_service.domain.definition.RoutineDefinition;
 import jakarta.persistence.Column;
@@ -27,8 +28,7 @@ import java.time.LocalDateTime;
  * {@code ck_rt_schedule} CHECK 제약과의 정합은 {@link RoutineDefinition}이 보장한다 —
  * 잘못된 조합으로는 정의 객체 자체가 만들어지지 않는다.
  *
- * <p>챌린지 연결 템플릿은 challenge.created 이벤트를 소비해 생성하며 challenge_id를 갖는다.
- * {@code uq_rt_challenge_id} UNIQUE 제약으로 챌린지당 1개만 보장된다. (ADR-0034)
+ * <p>사용자가 저장한 틀 전용이다. 챌린지 루틴 정의는 challenge-service가 소유하고 템플릿을 만들지 않는다. (ADR-0044)
  *
  * <p>선호 시각·선호 요일은 템플릿이 아닌 멤버별 routines 인스턴스에서 개별 설정한다. (ADR-0035)
  *
@@ -47,9 +47,6 @@ public class RoutineTemplate extends BaseEntity {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    @Column(name = "challenge_id", unique = true)
-    private Long challengeId;
-
     /** 무엇을·얼마나 — 루틴 시작 시 인스턴스로 복사된다 (ADR-0040). */
     @Embedded
     private RoutineDefinition definition;
@@ -61,22 +58,8 @@ public class RoutineTemplate extends BaseEntity {
     private LocalDateTime deletedAt;
 
     /**
-     * 챌린지 연결 루틴 템플릿을 생성한다.
-     *
-     * @param userId       템플릿 소유자(챌린지 생성자) ID — 항상 존재
-     * @param challengeId  연결된 챌린지 ID — UNIQUE
-     */
-    public static RoutineTemplate forChallenge(Long userId, Long challengeId, RoutineDefinition definition) {
-        RoutineTemplate template = new RoutineTemplate();
-        template.userId = userId;
-        template.challengeId = challengeId;
-        template.definition = definition;
-        template.isDeleted = false;
-        return template;
-    }
-
-    /**
-     * 개인 루틴 템플릿을 생성한다. 챌린지와 연결되지 않으므로 challengeId는 NULL이다.
+     * 개인 루틴 템플릿을 생성한다. 템플릿은 사용자가 저장한 틀 전용이다 —
+     * 챌린지 루틴 정의는 challenge-service가 소유한다(ADR-0044).
      */
     public static RoutineTemplate forPersonal(Long userId, RoutineDefinition definition) {
         RoutineTemplate template = new RoutineTemplate();
@@ -108,12 +91,5 @@ public class RoutineTemplate extends BaseEntity {
     public void softDelete(LocalDateTime deletedAt) {
         this.isDeleted = true;
         this.deletedAt = deletedAt;
-    }
-
-    /**
-     * 챌린지 연결 템플릿 여부 — 연결 템플릿은 개인 CRUD API로 수정/삭제할 수 없다.
-     */
-    public boolean isChallengeLinked() {
-        return challengeId != null;
     }
 }

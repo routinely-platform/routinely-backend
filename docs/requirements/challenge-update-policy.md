@@ -26,7 +26,7 @@
 
 ## 기타 필드
 
-대상 필드: `title`, `description`, `maxMembers`, `startedAt`, `endedAt`
+대상 필드: `title`, `description`, `maxMembers`, `startedAt`, `endedAt`, `routineTitle`
 
 | 상태 | 활성 멤버 수 | 수정 가능 항목 |
 |---|---:|---|
@@ -42,15 +42,15 @@
   (`ChallengePolicy.MAX_PERIOD_DAYS`, #160). 한쪽 날짜만 오면 나머지는 저장된 값을 쓰므로,
   이 판정만은 요청 DTO가 아니라 서비스 계층에서 병합 후 수행한다.
 - `maxMembers`는 20 이하여야 한다 (`ChallengePolicy.MAX_MEMBERS`, #160).
-- `categoryCode`, `creatorUserId`, 루틴 반복 설정, 루틴 소유자 관련 필드, 챌린지 연결 필드는 이 API로 변경할 수 없다.
-- 루틴 제목·선호 시간 수정은 routine-service gRPC 연동 전까지 의도적으로 거부한다.
+- `categoryCode`, `creatorUserId`, 루틴 반복 설정(`scheduleType` · `daysOfWeek` · `targetCount`)은 이 API로 변경할 수 없다.
+- 루틴 제목(`routineTitle`)은 챌린지가 소유한 정의라 `challenges`를 로컬 UPDATE한다 (ADR-0044, #167).
+  참여 결정의 근거이므로 다른 멤버가 있으면 바꾸지 않는다. 선호 시각은 멤버 각자의 루틴에서 수정한다.
 
 ## 검증 순서
 
 1. 챌린지를 조회하고, 요청자가 활성 상태의 `LEADER`인지 확인한다.
-2. 루틴 필드 수정 요청이 있으면 routine-service 연동 전까지 거부한다.
-3. 활성 멤버 수를 조회한다. 0이면 데이터 정합성 오류로 처리한다 (LEADER가 이미 확인됐으므로 1 이상이어야 한다).
-4. 공개 여부 변경을 상태·멤버 수·방향 기준으로 검증한다.
+2. 활성 멤버 수를 조회한다. 0이면 데이터 정합성 오류로 처리한다 (LEADER가 이미 확인됐으므로 1 이상이어야 한다).
+3. 공개 여부 변경을 상태·멤버 수·방향 기준으로 검증한다.
    (MVP의 `isPublic: false` 차단은 그 앞 요청 계층에서 이미 끝난다.)
-5. 기타 필드 변경을 상태·멤버 수 기준으로 검증한다.
-6. 모든 검증을 통과한 후에만 값을 실제로 반영한다.
+4. 기타 필드 변경을 상태·멤버 수 기준으로 검증한다.
+5. 모든 검증을 통과한 후에만 값을 실제로 반영한다.

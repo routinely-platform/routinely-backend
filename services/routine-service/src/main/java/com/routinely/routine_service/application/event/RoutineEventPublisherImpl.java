@@ -7,7 +7,7 @@ import com.routinely.routine_service.application.execution.AcceptedCount;
 import com.routinely.routine_service.domain.outbox.RoutineOutbox;
 import com.routinely.routine_service.domain.outbox.RoutineOutboxRepository;
 import com.routinely.routine_service.domain.routine.Routine;
-import com.routinely.routine_service.domain.template.Weekdays;
+import com.routinely.core.schedule.Weekdays;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

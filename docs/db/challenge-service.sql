@@ -16,6 +16,10 @@ CREATE TABLE challenges (
                             category_code   VARCHAR(30)                            NOT NULL,
                             started_at      DATE                                   NOT NULL,
                             ended_at        DATE                                   NOT NULL,
+                            routine_title   VARCHAR(100)                           NOT NULL,
+                            schedule_type   VARCHAR(20)                            NOT NULL,
+                            days_of_week    SMALLINT                               NULL,
+                            target_count    INT                                    NULL,
                             image_url        VARCHAR(500)                          NULL,
                             image_object_key VARCHAR(500)                          NULL,
                             created_at      TIMESTAMPTZ   DEFAULT now()            NOT NULL,
@@ -26,7 +30,18 @@ CREATE TABLE challenges (
                             CONSTRAINT ck_challenges_status      CHECK (status IN ('WAITING', 'ACTIVE', 'ENDED')),
                             CONSTRAINT ck_challenges_invite_code CHECK (is_public = true OR invite_code IS NOT NULL),
                             CONSTRAINT ck_challenges_max_members CHECK (max_members >= 2),
-                            CONSTRAINT ck_challenges_date_range  CHECK (ended_at >= started_at)
+                            CONSTRAINT ck_challenges_date_range  CHECK (ended_at >= started_at),
+    -- ⚠️ routine-service ck_rt_schedule · ck_routines_schedule과 짝이다 (#167, ADR-0044)
+                            CONSTRAINT ck_challenges_schedule    CHECK (
+                                (schedule_type = 'DAILY'
+                                    AND days_of_week IS NULL AND target_count IS NULL)
+                                OR (schedule_type = 'SPECIFIC_DAYS'
+                                    AND days_of_week IS NOT NULL AND days_of_week BETWEEN 1 AND 127 AND target_count IS NULL)
+                                OR (schedule_type = 'WEEKLY_COUNT'
+                                    AND target_count IS NOT NULL AND target_count BETWEEN 1 AND 6 AND days_of_week IS NULL)
+                                OR (schedule_type = 'MONTHLY_COUNT'
+                                    AND target_count IS NOT NULL AND target_count BETWEEN 1 AND 28 AND days_of_week IS NULL)
+                            )
 );
 
 COMMENT ON TABLE  challenges                  IS '챌린지 정보 — WAITING → ACTIVE 전이 시 challenge_outbox에 challenge.started 이벤트 INSERT (ADR-0032)';
@@ -41,6 +56,10 @@ COMMENT ON COLUMN challenges.status           IS '챌린지 상태 — WAITING: 
 COMMENT ON COLUMN challenges.category_code    IS '카테고리 코드 — routine-service categories.code 비정규화 사본 (생성 시점 1회 복사, 이후 불변)';
 COMMENT ON COLUMN challenges.started_at       IS '챌린지 시작일';
 COMMENT ON COLUMN challenges.ended_at         IS '챌린지 종료일';
+COMMENT ON COLUMN challenges.routine_title    IS '챌린지 루틴 제목 — 방장 혼자인 WAITING 상태에서만 수정 가능 (#167)';
+COMMENT ON COLUMN challenges.schedule_type    IS '반복 유형 — DAILY / SPECIFIC_DAYS / WEEKLY_COUNT / MONTHLY_COUNT (생성 후 변경 불가)';
+COMMENT ON COLUMN challenges.days_of_week     IS '지정 요일 비트마스크(bit0=월 … bit6=일) — SPECIFIC_DAYS 전용, 그 외 NULL (변경 불가)';
+COMMENT ON COLUMN challenges.target_count     IS '기간당 목표 횟수 — WEEKLY_COUNT 1~6 · MONTHLY_COUNT 1~28, 그 외 NULL (변경 불가)';
 COMMENT ON COLUMN challenges.image_url        IS '대표 이미지 접근 URL (#142)';
 COMMENT ON COLUMN challenges.image_object_key IS '대표 이미지 저장소 오브젝트 키 — 삭제/교체용 (#142)';
 COMMENT ON COLUMN challenges.created_at       IS '챌린지 생성일시';
@@ -142,7 +161,7 @@ COMMENT ON TABLE  challenge_outbox                 IS 'Outbox 패턴 — Kafka �
 COMMENT ON COLUMN challenge_outbox.id              IS '레코드 고유 식별자 (PK)';
 COMMENT ON COLUMN challenge_outbox.aggregate_type  IS '이벤트 발생 엔티티 유형 (예: CHALLENGE, CHALLENGE_MEMBER)';
 COMMENT ON COLUMN challenge_outbox.aggregate_id    IS '이벤트 발생 엔티티의 PK';
-COMMENT ON COLUMN challenge_outbox.event_type      IS 'Kafka 토픽 이벤트 유형 (예: challenge.created, challenge.member.joined)';
+COMMENT ON COLUMN challenge_outbox.event_type      IS 'Kafka 토픽 이벤트 유형 (예: challenge.started, challenge.member.joined)';
 COMMENT ON COLUMN challenge_outbox.payload         IS 'Kafka에 발행할 이벤트 JSON 데이터';
 COMMENT ON COLUMN challenge_outbox.status          IS '발행 상태 — PENDING: 대기 / PUBLISHED: 발행 완료 / FAILED: 실패';
 COMMENT ON COLUMN challenge_outbox.created_at      IS '이벤트 생성일시';

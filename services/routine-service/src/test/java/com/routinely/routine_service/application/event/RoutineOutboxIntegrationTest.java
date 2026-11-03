@@ -35,7 +35,7 @@ class RoutineOutboxIntegrationTest {
     private com.routinely.routine_service.domain.routine.Routine routine() {
         var routine = com.routinely.routine_service.domain.routine.Routine.forPersonal(null, 7L,
                 com.routinely.routine_service.domain.definition.RoutineDefinition.of("걷기", "HEALTH",
-                        com.routinely.routine_service.domain.template.ScheduleType.DAILY, null, null),
+                        com.routinely.core.schedule.ScheduleType.DAILY, null, null),
                 java.time.LocalDate.of(2026, 9, 1), null, null);
         org.springframework.test.util.ReflectionTestUtils.setField(routine, "id", 10L);
         return routine;

@@ -1,7 +1,7 @@
 package com.routinely.routine_service.presentation.rest.routine.dto.response;
 
 import com.routinely.routine_service.application.routine.dto.RoutineResult;
-import com.routinely.routine_service.domain.template.Weekdays;
+import com.routinely.core.schedule.Weekdays;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;

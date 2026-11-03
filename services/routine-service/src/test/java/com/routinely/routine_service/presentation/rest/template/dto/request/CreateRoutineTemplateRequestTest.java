@@ -2,7 +2,7 @@ package com.routinely.routine_service.presentation.rest.template.dto.request;
 
 import com.routinely.routine_service.presentation.rest.common.ScheduleValidation;
 import com.routinely.routine_service.application.template.dto.CreateRoutineTemplateCommand;
-import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.core.schedule.ScheduleType;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;

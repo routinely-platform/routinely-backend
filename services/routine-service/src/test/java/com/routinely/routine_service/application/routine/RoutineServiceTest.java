@@ -9,7 +9,7 @@ import com.routinely.routine_service.domain.routine.Routine;
 import com.routinely.routine_service.domain.routine.RoutineRepository;
 import com.routinely.routine_service.domain.template.RoutineTemplate;
 import com.routinely.routine_service.domain.template.RoutineTemplateRepository;
-import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.core.schedule.ScheduleType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -59,12 +59,6 @@ class RoutineServiceTest {
 
     private RoutineTemplate personalTemplate() {
         RoutineTemplate template = RoutineTemplate.forPersonal(OWNER_ID, RoutineDefinition.of("아침 러닝 30분", "EXERCISE", ScheduleType.DAILY, null, null));
-        ReflectionTestUtils.setField(template, "id", TEMPLATE_ID);
-        return template;
-    }
-
-    private RoutineTemplate challengeTemplate() {
-        RoutineTemplate template = RoutineTemplate.forChallenge(OWNER_ID, 42L, RoutineDefinition.of("아침 러닝 30분", "EXERCISE", ScheduleType.WEEKLY_COUNT, null, 3));
         ReflectionTestUtils.setField(template, "id", TEMPLATE_ID);
         return template;
     }
@@ -153,22 +147,6 @@ class RoutineServiceTest {
                     .isInstanceOfSatisfying(BusinessException.class, exception -> {
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
                         assertThat(exception.getMessage()).isEqualTo("본인의 루틴 템플릿으로만 루틴을 시작할 수 있습니다.");
-                    });
-
-            verify(routineRepository, never()).save(any());
-        }
-
-        @Test
-        @DisplayName("챌린지연결템플릿이면_FORBIDDEN예외를던진다")
-        void start_whenChallengeTemplate_throwsForbidden() {
-            when(templateRepository.findByIdAndIsDeletedFalse(TEMPLATE_ID))
-                    .thenReturn(Optional.of(challengeTemplate()));
-
-            assertThatThrownBy(() -> service.start(new StartRoutineCommand(
-                    OWNER_ID, TEMPLATE_ID, START, END, null)))
-                    .isInstanceOfSatisfying(BusinessException.class, exception -> {
-                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
-                        assertThat(exception.getMessage()).isEqualTo("챌린지 루틴은 챌린지 시작 시 자동으로 생성됩니다.");
                     });
 
             verify(routineRepository, never()).save(any());

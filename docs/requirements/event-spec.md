@@ -42,7 +42,7 @@
 | `routine.execution.completed` | RoutineService | ChallengeService | `userId` |
 | `routine.execution.cancelled` | RoutineService | ChallengeService | `userId` |
 | `routine.notification.scheduled` | RoutineService | NotificationService | `userId` |
-| ~~`challenge.created`~~ | ~~ChallengeService~~ | ~~RoutineService~~ | ⛔ 폐지 (ADR-0044) |
+| ~~`challenge.created`~~ | ~~ChallengeService~~ | ~~RoutineService~~ | ⛔ 제거 — 발행·소비 모두 없음 (ADR-0044, #167) |
 | `challenge.started` | ChallengeService | RoutineService, NotificationService, ChatService | `challengeId` |
 | `challenge.ended` | ChallengeService | NotificationService, ChatService | `challengeId` |
 | `challenge.member.joined` | ChallengeService | ChallengeService(랭킹) · 🔵 v2: RoutineService, ChatService (#118) | `challengeId` |
@@ -196,60 +196,12 @@ NotificationService도 구독하지 않는다. 발송 직전 gRPC CheckNotificat
 
 ---
 
-### 3. `challenge.created`
-
-> ⛔ **폐지 (ADR-0044)** — 챌린지 루틴 정의를 challenge-service가 소유하면서 템플릿을 만들 이유가 사라졌다. 발행·소비 제거는 #167. 아래는 제거 전 기록이다
-
-챌린지가 생성되었을 때 발행한다. routine-service가 소비해 챌린지 연결 루틴 템플릿(`routine_templates`, `challenge_id` UNIQUE)을 생성한다. (ADR-0034, 소비는 #133)
-
-| 항목 | 내용 |
-|------|------|
-| Publisher | ChallengeService |
-| Partition Key | `challengeId` |
-| Consumer Group | `routine-service.challenge.created` |
-
-**Payload**
-
-```json
-{
-  "eventId": "550e8400-e29b-41d4-a716-446655440007",
-  "occurredAt": "2026-05-24T00:00:00Z",
-  "challengeId": 1,
-  "creatorUserId": 100,
-  "categoryCode": "EXERCISE",
-  "routineTitle": "아침 러닝 30분",
-  "scheduleType": "WEEKLY_COUNT",
-  "targetCount": 3,
-  "startedAt": "2026-05-25",
-  "endedAt": "2026-06-24"
-}
-```
-
-| 필드 | 타입 | 필수 | routine_templates 매핑 | 설명 |
-|------|------|:----:|------|------|
-| `eventId` | string (UUID) | ✅ | — | Inbox 멱등성 키 |
-| `occurredAt` | string (ISO 8601) | ✅ | — | 이벤트 발생 시각 |
-| `challengeId` | long | ✅ | `challenge_id` (UNIQUE) | 소비자 멱등 키 |
-| `creatorUserId` | long | ✅ | `user_id` | 템플릿 생성자 |
-| `categoryCode` | string | ✅ | `category_code` | 카테고리 코드 |
-| `routineTitle` | string | ✅ | `title` | 루틴명 |
-| `scheduleType` | string | ✅ | `schedule_type` | `DAILY` \| `WEEKLY_COUNT` \| `MONTHLY_COUNT` (챌린지는 `SPECIFIC_DAYS` 불가 — ADR-0039) |
-| `targetCount` | int | ❌ | `target_count` | `WEEKLY_COUNT`/`MONTHLY_COUNT`일 때만 존재(≥1) |
-| `startedAt` | string (yyyy-MM-dd) | ✅ | — | 챌린지 시작일 |
-| `endedAt` | string (yyyy-MM-dd) | ✅ | — | 챌린지 종료일 |
-
-> routine-service가 추가 RPC 호출 없이 루틴 템플릿을 생성할 수 있도록 self-contained payload를 유지한다.
-> 선호 수행 시각(`preferred_time`)은 이 payload에 포함하지 않는다. 챌린지 루틴 템플릿은 항상 `preferred_time = NULL`로 생성되며, 알림 시각은 멤버별 `routines` 인스턴스에서 개별 설정한다 (ADR-0035).
-
-**소비자 처리**
-
-- **RoutineService**: `routine_inbox`에 저장(`eventId` 멱등성) 후, 스케줄러가 챌린지 연결 루틴 템플릿(`routine_templates.challenge_id = challengeId`, UNIQUE)을 생성한다 (#133)
-
----
-
-### 4. `challenge.started`
+### 3. `challenge.started`
 
 챌린지 시작일이 도래해 스케줄러가 WAITING → ACTIVE 상태 전이를 완료했을 때 발행한다. (ADR-0033)
+
+**자기완결적 페이로드다** — 소비자가 추가 RPC 없이 멤버별 루틴·채팅방을 만들 수 있도록 챌린지가 소유한 루틴 정의,
+시작 시점 멤버, 방장을 함께 싣는다 (ADR-0044 §6.2, #167).
 
 | 항목 | 내용 |
 |------|------|
@@ -266,29 +218,53 @@ NotificationService도 구독하지 않는다. 발송 직전 gRPC CheckNotificat
   "challengeId": 5,
   "challengeName": "30일 러닝 챌린지",
   "startedAt": "2025-03-01",
-  "endedAt": "2025-03-31"
+  "endedAt": "2025-03-31",
+  "routineTitle": "저녁 러닝 30분",
+  "categoryCode": "EXERCISE",
+  "scheduleType": "SPECIFIC_DAYS",
+  "daysOfWeek": ["MON", "WED", "FRI"],
+  "targetCount": null,
+  "leaderUserId": 100,
+  "members": [
+    { "userId": 100, "joinedAt": "2025-02-20" },
+    { "userId": 200, "joinedAt": "2025-02-25" }
+  ]
 }
 ```
 
 | 필드 | 타입 | 필수 | 설명 |
 |------|------|:----:|------|
+| `eventId` | string (UUID) | ✅ | Inbox 멱등성 키 |
+| `occurredAt` | string (ISO 8601) | ✅ | 이벤트 발생 시각 |
 | `challengeId` | long | ✅ | 챌린지 ID |
 | `challengeName` | string | ✅ | 챌린지 이름 |
 | `startedAt` | string (yyyy-MM-dd) | ✅ | 챌린지 시작일 |
 | `endedAt` | string (yyyy-MM-dd) | ✅ | 챌린지 종료일 |
+| `routineTitle` | string | ✅ | 루틴 제목 → `routines.title` |
+| `categoryCode` | string | ✅ | 챌린지 카테고리 = 루틴 카테고리 → `routines.category_code` |
+| `scheduleType` | string | ✅ | `DAILY` \| `SPECIFIC_DAYS` \| `WEEKLY_COUNT` \| `MONTHLY_COUNT` |
+| `daysOfWeek` | string[] | ❌ | MON~SUN 코드 리스트. `SPECIFIC_DAYS`일 때만 존재, 그 외 `null` → 비트마스크로 바꿔 `routines.days_of_week` |
+| `targetCount` | int | ❌ | `WEEKLY_COUNT`(1~6) / `MONTHLY_COUNT`(1~28)일 때만 존재, 그 외 `null` |
+| `leaderUserId` | long | ✅ | 시작 시점 방장 — 채팅방 `OWNER` (ADR-0046). 활성 방장이 없으면 챌린지를 시작하지 않고 건너뛴다 |
+| `members` | object[] | ✅ | **시작 시점 `ACTIVE` 멤버만**, 참여 순. 방장 포함 |
+| `members[].userId` | long | ✅ | 멤버 사용자 ID |
+| `members[].joinedAt` | string (yyyy-MM-dd) | ✅ | 참여일(Asia/Seoul). 재참여면 마지막 참여일 |
+
+> `routineTemplateId`는 싣지 않는다 — 챌린지 루틴에는 템플릿이 없다 (ADR-0044).
+> 선호 수행 시각은 싣지 않는다. 멤버 각자가 본인 `routines` 인스턴스에서 설정한다 (ADR-0035).
 
 **소비자 처리**
 
 - **RoutineService**: 페이로드의 멤버마다 `routines` 인스턴스를 만들고 **루틴 정의를 복사**한다(ADR-0032 · ADR-0040 · ADR-0044, #157). 실행 기록은 만들지 않는다 — 희소 저장(ADR-0038)
 - **NotificationService**: 챌린지 멤버 전원에게 "챌린지가 시작되었습니다" 알림 발송
-- **ChatService**: **채팅방을 만들고**(챌린지당 1개) 페이로드 멤버로 `chat_room_members`를 채운 뒤 SYSTEM 메시지 발행 ("챌린지가 시작되었습니다"). 방장(`OWNER`)은 페이로드의 **`leaderUserId`** 로 정한다 — 필드 추가는 #167 (ADR-0046)
+- **ChatService**: **채팅방을 만들고**(챌린지당 1개) 페이로드 멤버로 `chat_room_members`를 채운 뒤 SYSTEM 메시지 발행 ("챌린지가 시작되었습니다"). 방장(`OWNER`)은 페이로드의 **`leaderUserId`** 로 정한다 (ADR-0046)
 
 ---
 
-### 5. `challenge.member.joined`
+### 4. `challenge.member.joined`
 
 사용자가 챌린지에 참여했을 때 발행한다. **챌린지 생성 시 방장 참여로도 발행한다**(`role: LEADER`, #183) —
-`challenge.created`와 같은 트랜잭션 · 같은 `occurredAt`으로, created 다음에 적재한다.
+챌린지 저장과 같은 트랜잭션에서 적재한다.
 
 | 항목 | 내용 |
 |------|------|
@@ -329,7 +305,7 @@ NotificationService도 구독하지 않는다. 발송 직전 gRPC CheckNotificat
 
 ---
 
-### 6. `challenge.member.left`
+### 5. `challenge.member.left`
 
 사용자가 챌린지를 탈퇴하거나 추방되었을 때 발행한다.
 
@@ -367,7 +343,7 @@ NotificationService도 구독하지 않는다. 발송 직전 gRPC CheckNotificat
 
 ---
 
-### 7. `challenge.ended`
+### 6. `challenge.ended`
 
 챌린지가 ACTIVE → ENDED로 전이됐을 때 발행한다 — 종료일이 지나 스케줄러가 전이할 때(ADR-0033), **`ACTIVE`에서 마지막 멤버가 나가 끝날 때**.
 
@@ -410,7 +386,7 @@ NotificationService도 구독하지 않는다. 발송 직전 gRPC CheckNotificat
 
 ---
 
-### 8. `chat.message.created`
+### 7. `chat.message.created`
 
 채팅 메시지가 PostgreSQL에 저장되었을 때 발행한다.
 ChatService 멀티 인스턴스 간 WebSocket 브로드캐스트 용도. (ADR-0016)

@@ -85,6 +85,7 @@ class ChallengeCreationServiceTest {
                 LocalDate.of(2026, 6, 24),
                 "아침 러닝 30분",
                 "DAILY",
+                null,
                 null
         );
     }

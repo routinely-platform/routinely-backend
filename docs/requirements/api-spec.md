@@ -363,13 +363,24 @@ public class ApiResponse<T> {
   "startedAt": "2025-02-01",
   "endedAt": "2025-03-02",
   "routineTitle": "아침 운동 30분",
-  "scheduleType": "DAILY",
+  "scheduleType": "SPECIFIC_DAYS",
+  "daysOfWeek": ["MON", "WED", "FRI"],
   "targetCount": null
 }
 ```
 
-> 루틴 정보(`routineTitle`, `scheduleType`, `targetCount`)도 함께 입력한다. challenge-service는 저장하지 않고 `challenge.created` 이벤트로 전달한다 (#132).
-> **챌린지는 요일 지정형(`SPECIFIC_DAYS`)을 쓸 수 없다** — `scheduleType`: `DAILY`(매일) \| `WEEKLY_COUNT`(주 N회) \| `MONTHLY_COUNT`(월 N회). `targetCount`는 `WEEKLY_COUNT`/`MONTHLY_COUNT`일 때만 1 이상으로 필수이며, `DAILY`에서는 `null`이다. 멤버 생활 패턴이 달라 특정 요일 강제가 부적절하기 때문 (ADR-0035, ADR-0039).
+> 루틴 정의(`routineTitle`, `scheduleType`, `daysOfWeek`, `targetCount`)도 함께 입력한다. **challenge-service가 `challenges`에 저장하고**
+> 챌린지가 시작될 때 `challenge.started` 이벤트로 routine-service에 전달한다 (ADR-0044, #167). 카테고리는 챌린지의 `categoryCode`를 그대로 쓴다.
+>
+> | `scheduleType` | `daysOfWeek` | `targetCount` |
+> |---|---|---|
+> | `DAILY`(매일) | `null` | `null` |
+> | `SPECIFIC_DAYS`(요일 지정) | MON~SUN 코드 1개 이상 | `null` |
+> | `WEEKLY_COUNT`(주 N회) | `null` | **1~6** |
+> | `MONTHLY_COUNT`(월 N회) | `null` | **1~28** |
+>
+> 어긋나면 `400 VALIDATION_FAILED`. `challenges.ck_challenges_schedule`(routine-service `ck_rt_schedule`과 같은 규칙)을 요청 계층에서 미러링한다.
+> 시작 전 참여가 사전 동의이므로 챌린지도 `SPECIFIC_DAYS`를 쓸 수 있다 (ADR-0039 §2.3, 2026-08-29 개정).
 > 선호 수행 시각은 챌린지 생성 시 입력받지 않는다. 챌린지 루틴은 모든 멤버에게 동일하지만(ADR-0026), 알림 시각은 개인 일과에 종속되므로 멤버 각자가 본인 `routines` 인스턴스에서 설정한다 (ADR-0035).
 
 **Response** `201`
@@ -382,6 +393,10 @@ public class ApiResponse<T> {
     "title": "30일 아침 운동 챌린지",
     "description": "매일 아침 운동하기",
     "categoryCode": "EXERCISE",
+    "routineTitle": "아침 운동 30분",
+    "scheduleType": "SPECIFIC_DAYS",
+    "daysOfWeek": ["MON", "WED", "FRI"],
+    "targetCount": null,
     "isPublic": true,
     "inviteCode": null,
     "maxMembers": 10,
@@ -415,6 +430,10 @@ public class ApiResponse<T> {
         "title": "30일 아침 운동 챌린지",
         "description": "매일 아침 운동하기",
         "categoryCode": "EXERCISE",
+        "routineTitle": "아침 운동 30분",
+        "scheduleType": "WEEKLY_COUNT",
+        "daysOfWeek": null,
+        "targetCount": 3,
         "status": "WAITING",
         "currentMembers": 5,
         "maxMembers": 10,
@@ -454,6 +473,10 @@ public class ApiResponse<T> {
     "title": "30일 아침 운동 챌린지",
     "description": "매일 아침 운동하기",
     "categoryCode": "EXERCISE",
+    "routineTitle": "아침 운동 30분",
+    "scheduleType": "DAILY",
+    "daysOfWeek": null,
+    "targetCount": null,
     "isPublic": true,
     "inviteCode": null,
     "maxMembers": 10,
@@ -489,11 +512,11 @@ public class ApiResponse<T> {
 - 비공개→공개 전환 시 기존 `inviteCode` 유지 (다시 비공개 전환 시 재사용).
 - 공개→비공개 전환 시 `inviteCode`가 없으면 자동 생성.
 
-**그 외 필드 수정 정책** (`title`, `description`, `maxMembers`, `startedAt`, `endedAt`)
+**그 외 필드 수정 정책** (`title`, `description`, `maxMembers`, `startedAt`, `endedAt`, `routineTitle`)
 - `WAITING` 상태인 챌린지만 수정 가능하다.
-  - **방장 혼자 (1명)**: 위 필드 모두 수정 가능.
-  - **멤버 2명 이상**: `description`과 `maxMembers` 증가만 허용. 나머지 변경 시 `400` 반환.
-  - **항상 변경 불가**: `categoryCode`, `scheduleType`, `targetCount`, `creatorUserId`.
+  - **방장 혼자 (1명)**: 위 필드 모두 수정 가능. `routineTitle`은 `challenges`를 로컬 UPDATE한다 (#167).
+  - **멤버 2명 이상**: `description`과 `maxMembers` 증가만 허용. 나머지(`routineTitle` 포함) 변경 시 `400` 반환.
+  - **항상 변경 불가**: `categoryCode`, `scheduleType`, `daysOfWeek`, `targetCount`, `creatorUserId` — 요청 필드 자체가 없다.
 - 날짜 제약:
   - `startedAt`은 오늘 이후로만 변경 가능하며, 반드시 `endedAt`보다 빨라야 한다.
   - `endedAt`은 `startedAt` 이후로만 변경 가능하다.
@@ -756,8 +779,7 @@ public class ApiResponse<T> {
 }
 ```
 
-> 개인 루틴 생성 시 `challengeId` 없이 요청한다.  
-> 챌린지 루틴은 `challenge.created` 이벤트를 받은 routine-service가 내부적으로 생성한다 (클라이언트 직접 호출 아님).  
+> 템플릿은 **사용자가 저장한 틀 전용**이다. 챌린지 루틴 정의는 challenge-service가 소유하고 템플릿을 만들지 않는다 (ADR-0044, #167).  
 > 선호 수행 시각(`preferredTime`)·선호 요일(`preferredDays`)은 템플릿(정의)이 아니라 루틴 인스턴스 속성이다. 시각은 `POST /api/v1/routines` 또는 `PATCH /api/v1/routines/{routineId}`에서, 선호 요일은 `PATCH`에서 설정한다 (ADR-0035, ADR-0039).  
 > **`scheduleType` (ADR-0039)**:  
 > - `DAILY`(매일) — `daysOfWeek`/`targetCount` 모두 생략  
@@ -775,8 +797,7 @@ public class ApiResponse<T> {
     "categoryCode": "EXERCISE",
     "scheduleType": "SPECIFIC_DAYS",
     "daysOfWeek": ["MON", "WED", "FRI"],
-    "targetCount": null,
-    "challengeId": null
+    "targetCount": null
   }
 }
 ```
@@ -790,7 +811,7 @@ public class ApiResponse<T> {
 - Auth: ✅
 - Query: `categoryCode` (선택)
 
-> **개인 템플릿만** 반환한다 (`challengeId` NULL, 미삭제). 챌린지 연결 템플릿은 챌린지/피드 맥락에서 노출한다.  
+> 본인의 미삭제 템플릿을 반환한다.  
 > 정렬: 최신 생성 순 (id 내림차순).
 
 **Response** `200`
@@ -805,8 +826,7 @@ public class ApiResponse<T> {
       "categoryCode": "READING",
       "scheduleType": "WEEKLY_COUNT",
       "daysOfWeek": null,
-      "targetCount": 3,
-      "challengeId": null
+      "targetCount": 3
     },
     {
       "templateId": 1,
@@ -814,8 +834,7 @@ public class ApiResponse<T> {
       "categoryCode": "EXERCISE",
       "scheduleType": "DAILY",
       "daysOfWeek": null,
-      "targetCount": null,
-      "challengeId": null
+      "targetCount": null
     }
   ]
 }
@@ -824,9 +843,7 @@ public class ApiResponse<T> {
 ---
 
 #### `GET /api/v1/routine-templates/{templateId}` — 루틴 템플릿 상세
-- Auth: ✅ (소유자만, 개인 템플릿만)
-
-> 챌린지 연결 템플릿(`challengeId` NOT NULL)은 소유자여도 이 API로 조회할 수 없다. 챌린지 루틴은 챌린지/피드 맥락에서 노출한다.
+- Auth: ✅ (소유자만)
 
 **Response** `200`
 ```json
@@ -839,20 +856,19 @@ public class ApiResponse<T> {
     "categoryCode": "EXERCISE",
     "scheduleType": "DAILY",
     "daysOfWeek": null,
-    "targetCount": null,
-    "challengeId": null
+    "targetCount": null
   }
 }
 ```
 
 **Error**
 - `404 ROUTINE_TEMPLATE_NOT_FOUND` — 없거나 삭제된 템플릿
-- `403 FORBIDDEN` — 소유자가 아님 / 챌린지 연결 템플릿
+- `403 FORBIDDEN` — 소유자가 아님
 
 ---
 
 #### `PATCH /api/v1/routine-templates/{templateId}` — 루틴 템플릿 수정
-- Auth: ✅ (소유자만, 개인 템플릿만)
+- Auth: ✅ (소유자만)
 
 **Request** (부분 수정 — 보낸 필드만 변경)
 ```json
@@ -865,8 +881,7 @@ public class ApiResponse<T> {
 ```
 
 > 템플릿은 루틴의 정의(`title`, `categoryCode`, `scheduleType`, `daysOfWeek`, `targetCount`)만 수정한다. 선호 수행 시각·요일은 `PATCH /api/v1/routines/{routineId}`에서 수정한다 (ADR-0035, ADR-0039).  
-> 스케줄은 항상 한 묶음으로 수정한다 — `daysOfWeek`/`targetCount`는 `scheduleType`과 함께만 보낼 수 있고, 유형별 정합성(`SPECIFIC_DAYS`→`daysOfWeek`, `WEEKLY_COUNT`/`MONTHLY_COUNT`→`targetCount`, `DAILY`→둘 다 없음)을 지켜야 한다 (`ck_rt_schedule` 제약 미러링).  
-> 챌린지 연결 템플릿(`challengeId` NOT NULL)은 이 API로 수정할 수 없다.
+> 스케줄은 항상 한 묶음으로 수정한다 — `daysOfWeek`/`targetCount`는 `scheduleType`과 함께만 보낼 수 있고, 유형별 정합성(`SPECIFIC_DAYS`→`daysOfWeek`, `WEEKLY_COUNT`/`MONTHLY_COUNT`→`targetCount`, `DAILY`→둘 다 없음)을 지켜야 한다 (`ck_rt_schedule` 제약 미러링).
 
 **Response** `200` — 수정 후 전체 템플릿 반환
 ```json
@@ -879,23 +894,22 @@ public class ApiResponse<T> {
     "categoryCode": "EXERCISE",
     "scheduleType": "WEEKLY_COUNT",
     "daysOfWeek": null,
-    "targetCount": 3,
-    "challengeId": null
+    "targetCount": 3
   }
 }
 ```
 
 **Error**
 - `400 VALIDATION_FAILED` — 수정 필드 없음 / 유효하지 않은 카테고리 코드 / 스케줄 정합성 위반
-- `403 FORBIDDEN` — 소유자가 아님 / 챌린지 연결 템플릿
+- `403 FORBIDDEN` — 소유자가 아님
 - `404 ROUTINE_TEMPLATE_NOT_FOUND` — 없거나 삭제된 템플릿
 
 ---
 
 #### `DELETE /api/v1/routine-templates/{templateId}` — 루틴 템플릿 삭제 (소프트)
-- Auth: ✅ (소유자만, 개인 템플릿만)
+- Auth: ✅ (소유자만)
 
-> 물리 삭제하지 않고 `is_deleted = true` + `deleted_at`만 기록한다. 챌린지 연결 템플릿은 삭제할 수 없다.
+> 물리 삭제하지 않고 `is_deleted = true` + `deleted_at`만 기록한다.
 
 **Response** `200`
 ```json
@@ -907,7 +921,7 @@ public class ApiResponse<T> {
 ```
 
 **Error**
-- `403 FORBIDDEN` — 소유자가 아님 / 챌린지 연결 템플릿
+- `403 FORBIDDEN` — 소유자가 아님
 - `404 ROUTINE_TEMPLATE_NOT_FOUND` — 없거나 이미 삭제된 템플릿
 
 > 구현 이슈: #55

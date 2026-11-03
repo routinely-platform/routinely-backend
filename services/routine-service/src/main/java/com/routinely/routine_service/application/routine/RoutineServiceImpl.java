@@ -11,7 +11,7 @@ import com.routinely.routine_service.domain.routine.Routine;
 import com.routinely.routine_service.domain.routine.RoutineRepository;
 import com.routinely.routine_service.domain.template.RoutineTemplate;
 import com.routinely.routine_service.domain.template.RoutineTemplateRepository;
-import com.routinely.routine_service.domain.template.ScheduleType;
+import com.routinely.core.schedule.ScheduleType;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -164,9 +164,6 @@ public class RoutineServiceImpl implements RoutineService {
 
         if (!template.getUserId().equals(userId)) {
             throw new BusinessException(FORBIDDEN, "본인의 루틴 템플릿으로만 루틴을 시작할 수 있습니다.");
-        }
-        if (template.isChallengeLinked()) {
-            throw new BusinessException(FORBIDDEN, "챌린지 루틴은 챌린지 시작 시 자동으로 생성됩니다.");
         }
         return template;
     }

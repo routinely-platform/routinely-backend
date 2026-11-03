@@ -10,6 +10,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -54,6 +55,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(30),
                 "아침 러닝 30분",
                 "DAILY",
+                null,
                 null
         );
 
@@ -79,6 +81,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(30),
                 "아침 러닝 30분",
                 "DAILY",
+                null,
                 null
         );
 
@@ -104,6 +107,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(30),
                 "아침 러닝 30분",
                 "DAILY",
+                null,
                 null
         );
 
@@ -129,6 +133,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(30),
                 "아침 러닝 30분",
                 "DAILY",
+                null,
                 null
         );
 
@@ -154,6 +159,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(30),
                 "아침 러닝 30분",
                 "DAILY",
+                null,
                 null
         );
 
@@ -175,6 +181,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(30),
                 "아침 러닝 30분",
                 "DAILY",
+                null,
                 null
         );
 
@@ -200,6 +207,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(30),
                 "아침 러닝 30분",
                 "DAILY",
+                null,
                 null
         );
 
@@ -225,6 +233,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(30),
                 "아침 러닝 30분",
                 "DAILY",
+                null,
                 null
         );
 
@@ -251,6 +260,7 @@ class CreateChallengeRequestTest {
                 startedAt.minusDays(1),
                 "아침 러닝 30분",
                 "DAILY",
+                null,
                 null
         );
 
@@ -274,6 +284,7 @@ class CreateChallengeRequestTest {
                 startedAt.plusDays(99),  // 시작일 포함 100일
                 "아침 러닝 30분",
                 "DAILY",
+                null,
                 null
         );
 
@@ -296,6 +307,7 @@ class CreateChallengeRequestTest {
                 startedAt.plusDays(100),  // 시작일 포함 101일
                 "아침 러닝 30분",
                 "DAILY",
+                null,
                 null
         );
 
@@ -321,6 +333,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(30),
                 "   ",
                 "DAILY",
+                null,
                 null
         );
 
@@ -346,6 +359,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(30),
                 "아침 러닝 30분",
                 "   ",
+                null,
                 null
         );
 
@@ -371,6 +385,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(30),
                 "아침 러닝 30분",
                 "INVALID_TYPE",
+                null,
                 null
         );
 
@@ -384,28 +399,73 @@ class CreateChallengeRequestTest {
     }
 
     @Test
-    @DisplayName("챌린지는_요일지정유형(SPECIFIC_DAYS)을_사용할수없다")
-    void validate_whenSpecificDays_fails() {
-        CreateChallengeRequest request = new CreateChallengeRequest(
-                "30일 러닝 챌린지",
-                "매일 달리기",
-                true,
-                10,
-                "EXERCISE",
-                LocalDate.now().plusDays(1),
-                LocalDate.now().plusDays(30),
-                "아침 러닝 30분",
-                "SPECIFIC_DAYS",
-                null
-        );
+    @DisplayName("요일지정유형(SPECIFIC_DAYS)에요일이있으면_검증에성공한다")
+    void validate_whenSpecificDaysWithDays_succeeds() {
+        CreateChallengeRequest request = scheduleRequest("SPECIFIC_DAYS", List.of("MON", "WED", "FRI"), null);
 
-        Set<ConstraintViolation<CreateChallengeRequest>> violations = validator.validate(request);
+        assertThat(validator.validate(request)).isEmpty();
+        assertThat(request.toCommand().daysOfWeek()).isEqualTo((short) 21);
+    }
 
-        assertThat(violations)
-                .anySatisfy(violation -> {
-                    assertThat(violation.getPropertyPath()).hasToString("scheduleType");
-                    assertThat(violation.getMessage()).isEqualTo("올바르지 않은 반복 유형입니다.");
-                });
+    @Test
+    @DisplayName("SPECIFIC_DAYS인데요일이없으면_검증에실패한다")
+    void validate_whenSpecificDaysWithoutDays_fails() {
+        CreateChallengeRequest request = scheduleRequest("SPECIFIC_DAYS", null, null);
+
+        assertThat(validator.validate(request))
+                .anySatisfy(violation -> assertThat(violation.getPropertyPath()).hasToString("daysOfWeekValid"));
+    }
+
+    @Test
+    @DisplayName("SPECIFIC_DAYS인데요일이0개이면_검증에실패한다")
+    void validate_whenSpecificDaysWithEmptyDays_fails() {
+        CreateChallengeRequest request = scheduleRequest("SPECIFIC_DAYS", List.of(), null);
+
+        assertThat(validator.validate(request))
+                .anySatisfy(violation -> assertThat(violation.getPropertyPath()).hasToString("daysOfWeekValid"));
+    }
+
+    @Test
+    @DisplayName("SPECIFIC_DAYS에잘못된요일코드가있으면_검증에실패한다")
+    void validate_whenSpecificDaysWithInvalidCode_fails() {
+        CreateChallengeRequest request = scheduleRequest("SPECIFIC_DAYS", List.of("MON", "FUNDAY"), null);
+
+        assertThat(validator.validate(request))
+                .anySatisfy(violation -> assertThat(violation.getPropertyPath()).hasToString("daysOfWeekValid"));
+    }
+
+    @Test
+    @DisplayName("DAILY인데요일이있으면_검증에실패한다")
+    void validate_whenDailyWithDays_fails() {
+        CreateChallengeRequest request = scheduleRequest("DAILY", List.of("MON"), null);
+
+        assertThat(validator.validate(request))
+                .anySatisfy(violation -> assertThat(violation.getPropertyPath()).hasToString("daysOfWeekValid"));
+    }
+
+    @Test
+    @DisplayName("SPECIFIC_DAYS에목표횟수가있으면_검증에실패한다")
+    void validate_whenSpecificDaysWithTargetCount_fails() {
+        CreateChallengeRequest request = scheduleRequest("SPECIFIC_DAYS", List.of("MON"), 3);
+
+        assertThat(validator.validate(request))
+                .anySatisfy(violation -> assertThat(violation.getPropertyPath()).hasToString("targetCountValid"));
+    }
+
+    @Test
+    @DisplayName("주6회와월28회는_검증에성공한다")
+    void validate_whenTargetCountAtUpperBound_succeeds() {
+        assertThat(validator.validate(scheduleRequest("WEEKLY_COUNT", null, 6))).isEmpty();
+        assertThat(validator.validate(scheduleRequest("MONTHLY_COUNT", null, 28))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("주7회와월29회는_검증에실패한다")
+    void validate_whenTargetCountOverUpperBound_fails() {
+        assertThat(validator.validate(scheduleRequest("WEEKLY_COUNT", null, 7)))
+                .anySatisfy(violation -> assertThat(violation.getPropertyPath()).hasToString("targetCountWithinLimit"));
+        assertThat(validator.validate(scheduleRequest("MONTHLY_COUNT", null, 29)))
+                .anySatisfy(violation -> assertThat(violation.getPropertyPath()).hasToString("targetCountWithinLimit"));
     }
 
     @Test
@@ -421,6 +481,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(30),
                 "아침 러닝 30분",
                 "WEEKLY_COUNT",
+                null,
                 null
         );
 
@@ -447,6 +508,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(30),
                 "아침 러닝 30분",
                 "MONTHLY_COUNT",
+                null,
                 3
         );
 
@@ -468,6 +530,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(30),
                 "아침 러닝 30분",
                 "WEEKLY_COUNT",
+                null,
                 0
         );
 
@@ -493,6 +556,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(30),
                 "아침 러닝 30분",
                 "DAILY",
+                null,
                 3
         );
 
@@ -500,6 +564,22 @@ class CreateChallengeRequestTest {
 
         assertThat(violations)
                 .anySatisfy(violation -> assertThat(violation.getPropertyPath()).hasToString("targetCountValid"));
+    }
+
+    private CreateChallengeRequest scheduleRequest(String scheduleType, List<String> daysOfWeek, Integer targetCount) {
+        return new CreateChallengeRequest(
+                "30일 러닝 챌린지",
+                "매일 달리기",
+                true,
+                10,
+                "EXERCISE",
+                LocalDate.now().plusDays(1),
+                LocalDate.now().plusDays(30),
+                "아침 러닝 30분",
+                scheduleType,
+                daysOfWeek,
+                targetCount
+        );
     }
 
     private CreateChallengeRequest validRequest() {
@@ -513,6 +593,7 @@ class CreateChallengeRequestTest {
                 LocalDate.now().plusDays(30),
                 "아침 러닝 30분",
                 "DAILY",
+                null,
                 null
         );
     }

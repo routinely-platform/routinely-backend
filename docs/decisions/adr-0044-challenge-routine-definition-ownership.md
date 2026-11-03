@@ -9,6 +9,12 @@ Accepted (2026-08-24)
 
 **개정** — [ADR-0032](adr-0032-challenge-start-routine-creation.md) §7 이벤트 페이로드
 
+> **2026-10-29 개정 (#167 구현)** — 2026-08-29 규약 변경([ADR-0039](adr-0039-repeat-schedule-model.md) §2.3 개정)으로
+> 챌린지 루틴도 `SPECIFIC_DAYS`를 쓸 수 있게 되어 `days_of_week` 컬럼을 추가한다(§2 · §6.1).
+> `challenge.started` 페이로드에 `daysOfWeek` · `members[].joinedAt` · `leaderUserId`를 더한다(§6.2).
+> 기존 행 백필은 하지 않는다 — 배포된 운영 데이터가 없어 처음부터 NOT NULL로 만든다.
+> 원래 이 ADR은 요일 금지의 근거를 ADR-0036으로 적었으나 실제 출처는 ADR-0039 §2.3이었다 — 함께 바로잡는다.
+
 ---
 
 ## 1. Context
@@ -77,13 +83,16 @@ ADR-0034는 *"`challenge.started` 페이로드가 `routineTemplateId`를 포함�
 
 **챌린지의 루틴 정의는 challenge-service가 소유한다.**
 
-1. `challenges`에 정의 컬럼을 둔다 — `routine_title` · `schedule_type` · `target_count`
+1. `challenges`에 정의 컬럼을 둔다 — `routine_title` · `schedule_type` · `days_of_week` · `target_count`
 2. `challenge.started` 이벤트 페이로드에 **정의를 실어** 보낸다
 3. routine-service는 그 페이로드만으로 멤버별 루틴을 만든다 — **추가 조회 없음**
 4. **챌린지 템플릿을 만들지 않는다.** `challenge.created` → 템플릿 생성 흐름을 제거한다
 5. `routine_templates`는 **사용자가 저장한 틀 전용** 테이블이 된다 — `challenge_id` 컬럼과 `uq_rt_challenge_id` 제거
 
-`days_of_week`는 두지 않는다 — 챌린지 루틴은 `SPECIFIC_DAYS`를 쓸 수 없다(ADR-0036).
+`days_of_week`는 `SPECIFIC_DAYS` 전용이다 — 챌린지 루틴도 요일 지정을 쓸 수 있다(ADR-0039 §2.3, 2026-08-29 개정).
+카테고리는 따로 두지 않는다 — `challenges.category_code`가 루틴 카테고리를 겸한다.
+
+> 개정 전(2026-08-24): *"`days_of_week`는 두지 않는다 — 챌린지 루틴은 `SPECIFIC_DAYS`를 쓸 수 없다(ADR-0036)."*
 
 ---
 
@@ -134,7 +143,7 @@ ADR-0032 §7은 이렇게 적었다.
 |---|---|
 | `#132`·`#133` 되돌리기 | `challenge.created` Outbox 발행과 소비(템플릿 생성). 이미 머지됨 |
 | 스케줄 검증 중복 | 두 서비스가 `WEEKLY_COUNT`면 `targetCount` 필수 같은 규칙을 각자 갖는다 (§3.4 — 이미 중복) |
-| 이벤트 페이로드 증가 | `challenge.started`에 3필드 추가. 멤버 상한이 20명이라 부담 없다 |
+| 이벤트 페이로드 증가 | `challenge.started`에 정의 5필드 · `members` · `leaderUserId` 추가. 멤버 상한이 20명이라 부담 없다 |
 
 | 얻는 것 | |
 |---|---|
@@ -146,7 +155,7 @@ ADR-0032 §7은 이렇게 적었다.
 
 ## 5. 확장 여지 — 챌린지 루틴 복수화
 
-**현재는 챌린지당 루틴이 하나다**(ADR-0036). 그래서 `challenges`에 3컬럼을 직접 둔다.
+**현재는 챌린지당 루틴이 하나다**(ADR-0036). 그래서 `challenges`에 4컬럼을 직접 둔다.
 
 복수 루틴이 필요해지면 **challenge-service 내부에 `challenge_routine_definitions` 테이블로 분리**한다.
 서비스 경계는 그대로이므로 이 결정은 유지되고, 저장 형태만 바뀐다.
@@ -161,19 +170,23 @@ ADR-0032 §7은 이렇게 적었다.
 ### 6.1 스키마
 
 ```sql
-ALTER TABLE challenges ADD COLUMN routine_title VARCHAR(100);
-ALTER TABLE challenges ADD COLUMN schedule_type VARCHAR(20);
-ALTER TABLE challenges ADD COLUMN target_count  INT NULL;
--- 기존 행은 routine-service의 챌린지 템플릿에서 백필한 뒤 NOT NULL 전환
--- ck_challenges_schedule — routine_templates.ck_rt_schedule을 미러링하되
---   SPECIFIC_DAYS는 허용하지 않는다 (ADR-0036)
+-- challenge-service V6
+ALTER TABLE challenges ADD COLUMN routine_title VARCHAR(100) NOT NULL;
+ALTER TABLE challenges ADD COLUMN schedule_type VARCHAR(20)  NOT NULL;
+ALTER TABLE challenges ADD COLUMN days_of_week  SMALLINT     NULL;
+ALTER TABLE challenges ADD COLUMN target_count  INT          NULL;
+-- 백필 없음 — 배포된 운영 데이터가 없다. 로컬 DB는 볼륨을 비우고 다시 만든다
+-- ck_challenges_schedule — routine_templates.ck_rt_schedule을 글자 그대로 미러링한다
+--   (SPECIFIC_DAYS 1~127 · WEEKLY_COUNT 1~6 · MONTHLY_COUNT 1~28)
 
+-- routine-service V7
 ALTER TABLE routine_templates DROP CONSTRAINT uq_rt_challenge_id;
 ALTER TABLE routine_templates DROP COLUMN challenge_id;
 ```
 
-> ⚠️ `ck_challenges_schedule`과 `ck_rt_schedule`은 **짝이다.** 한쪽을 고치면 다른 쪽도 본다 —
-> 컴파일러가 잡지 못하는 결합이다.
+> ⚠️ `ck_challenges_schedule` · `ck_rt_schedule` · `ck_routines_schedule`은 **짝이다.** 한쪽을 고치면 셋을 본다 —
+> 컴파일러가 잡지 못하는 결합이다. 코드 대응물은 `ChallengeRoutineDefinition` · `RoutineDefinition`이고,
+> 두 서비스의 CHECK 판정 테스트가 같은 입력 목록으로 이 결합을 고정한다.
 
 ### 6.2 이벤트
 
@@ -183,15 +196,22 @@ ALTER TABLE routine_templates DROP COLUMN challenge_id;
 {
   "eventId": "...", "occurredAt": "...",
   "challengeId": 10,
+  "challengeName": "3월 러닝",
   "startedAt": "2026-03-01",
   "endedAt": "2026-03-31",
   "routineTitle": "아침 러닝 3km",
   "categoryCode": "EXERCISE",
-  "scheduleType": "DAILY",
+  "scheduleType": "SPECIFIC_DAYS",
+  "daysOfWeek": ["MON", "WED", "FRI"],
   "targetCount": null,
-  "members": [ { "userId": 1 }, { "userId": 2 } ]
+  "leaderUserId": 1,
+  "members": [ { "userId": 1, "joinedAt": "2026-02-20" }, { "userId": 2, "joinedAt": "2026-02-25" } ]
 }
 ```
+
+- `members`는 **시작 시점 `ACTIVE` 멤버만** 싣는다. `joinedAt`은 참여일(`yyyy-MM-dd`)이다
+- `daysOfWeek`는 API와 같은 코드 리스트다. `SPECIFIC_DAYS`가 아니면 `null`
+- `leaderUserId`는 채팅방 `OWNER`를 정하는 데 쓴다(ADR-0046)
 
 - `routineTemplateId` **제거**
 - routine-service는 이 페이로드만으로 멤버별 `routines`를 만든다.
@@ -217,6 +237,7 @@ ALTER TABLE routine_templates DROP COLUMN challenge_id;
 |---|---|
 | ADR-0040 | 루틴 인스턴스 독립 — 이 결정의 출발점 |
 | ADR-0036 | 챌린지 루틴 고정 — 정의가 챌린지의 불변 속성인 근거 |
+| ADR-0039 | 반복 스케줄 — §2.3 개정(2026-08-29)으로 챌린지도 `SPECIFIC_DAYS` 허용 |
 | ADR-0032 | 챌린지 시작 시 루틴 생성 — §7 페이로드가 개정된다 |
 | ADR-0034 | **Superseded** — 템플릿 생성 자체가 없어진다 |
 | ADR-0037 | **Superseded** — `routine_templates.challenge_id`가 없어진다 |
