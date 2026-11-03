@@ -77,6 +77,7 @@ public class ChallengeStatusTransitionScheduler {
     }
 
     private void endChallenges(LocalDate today) {
+        // 대상 행을 잠가 이미지 변경과 줄 세운다 — 커밋 때 전체 컬럼 UPDATE가 그사이 바뀐 이미지를 되돌리지 않는다.
         List<Challenge> targets = challengeRepository.findActiveToEnd(today);
         for (Challenge challenge : targets) {
             challenge.end();

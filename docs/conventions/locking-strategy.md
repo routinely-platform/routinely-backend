@@ -18,7 +18,11 @@ challenge-service에서 사용하는 세 가지 락 기법과 각각의 적용 �
 
 ```
 ChallengeRepository.findByIdForUpdate()
-  └── ChallengeService.joinChallenge()
+  ├── ChallengeService.joinChallenge() · leaveChallenge() · updateChallenge()
+  └── ChallengeImageWriter.changeImage() · removeImage()
+
+ChallengeRepository.findWaitingToActivate() · findActiveToEnd()
+  └── ChallengeStatusTransitionScheduler
 ```
 
 ### 코드 패턴
@@ -50,8 +54,18 @@ public ChallengeMemberResult joinChallenge(Long challengeId, Long userId) {
 | 배치성 일괄 처리 (스케줄러) — 중복 실행 방지 | ❌ (분산 락 사용) |
 | 스케줄러가 요청과 같은 행을 두고 경쟁 (시작 전이의 멤버 스냅샷) | ✅ (분산 락과 별개) |
 
-> 챌린지 행 락은 **참여 · 탈퇴 · 수정 · 시작 전이**를 한 줄로 세운다. ShedLock은 스케줄러끼리만 막고 HTTP 요청은 막지 못한다.
-> 네 경로 중 하나라도 일반 조회로 읽으면 멤버 수 검사나 `challenge.started`의 `members`가 어긋난다. (#167)
+> **챌린지 행을 바꾸는 쓰기는 전부 행 락으로 읽는다** — 참여 · 탈퇴 · 수정 · 이미지 변경 · 시작 전이 · 종료 전이.
+> ShedLock은 스케줄러끼리만 막고 HTTP 요청은 막지 못한다. (#167)
+>
+> 한 경로라도 일반 조회로 읽으면 두 가지가 깨진다.
+>
+> - **check-then-act**: 멤버 수 검사나 `challenge.started`의 `members`가 그사이 바뀐 구성원을 놓친다
+> - **lost update**: `Challenge`에는 `@DynamicUpdate`가 없어 커밋 때 **모든 컬럼**을 UPDATE한다.
+>   이미지 변경이 읽은 뒤 시작 전이가 커밋되면, 이미지 변경의 커밋이 `status`를 `WAITING`으로 되돌린다.
+>   다음 날 다시 시작하려다 `challenge.started:{id}` 멱등 키에 막혀 그날 전이 트랜잭션 전체가 롤백된다
+>
+> 락을 잡은 트랜잭션 안에서 외부 I/O를 하지 않는다. 이미지 업로드는 S3 전송을 트랜잭션 밖에서 마친 뒤
+> `ChallengeImageWriter`의 짧은 트랜잭션으로 DB만 반영한다 — 전송 동안 락을 잡으면 참여와 전이가 함께 기다린다.
 
 ---
 
@@ -169,9 +183,11 @@ DB는 모든 인스턴스가 공유하는 단 하나의 저장소이므로,
 
 챌린지 상태 전이 스케줄러 (transitionChallengeStatus)
   └── "오늘 전이 대상 전체"를 조회해 일괄 처리
-       └── 잠글 특정 row가 없음
-            → 인스턴스 N개가 동시에 "전체 조회 → 전체 처리" 실행
-            → ShedLock으로 실행 자체를 1개 인스턴스로 제한
+       ├── 인스턴스 N개가 동시에 "전체 조회 → 전체 처리" 실행
+       │    → 행 락만으로는 두 번째 인스턴스가 기다렸다가 같은 일을 다시 시도한다
+       │    → ShedLock으로 실행 자체를 1개 인스턴스로 제한
+       └── 같은 행을 두고 HTTP 요청과 경쟁 (참여 · 탈퇴 · 수정 · 이미지 변경)
+            → 대상 조회를 SELECT FOR UPDATE로 해서 요청과 줄 세운다 (§1)
 ```
 
 | | 비관적 락 | 분산 락 (ShedLock) |
@@ -180,7 +196,7 @@ DB는 모든 인스턴스가 공유하는 단 하나의 저장소이므로,
 | 잠금 대상 | **특정 row** | **메서드 실행 단위 전체** |
 | 자동 해제 | 트랜잭션 커밋/롤백 시 | `lockAtMostFor` 만료 시 |
 | 챌린지 참여 | ✅ 잠글 row가 명확 | 불필요 (추가 Redis 왕복만 발생) |
-| 스케줄러 | ❌ 잠글 row가 없음 | ✅ 실행 자체를 막아야 함 |
+| 스케줄러 | ✅ 요청과 같은 행을 두고 경쟁 | ✅ 실행 자체를 막아야 함 |
 
 > 챌린지 참여에 Redis 분산 락을 쓰면 오히려 단점이 생긴다.
 > 매 참여 요청마다 Redis 왕복이 추가되고, 락 이름을 `challenge:{id}` 형태로 동적 관리해야 하며,
@@ -194,6 +210,7 @@ DB는 모든 인스턴스가 공유하는 단 하나의 저장소이므로,
 | 상황 | 사용할 기법 |
 |---|---|
 | HTTP 요청 — 동시 사용자 간 단일 row 경쟁 | 비관적 락 (`SELECT FOR UPDATE`) |
+| 스케줄러 — 요청과 같은 row 경쟁 | 비관적 락 (대상 조회를 `SELECT FOR UPDATE`) |
 | 스케줄러 — 멀티 인스턴스 중복 실행 | 분산 락 (ShedLock + Redis) |
 | Outbox — 이벤트 중복 발행 방지 | 멱등성 키 (DB UNIQUE 제약) |
 

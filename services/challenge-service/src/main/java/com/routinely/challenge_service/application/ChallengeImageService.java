@@ -1,13 +1,7 @@
 package com.routinely.challenge_service.application;
 
 import com.routinely.challenge_service.application.dto.ChallengeImageUploadCommand;
-import com.routinely.challenge_service.domain.challenge.Challenge;
 import com.routinely.challenge_service.domain.challenge.ChallengeImage;
-import com.routinely.challenge_service.domain.challenge.ChallengeRepository;
-import com.routinely.challenge_service.domain.member.ChallengeMember;
-import com.routinely.challenge_service.domain.member.ChallengeMemberRepository;
-import com.routinely.challenge_service.domain.member.ChallengeMemberRole;
-import com.routinely.challenge_service.domain.member.MembershipStatus;
 import com.routinely.core.exception.BusinessException;
 import com.routinely.core.exception.ErrorCode;
 import com.routinely.storage.FileStorage;
@@ -15,9 +9,6 @@ import com.routinely.storage.FileUploadCommand;
 import com.routinely.storage.StoredFile;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Locale;
 import java.util.Set;
@@ -27,6 +18,10 @@ import java.util.Set;
  *
  * <p>저장은 공통 모듈 {@link FileStorage}(S3)에 위임하고, 결과 URL/ObjectKey 를 Challenge 에 반영한다.
  * 방장(leader)만 변경/삭제할 수 있으며, MIME/크기/시그니처 검증은 이 서비스 계층에서 수행한다.
+ *
+ * <p>이 클래스에는 트랜잭션이 없다. S3 전송은 트랜잭션 밖에서 하고, DB 반영만 {@link ChallengeImageWriter}가
+ * 챌린지 행을 잠근 짧은 트랜잭션으로 한다 — 전송 동안 행 락을 잡으면 참여와 상태 전이가 함께 기다린다.
+ * Writer가 반환되면 커밋된 것이므로 이전 오브젝트를 지우고, 예외면 롤백된 것이므로 새 오브젝트를 지운다.
  */
 @Slf4j
 @Service
@@ -39,25 +34,17 @@ public class ChallengeImageService {
     private static final byte[] PNG_SIGNATURE =
             {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
 
-    private final ChallengeRepository challengeRepository;
-    private final ChallengeMemberRepository challengeMemberRepository;
+    private final ChallengeImageWriter challengeImageWriter;
     private final FileStorage fileStorage;
 
-    public ChallengeImageService(ChallengeRepository challengeRepository,
-                                 ChallengeMemberRepository challengeMemberRepository,
-                                 FileStorage fileStorage) {
-        this.challengeRepository = challengeRepository;
-        this.challengeMemberRepository = challengeMemberRepository;
+    public ChallengeImageService(ChallengeImageWriter challengeImageWriter, FileStorage fileStorage) {
+        this.challengeImageWriter = challengeImageWriter;
         this.fileStorage = fileStorage;
     }
 
-    @Transactional
     public void upload(ChallengeImageUploadCommand command) {
-        Challenge challenge = getChallengeOrThrow(command.challengeId());
-        validateLeader(command.challengeId(), command.requesterUserId());
+        challengeImageWriter.checkLeader(command.challengeId(), command.requesterUserId());
         validate(command);
-
-        String previousObjectKey = challenge.getImageObjectKey();
 
         StoredFile stored = fileStorage.upload(new FileUploadCommand(
                 DIRECTORY,
@@ -66,38 +53,20 @@ public class ChallengeImageService {
                 command.size(),
                 command.inputStream()));
 
-        challenge.changeImage(ChallengeImage.of(stored.url(), stored.key()));
-
-        deleteAfterCommit(previousObjectKey);
-        deleteAfterRollback(stored.key());
+        String previousObjectKey;
+        try {
+            previousObjectKey = challengeImageWriter.changeImage(
+                    command.challengeId(), command.requesterUserId(), ChallengeImage.of(stored.url(), stored.key()));
+        } catch (RuntimeException e) {
+            deleteQuietly(stored.key());
+            throw e;
+        }
+        deleteQuietly(previousObjectKey);
     }
 
-    @Transactional
     public void delete(Long challengeId, Long requesterUserId) {
-        Challenge challenge = getChallengeOrThrow(challengeId);
-        validateLeader(challengeId, requesterUserId);
-
-        String objectKey = challenge.getImageObjectKey();
-        if (objectKey == null) {
-            return;
-        }
-        challenge.removeImage();
-        deleteAfterCommit(objectKey);
-    }
-
-    private Challenge getChallengeOrThrow(Long challengeId) {
-        return challengeRepository.findById(challengeId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.CHALLENGE_NOT_FOUND));
-    }
-
-    private void validateLeader(Long challengeId, Long requesterUserId) {
-        ChallengeMember member = challengeMemberRepository
-                .findByChallengeIdAndUserIdAndStatus(challengeId, requesterUserId, MembershipStatus.ACTIVE)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_CHALLENGE_MEMBER));
-
-        if (member.getRole() != ChallengeMemberRole.LEADER) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "챌린지 방장만 대표 이미지를 변경할 수 있습니다.");
-        }
+        String objectKey = challengeImageWriter.removeImage(challengeId, requesterUserId);
+        deleteQuietly(objectKey);
     }
 
     private void validate(ChallengeImageUploadCommand command) {
@@ -114,36 +83,6 @@ public class ChallengeImageService {
         if (!hasValidImageSignature(contentType, command.bytes())) {
             throw new BusinessException(ErrorCode.UNSUPPORTED_IMAGE_TYPE);
         }
-    }
-
-    private void deleteAfterCommit(String objectKey) {
-        if (objectKey == null) {
-            return;
-        }
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            deleteQuietly(objectKey);
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                deleteQuietly(objectKey);
-            }
-        });
-    }
-
-    private void deleteAfterRollback(String objectKey) {
-        if (objectKey == null || !TransactionSynchronizationManager.isSynchronizationActive()) {
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                if (status != STATUS_COMMITTED) {
-                    deleteQuietly(objectKey);
-                }
-            }
-        });
     }
 
     private void deleteQuietly(String objectKey) {

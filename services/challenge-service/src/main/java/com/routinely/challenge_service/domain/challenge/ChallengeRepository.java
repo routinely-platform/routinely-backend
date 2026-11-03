@@ -20,6 +20,7 @@ public interface ChallengeRepository extends JpaRepository<Challenge, Long> {
     @Query("SELECT c FROM Challenge c WHERE c.status = 'WAITING' AND c.startedAt <= :today")
     List<Challenge> findWaitingToActivate(@Param("today") LocalDate today);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT c FROM Challenge c WHERE c.status = 'ACTIVE' AND c.endedAt < :today")
     List<Challenge> findActiveToEnd(@Param("today") LocalDate today);
 }
