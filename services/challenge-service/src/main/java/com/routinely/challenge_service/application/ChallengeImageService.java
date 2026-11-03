@@ -21,7 +21,8 @@ import java.util.Set;
  *
  * <p>이 클래스에는 트랜잭션이 없다. S3 전송은 트랜잭션 밖에서 하고, DB 반영만 {@link ChallengeImageWriter}가
  * 챌린지 행을 잠근 짧은 트랜잭션으로 한다 — 전송 동안 행 락을 잡으면 참여와 상태 전이가 함께 기다린다.
- * Writer가 반환되면 커밋된 것이므로 이전 오브젝트를 지우고, 예외면 롤백된 것이므로 새 오브젝트를 지운다.
+ * Writer가 반환되면 커밋된 것이므로 이전 오브젝트를 지운다. {@link BusinessException}이면 본문에서 거부돼
+ * 롤백된 것이므로 새 오브젝트를 지운다. 그 밖의 예외는 커밋 여부를 알 수 없어 새 오브젝트를 남긴다.
  */
 @Slf4j
 @Service
@@ -57,8 +58,13 @@ public class ChallengeImageService {
         try {
             previousObjectKey = challengeImageWriter.changeImage(
                     command.challengeId(), command.requesterUserId(), ChallengeImage.of(stored.url(), stored.key()));
-        } catch (RuntimeException e) {
+        } catch (BusinessException e) {
+            // 본문 검증이 거부했다 — 확실히 롤백됐으므로 아무도 참조하지 않는 새 오브젝트를 지운다.
             deleteQuietly(stored.key());
+            throw e;
+        } catch (RuntimeException e) {
+            // 커밋 단계 예외는 DB에 반영됐는지 알 수 없다. 지우면 깨진 이미지가 남을 수 있어 고아 파일을 감수한다.
+            log.warn("챌린지 대표 이미지 반영 결과를 알 수 없어 새 오브젝트를 남깁니다 (objectKey={}).", stored.key(), e);
             throw e;
         }
         deleteQuietly(previousObjectKey);

@@ -28,6 +28,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.transaction.TransactionSystemException;
 
 @DisplayName("ChallengeImageService")
 class ChallengeImageServiceTest {
@@ -91,6 +92,20 @@ class ChallengeImageServiceTest {
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.CHALLENGE_NOT_FOUND);
         verify(fileStorage).delete(newStored().key());
         verify(fileStorage, never()).delete(OLD_KEY);
+    }
+
+    @Test
+    @DisplayName("업로드_커밋결과를알수없는예외면_새오브젝트를남긴다")
+    void upload_commitOutcomeUnknown_keepsNewObject() {
+        givenChallengeWithLeader(ChallengeImage.of("old-url", OLD_KEY));
+        when(challengeRepository.findByIdForUpdate(CHALLENGE_ID))
+                .thenThrow(new TransactionSystemException("커밋 응답 유실"));
+        when(fileStorage.upload(any(FileUploadCommand.class))).thenReturn(newStored());
+
+        ChallengeImageUploadCommand command = command("image/jpeg", 1024);
+        assertThatThrownBy(() -> service.upload(command))
+                .isInstanceOf(TransactionSystemException.class);
+        verify(fileStorage, never()).delete(any());
     }
 
     @Test
