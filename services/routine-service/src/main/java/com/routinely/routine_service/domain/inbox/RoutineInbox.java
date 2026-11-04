@@ -21,7 +21,7 @@ import java.time.LocalDateTime;
  * Inbox 패턴 — Kafka 수신 이벤트를 저장해 중복 처리를 방지하고 처리 이력을 남긴다. (ADR-0012, ADR-0013)
  *
  * <p>Consumer는 {@link #received} 로 RECEIVED 상태로 저장만 하고 즉시 오프셋을 커밋한다.
-     * 후속 비즈니스 처리(루틴 템플릿 생성)는 스케줄러가 RECEIVED 건을 폴링해 수행한다.
+     * 후속 비즈니스 처리(eventType별 처리기)는 스케줄러가 RECEIVED 건을 폴링해 수행한다.
      * 성공 시 {@link #markProcessed}로 PROCESSED 전이하고, 실패 시 {@link #recordFailure}로
      * retry_count/last_error를 기록한 뒤 한도 초과 시에만 FAILED로 전이한다.
  */
