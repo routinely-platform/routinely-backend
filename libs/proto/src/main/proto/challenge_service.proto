@@ -20,7 +20,7 @@ service ChallengeGrpcService {
 
   // RoutineService → ChallengeService
   // 챌린지 루틴 실행 완료 처리 전 챌린지 유효성 및 멤버 상태 확인
-  // RoutineService가 routine_templates.challenge_id로 challengeId를 직접 전달한다.
+  // RoutineService가 routines.challenge_id로 challengeId를 직접 전달한다.
   rpc GetChallengeContext(GetChallengeContextRequest) returns (GetChallengeContextResponse);
 }
 
@@ -37,7 +37,7 @@ message CheckMembershipResponse {
 
 // ── GetChallengeContext ────────────────────────────────────────────
 message GetChallengeContextRequest {
-  int64 challenge_id = 1; // routine_templates.challenge_id (RoutineService가 직접 전달)
+  int64 challenge_id = 1; // routines.challenge_id (RoutineService가 직접 전달)
   int64 user_id      = 2;
 }
 
