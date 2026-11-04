@@ -9,6 +9,7 @@ public interface KafkaTopics {
     String ROUTINE_NOTIFICATION_SCHEDULED = "routine.notification.scheduled";
 
     // Challenge
+    String CHALLENGE_STARTED       = "challenge.started";
     String CHALLENGE_MEMBER_JOINED = "challenge.member.joined";
     String CHALLENGE_MEMBER_LEFT   = "challenge.member.left";
 
