@@ -69,23 +69,51 @@ public class ChallengeStartedHandler implements InboxEventHandler {
      * @throws BusinessException 필수 필드가 없거나 정의가 스케줄 규칙에 맞지 않을 때 — Inbox 실패로 기록된다
      */
     int createMemberRoutines(ChallengeStartedPayload payload) {
-        // TODO(human): 페이로드 → 멤버별 챌린지 루틴. 순서대로 네 단계다.
-        //   ① 필수 필드 검증 — challengeId · routineTitle · categoryCode · scheduleType · startedAt · endedAt,
-        //      members는 비어 있지 않아야 하고 각 멤버의 userId도 있어야 한다.
-        //      실패는 invalid(사유, payload)로 던진다. 사유에 필드명을 넣는다(테스트가 메시지에서 찾는다).
-        //   ② 변환 — 날짜 문자열 → LocalDate, scheduleType 문자열 → ScheduleType,
-        //      daysOfWeek 코드 리스트(["MON","WED","FRI"]) → Weekdays.toBitmask() 비트마스크(null이면 null).
-        //      형식 오류(DateTimeParseException · IllegalArgumentException)도 invalid(...)로 바꿔 던진다.
-        //   ③ 정의 — RoutineDefinition.of(...)가 유형 ↔ 요일·횟수 조합을 교차 검증한다(ck_routines_schedule 미러).
-        //      루프 밖에서 한 번 만든다 — 잘못된 정의면 아무도 저장되기 전에 실패해야 한다.
-        //   ④ 멤버 N명 루프 — Routine.forChallenge(...)를 save해 ID를 확보한 뒤
-        //      eventPublisher.publishNotificationScheduled(저장된 루틴)를 부른다. 만든 수를 반환한다.
-        // HINT: Outbox aggregate_id가 routineId라 save가 publish보다 먼저다. save의 반환값을 넘긴다.
-        // HINT: 정의는 @Embeddable 값 객체다. 멤버마다 definition.copy()로 각자의 사본을 갖게 한다(ADR-0040).
-        // HINT: 이 메서드에 트랜잭션을 붙이지 않는다 — handle()의 MANDATORY가 processInbox()의 트랜잭션에 얹는다.
-        // REFERENCE: docs/requirements/event-spec.md §3 · Routine.forChallenge · RoutineDefinition.of
-        //            · ChallengeStartedHandlerTest · ChallengeStartedIntegrationTest
-        throw new UnsupportedOperationException("TODO(human): challenge.started 멤버별 루틴 생성");
+        // ① 필수 필드 — endedAt이 빠지면 완료가 전부 거부되는 루틴이 생긴다(Routine.forChallenge)
+        require(payload.challengeId(), "challengeId", payload);
+        require(payload.routineTitle(), "routineTitle", payload);
+        require(payload.categoryCode(), "categoryCode", payload);
+        require(payload.scheduleType(), "scheduleType", payload);
+        require(payload.startedAt(), "startedAt", payload);
+        require(payload.endedAt(), "endedAt", payload);
+        if (payload.members() == null || payload.members().isEmpty()) {
+            throw invalid("members가 비어 있습니다", payload);
+        }
+
+        // ② 원문 → 도메인 타입. 형식 오류도 Inbox 실패로 남도록 BusinessException으로 바꾼다
+        LocalDate startedAt;
+        LocalDate endedAt;
+        ScheduleType scheduleType;
+        Short daysOfWeek;
+        try {
+            startedAt = LocalDate.parse(payload.startedAt());
+            endedAt = LocalDate.parse(payload.endedAt());
+            scheduleType = ScheduleType.valueOf(payload.scheduleType());
+            daysOfWeek = payload.daysOfWeek() == null ? null : Weekdays.toBitmask(payload.daysOfWeek());
+        } catch (RuntimeException e) {
+            throw invalid("형식이 잘못된 필드가 있습니다(" + e.getMessage() + ")", payload);
+        }
+
+        // ③ 정의는 루프 밖에서 한 번 — 잘못된 조합이면 아무도 저장되기 전에 실패한다
+        RoutineDefinition definition = RoutineDefinition.of(payload.routineTitle(), payload.categoryCode(),
+                scheduleType, daysOfWeek, payload.targetCount());
+
+        // ④ 멤버마다 저장 → ID 확보 → 알림 예약 Outbox(aggregate_id = routineId)
+        for (ChallengeStartedPayload.Member member : payload.members()) {
+            if (member == null || member.userId() == null) {
+                throw invalid("userId가 없는 멤버가 있습니다", payload);
+            }
+            Routine routine = routineRepository.save(Routine.forChallenge(payload.challengeId(), member.userId(),
+                    definition.copy(), startedAt, endedAt));
+            eventPublisher.publishNotificationScheduled(routine);
+        }
+        return payload.members().size();
+    }
+
+    private static void require(Object value, String field, ChallengeStartedPayload payload) {
+        if (value == null || (value instanceof String s && s.isBlank())) {
+            throw invalid("필수 필드 " + field + "가 없습니다", payload);
+        }
     }
 
     private static BusinessException invalid(String reason, ChallengeStartedPayload payload) {
