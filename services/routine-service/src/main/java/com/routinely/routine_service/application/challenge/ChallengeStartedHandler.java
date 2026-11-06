@@ -34,7 +34,8 @@ import static com.routinely.core.exception.ErrorCode.INTERNAL_SERVER_ERROR;
  * <p><b>트랜잭션을 새로 열지 않는다</b>({@link Propagation#MANDATORY}). {@code processInbox()}의 트랜잭션에 얹혀
  * 멤버 N명의 루틴 · Outbox N건 · Inbox PROCESSED가 한 번에 커밋된다. 한 명이라도 실패하면 전부 롤백되므로
  * "앞의 몇 명만 만들어진" 상태가 없고, 재시도해도 중복이 생기지 않는다. 발행 창구
- * {@code publishNotificationScheduled}도 {@code MANDATORY}라 경계를 새로 열면 바로 깨진다.
+ * {@code REQUIRES_NEW}로 바꿔도 발행 창구({@code MANDATORY})는 새 트랜잭션에 참여해 정상 동작한다 — 그래서 더 위험하다.
+ * 루틴이 커밋된 뒤 Inbox 커밋이 실패하면 재처리가 UNIQUE에 막혀 "루틴은 있는데 FAILED"가 남는다.
  *
  * <p>실행 기록({@code routine_executions})은 만들지 않는다 — 희소 저장(ADR-0038).
  * {@code challengeName} · {@code leaderUserId}는 쓰지 않는다(채팅·알림용).

@@ -8,7 +8,8 @@ import com.routinely.routine_service.domain.inbox.RoutineInbox;
  *
  * <p><b>트랜잭션을 새로 열지 않는다.</b> {@link #handle}은 {@code processInbox()}의 트랜잭션 안에서 불린다 —
  * 도메인 저장 · Outbox INSERT · Inbox PROCESSED 전이가 한 번에 커밋되거나 함께 롤백되어야 한다.
- * 구현체에 {@code REQUIRES_NEW}를 붙이면 이 원자성이 깨지고, {@code MANDATORY}인 Outbox 발행 창구와도 어긋난다.
+ * 구현체에 {@code REQUIRES_NEW}를 붙이면 예외는 나지 않고 <b>원자성만 조용히 사라진다</b> — 처리기 트랜잭션이 커밋된 뒤
+ * Inbox 쪽이 실패하면, 도메인 변경은 남았는데 Inbox는 RECEIVED로 남아 재처리된다.
  *
  * <p>처리할 수 없으면 <b>예외를 던진다.</b> 스케줄러가 별도 트랜잭션으로 실패를 기록하고 재시도 한도 후 FAILED로 남긴다.
  */
