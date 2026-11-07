@@ -24,7 +24,7 @@ import java.time.LocalTime;
  * 있으며(템플릿 없이 직접 시작), 조회·판정에 사용하지 않는다.
  *
  * <p>개인 루틴은 {@code POST /api/v1/routines}로 사용자가 직접 시작하며 challengeId는 NULL이다.
- * 챌린지 루틴은 {@code challenge.started} 이벤트 소비로 자동 생성되며(ADR-0032, 별도 구현) challengeId를 갖는다.
+ * 챌린지 루틴은 {@code challenge.started} 이벤트 소비로 자동 생성되며({@link #forChallenge}, ADR-0032) challengeId를 갖는다.
  *
  * <p>선호 수행 시각(preferred_time)은 알림 발송 기준이며 인스턴스가 소유한다. NULL이면 리마인더를
  * 발송하지 않는다. 설정/수정은 {@code PATCH /api/v1/routines/{routineId}}에서 처리한다 (#139, ADR-0035).
@@ -89,6 +89,36 @@ public class Routine extends BaseEntity {
         routine.startedAt = startedAt;
         routine.endedAt = endedAt;
         routine.preferredTime = preferredTime;
+        routine.isActive = true;
+        return routine;
+    }
+
+    /**
+     * 챌린지 루틴 인스턴스를 생성한다. {@code challenge.started} 소비가 유일한 생성 경로다 (ADR-0032, #157).
+     *
+     * <p>템플릿이 없으므로 {@code routineTemplateId}는 NULL이다(ADR-0044). 선호 시각·요일도 NULL로 시작하고
+     * 멤버가 각자 설정한다(ADR-0035).
+     *
+     * <p>⚠️ <b>{@code endedAt}을 반드시 받는다.</b> DB는 NULL을 허용하지만(V5, ADR-0041 — 개인 루틴의 무기한),
+     * 챌린지 루틴이 NULL이면 완료 검증이 데이터 이상으로 보고 인증을 전부 거부하고 중단도 막혀 있어(ADR-0036)
+     * 손댈 수 없는 루틴이 남는다. DB CHECK 대신 이 팩토리가 그 제약의 자리다.
+     *
+     * @throws IllegalArgumentException {@code challengeId} 또는 {@code endedAt}이 NULL일 때
+     */
+    public static Routine forChallenge(Long challengeId, Long userId, RoutineDefinition definition,
+                                       LocalDate startedAt, LocalDate endedAt) {
+        if (challengeId == null) {
+            throw new IllegalArgumentException("챌린지 루틴은 challengeId가 필요합니다.");
+        }
+        if (endedAt == null) {
+            throw new IllegalArgumentException("챌린지 루틴은 종료일이 필요합니다. challengeId=" + challengeId);
+        }
+        Routine routine = new Routine();
+        routine.challengeId = challengeId;
+        routine.userId = userId;
+        routine.definition = definition;
+        routine.startedAt = startedAt;
+        routine.endedAt = endedAt;
         routine.isActive = true;
         return routine;
     }

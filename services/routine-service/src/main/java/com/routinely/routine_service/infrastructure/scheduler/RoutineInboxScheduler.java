@@ -15,8 +15,8 @@ import java.util.List;
 /**
  * routine_inbox의 RECEIVED 건을 폴링해 처리하는 스케줄러.
  *
- * <p>지금은 구독 토픽이 없어 처리할 메시지가 없다 — {@code challenge.created} 소비를 제거했다(ADR-0044, #167).
- * {@code challenge.started}(#157) · {@code challenge.member.left}(#158) 소비가 이 경로를 다시 쓴다.
+ * <p>처리 대상은 {@code challenge.started}(#157)이고 {@code challenge.member.left}(#158)가 같은 경로를 쓴다.
+ * 어떤 처리기로 보낼지는 {@link RoutineInboxProcessor}가 {@code eventType}으로 정한다.
  *
  * <p>각 메시지는 {@link RoutineInboxProcessor}의 독립 트랜잭션으로 처리되며,
  * 한 건의 실패가 다른 건에 영향을 주지 않도록 try-catch로 격리한다.
