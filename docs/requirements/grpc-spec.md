@@ -10,6 +10,7 @@
 - **Command는 gRPC** — 즉시 결과가 필요한 내부 서비스 간 요청
 - **단방향 의존** — 호출 방향은 항상 소비자 → 제공자. 순환 호출 금지
 - **Proto 파일 위치** — `libs/proto/src/main/proto/` 에 중앙 관리
+- **서버 reflection은 `local`에서만 켠다** — 서비스·메서드·메시지 구조가 드러나므로 기본은 끈다(`spring.grpc.server.reflection.enabled`, #199)
 
 ---
 
