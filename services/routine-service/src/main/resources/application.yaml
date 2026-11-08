@@ -7,6 +7,9 @@ spring:
   grpc:
     server:
       port: 9082
+      # reflection은 서비스·메서드·메시지 구조를 외부에 드러낸다. 기본은 끄고 local에서만 켠다(#199)
+      reflection:
+        enabled: false
     client:
       channels:
         challenge-service:

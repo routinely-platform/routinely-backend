@@ -1,5 +1,9 @@
 spring:
   grpc:
+    # grpcurl·grpcui(#202)가 local에서 서비스 목록을 읽을 수 있게 reflection을 켠다(#199)
+    server:
+      reflection:
+        enabled: true
     client:
       channels:
         challenge-service:
