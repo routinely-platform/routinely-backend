@@ -267,12 +267,12 @@
 | gRPC API | `protoc-gen-doc` | `.proto` 파일에서 HTML / Markdown 자동 생성 |
 | REST API | `Swagger (OpenAPI)` | Springdoc openapi-starter 기반, `/swagger-ui.html` 제공 |
 | Kafka 이벤트 | `AsyncAPI` | 토픽 / 페이로드 / 컨슈머 그룹 스펙 명세 (`docs/requirements/event-spec.md` 참조) |
-| 환경 변수 | `.env.example` | 실제 시크릿 없이 필요한 환경변수 목록과 설명 제공, 프로젝트 루트에 커밋 |
+| 환경 변수 | `infra/.env.example` | 실제 시크릿 없이 필요한 환경변수 목록과 설명 제공, `infra/`에 커밋. prod 프로파일이 기본값 없이 읽는 값(DB 접속 · 시크릿)은 비우면 기동 시점에 실패한다 |
 | 로컬 개발 가이드 | `README.md` | 서비스별 실행 방법, 환경변수 설정, Docker Compose 사용법 |
 
 **운영 원칙**
 
-- `.env` 파일은 `.gitignore`에 추가하고, `.env.example`만 커밋한다.
+- `infra/.env` 파일은 `.gitignore`에 추가하고, `infra/.env.example`만 커밋한다.
 - Swagger UI는 `local` / `dev` 프로파일에서만 활성화한다 (`springdoc.api-docs.enabled: false` in prod).
 - gRPC 문서는 빌드 파이프라인에서 자동 생성하여 `docs/grpc/` 디렉토리에 출력한다.
 - Kafka 이벤트 명세는 `docs/requirements/event-spec.md`를 단일 소스로 유지한다.
