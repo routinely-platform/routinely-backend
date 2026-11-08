@@ -22,6 +22,7 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-kafka-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-websocket-test'
 	testImplementation 'org.springframework.grpc:spring-grpc-test'
+	testRuntimeOnly 'com.h2database:h2'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
