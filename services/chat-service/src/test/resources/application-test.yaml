@@ -1,0 +1,16 @@
+spring:
+  datasource:
+    # PostgreSQL 호환 모드의 인메모리 H2. Docker 없이 컨텍스트를 띄우기 위해 테스트에서는 H2를 쓴다.
+    url: jdbc:h2:mem:chat_test_db;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+  flyway:
+    # db/migration의 DDL이 PostgreSQL 전용(JSONB · 부분 인덱스 등)이라 H2에서 실행할 수 없어 테스트에서는 비활성화한다.
+    enabled: false
+  jpa:
+    hibernate:
+      # 임베디드 DB의 기본값(create-drop)으로 스키마를 만들지 않도록 비활성화한다. 아직 엔티티가 없다.
+      ddl-auto: none
+
+eureka:
+  client:
+    # 컨텍스트 로드 중 Eureka 서버(localhost:8761) 등록을 시도하지 않도록 테스트에서는 비활성화한다.
+    enabled: false
