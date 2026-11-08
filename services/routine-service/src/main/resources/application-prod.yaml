@@ -1,0 +1,18 @@
+spring:
+  grpc:
+    server:
+      # application.yaml 기본값과 같지만 prod에서 꺼져 있어야 한다는 의도를 명시한다(#199)
+      reflection:
+        enabled: false
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/routine_db
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+gateway:
+  secret: ${GATEWAY_SECRET}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_HOST:registry-service}:8761/eureka/

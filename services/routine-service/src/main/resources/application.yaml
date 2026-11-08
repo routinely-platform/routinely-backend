@@ -55,6 +55,9 @@ spring:
         request.timeout.ms: 5000
         delivery.timeout.ms: 10000
 
+gateway:
+  secret: ${GATEWAY_SECRET}
+
 eureka:
   client:
     register-with-eureka: true
