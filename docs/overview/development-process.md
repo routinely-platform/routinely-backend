@@ -137,9 +137,9 @@ config/grafana/provisioning/      # Grafana 데이터소스 자동 등록
 ```bash
 # infra/.env.example
 DB_PASSWORD=        # PostgreSQL POSTGRES_PASSWORD 로 사용
-DB_HOST=            # prod 필수 — challenge · user · routine DB 주소 (미설정 시 기동 실패)
-DB_PORT=            # prod 선택 — 기본 5432
-DB_USERNAME=        # prod 필수 — DB 계정 (미설정 시 기동 실패)
+# DB_HOST=          # prod 필수 — challenge · user · routine DB 주소 (미설정 시 기동 실패). 주석으로 둔다 — 빈 값은 기본값을 막는다
+# DB_PORT=          # prod 선택 — 줄이 없으면 5432
+# DB_USERNAME=      # prod 필수 — DB 계정 (미설정 시 기동 실패)
 EUREKA_HOST=        # prod 선택 — Eureka 호스트 (기본: registry-service)
 JWT_SECRET=         # Gateway JWT 서명 검증 키
 GATEWAY_SECRET=     # X-Gateway-Secret 헤더 값 (ADR-0019)
