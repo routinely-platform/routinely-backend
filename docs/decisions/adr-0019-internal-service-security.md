@@ -226,6 +226,7 @@ gateway:
 |---|---|
 | `common-web` `WebAutoConfigurationTest` | 기본 · `test` · `prod` → 등록 / `local` 계열 → 미등록 / 시크릿 없음 · 빈 값 → 기동 실패 |
 | `common-web` `GatewayAuthFilterIntegrationTest` | 자동설정이 등록한 필터로 헤더 없음 · 틀린 값 401, 맞는 값 통과, `/actuator` 통과 |
+| `common-web` `GatewayAuthFilterTomcatPathTest` | **내장 Tomcat에 원시 요청 줄**로 `/actuator/../` · `%2e%2e` · `;` · 이중 슬래시 · 대소문자 · 인코딩된 슬래시를 보내도 보호 경로가 400(Tomcat 거부) 또는 401(필터 차단)이다. MockMvc는 컨테이너의 경로 정규화를 거치지 않아 이 경우를 검증하지 못한다 |
 | 서비스 `GatewayAuthFilterRegistrationTest` (5개) | 실제 서비스 컨텍스트(`test`)에 필터가 있다 |
 | routine · challenge `GatewayAuthFilterLocalProfileTest` | 실제 서비스 컨텍스트(`local,test`)에 필터가 없다 |
 
