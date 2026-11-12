@@ -1,3 +1,7 @@
 spring:
   application:
     name: chat-service
+
+# GatewayAuthFilter가 검증하는 값. local이 아닌 환경에서 없으면 기동이 실패한다 (ADR-0019).
+gateway:
+  secret: ${GATEWAY_SECRET}
