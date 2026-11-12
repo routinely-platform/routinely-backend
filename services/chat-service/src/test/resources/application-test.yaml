@@ -14,3 +14,7 @@ eureka:
   client:
     # 컨텍스트 로드 중 Eureka 서버(localhost:8761) 등록을 시도하지 않도록 테스트에서는 비활성화한다.
     enabled: false
+
+# GatewayAuthFilter(!local)가 등록되므로 테스트 컨텍스트에도 시크릿이 필요하다 (ADR-0019).
+gateway:
+  secret: test-gateway-secret

@@ -179,9 +179,11 @@ void join_alreadyJoined_throwsException() { }
 
 ```java
 // local 프로파일에서 GatewayAuthFilter 비활성화 (ADR-0019)
-@Component
+// @Component가 아니다 — common-web은 서비스 스캔 범위 밖이라 WebAutoConfiguration의 @Import로 등록한다 (#208)
 @Profile("!local")
 public class GatewayAuthFilter extends OncePerRequestFilter { ... }
+// → test 프로파일은 !local이라 필터가 등록된다. @SpringBootTest 컨텍스트에는 gateway.secret이 필요하다
+//   (각 서비스 application-test.yaml의 test-gateway-secret)
 
 // prod 프로파일에서만 S3 실제 클라이언트 등록
 @Bean

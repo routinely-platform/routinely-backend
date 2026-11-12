@@ -177,35 +177,57 @@ public PasswordEncoder passwordEncoder() {
 
 ### 각 마이크로서비스 — GatewayAuthFilter
 
-Spring Security 대신 단순 Filter 하나로 검증한다.
+Spring Security 대신 단순 Filter 하나로 검증한다. 구현은 `libs/common-web`의 `GatewayAuthFilter`.
+
+#### 등록 경로 — 컴포넌트 스캔이 아니라 자동설정 (#208)
+
+필터는 `com.routinely.web.filter`에 있고, 각 서비스의 컴포넌트 스캔은 `com.routinely.{svc}_service`에서 시작한다.
+**스캔 범위 밖이라 `@Component`를 붙여도 등록되지 않는다.** 처음 구현(#6)이 이 상태였고, 필터를 `new`로 만들어
+로직만 보는 단위 테스트로는 누락이 드러나지 않았다(#208에서 발견).
+
+그래서 `common-web`의 자동설정 목록에 직접 적는다. 서비스는 `implementation project(':libs:common-web')` 한 줄로
+jar 안의 `META-INF/spring/...AutoConfiguration.imports`를 받고, Boot가 기동할 때 이 파일을 읽어 `WebAutoConfiguration`을 로드한다.
 
 ```java
-@Component
-@RequiredArgsConstructor
-public class GatewayAuthFilter extends OncePerRequestFilter {
+@AutoConfiguration
+@Import({GlobalExceptionHandler.class, GatewayAuthFilter.class})
+public class WebAutoConfiguration { }
 
-    @Value("${gateway.secret}")
-    private String gatewaySecret;
-
-    @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain chain) throws IOException, ServletException {
-        String secret = request.getHeader("X-Gateway-Secret");
-        if (!gatewaySecret.equals(secret)) {
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Direct access not allowed");
-            return;
-        }
-        chain.doFilter(request, response);
-    }
-}
+@Profile("!local")          // @Component 없음 — 등록은 위 @Import가 맡는다
+public class GatewayAuthFilter extends OncePerRequestFilter { ... }
 ```
+
+- 서비스별 활성화 속성(`enabled`)은 두지 않는다 — 방어가 꺼지는 경로가 늘어난다
+- `!local`에서 `gateway.secret`이 **없거나 비어 있으면 기동이 실패한다.** 시크릿이 없을 때 필터를 생략하는 조건은 두지 않는다
+- 순서는 지정하지 않는다(기본 = 가장 나중). Boot의 관측 필터가 먼저 돌아 401에도 traceId · 메트릭이 남는다
+
+#### 적용 범위
+
+| 대상 | 필터 | 이유 |
+|---|:---:|---|
+| 서비스 HTTP 포트의 모든 경로 | ✅ | `X-User-Id`를 믿는 컨트롤러 전부 |
+| `/actuator` · `/actuator/**` | ❌ 제외 | Prometheus가 서비스 포트에 헤더 없이 직접 수집한다. 정규화한 경로로 판정해 `/actuator/../api/...`는 제외되지 않는다. **management 포트를 분리하면(#23) 이 제외를 지운다** |
+| gRPC (HTTP 포트 + 1000) | ❌ 대상 아님 | 서블릿 필터 체인을 지나지 않는 별도 서버다. 서비스 간 내부 호출이라 1차 방어(내부 네트워크)에 기댄다 |
+| gateway-service | ❌ 대상 아님 | 리액티브(WebFlux)이고 `common-web`을 의존하지 않는다. 시크릿을 **붙이는** 쪽이다 |
 
 ```yaml
-# 각 서비스 application.yml
+# 각 서비스 application.yaml
 gateway:
   secret: ${GATEWAY_SECRET}   # 환경변수로 관리. Gateway와 동일한 값 공유
+
+# 각 서비스 application-test.yaml — test는 !local이라 필터가 등록된다
+gateway:
+  secret: test-gateway-secret
 ```
+
+#### 검증
+
+| 테스트 | 확인하는 것 |
+|---|---|
+| `common-web` `WebAutoConfigurationTest` | 기본 · `test` · `prod` → 등록 / `local` 계열 → 미등록 / 시크릿 없음 · 빈 값 → 기동 실패 |
+| `common-web` `GatewayAuthFilterIntegrationTest` | 자동설정이 등록한 필터로 헤더 없음 · 틀린 값 401, 맞는 값 통과, `/actuator` 통과 |
+| 서비스 `GatewayAuthFilterRegistrationTest` (5개) | 실제 서비스 컨텍스트(`test`)에 필터가 있다 |
+| routine · challenge `GatewayAuthFilterLocalProfileTest` | 실제 서비스 컨텍스트(`local,test`)에 필터가 없다 |
 
 ---
 
@@ -247,27 +269,17 @@ services:
 ### 로컬 개발 — GatewayAuthFilter 비활성화
 
 서비스 단독 개발/테스트 시 Gateway 없이 직접 호출하면 `X-Gateway-Secret` 헤더가 없어 전부 401이 된다.
-`local` 프로파일에서 필터를 Bean으로 등록하지 않아 우회한다.
+`local` 프로파일에서는 필터를 Bean으로 등록하지 않는다(`@Profile("!local")`).
 
-```java
-@Component
-@Profile("!local")  // local 프로파일에서는 Bean 미등록
-public class GatewayAuthFilter extends OncePerRequestFilter {
-    // ...
-}
-```
+Gateway의 `JwtAuthenticationFilter`도 `@Profile("!local")`이라 **local에서는 시크릿을 붙이지 않는다.**
+두 필터는 짝이라 한쪽만 켜면 local에서 Gateway 경유 호출이 전부 401이 된다.
+local에서 두 필터를 켤지는 **#201(Swagger UI)에서 함께 재검토한다.**
 
 ```yaml
-# application-local.yml
-spring:
-  profiles:
-    active: local
-
+# application-local.yaml (user · routine · challenge) — 필터가 없으므로 값은 쓰이지 않는다
 gateway:
-  secret: ${GATEWAY_SECRET:local-secret}  # 기본값으로 환경변수 없어도 기동 가능
+  secret: ${GATEWAY_SECRET:local-secret}
 ```
-
-IntelliJ Run Configuration에서 `spring.profiles.active=local` 설정 시 필터 없이 자유롭게 테스트 가능하다.
 
 ---
 

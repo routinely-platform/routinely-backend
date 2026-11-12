@@ -195,11 +195,16 @@ com.routinely.core/
 
 ```
 com.routinely.web/
+├── config/
+│   └── WebAutoConfiguration.java    # 자동설정 — 아래 두 빈을 @Import로 서비스에 등록
 ├── handler/
 │   └── GlobalExceptionHandler.java  # @RestControllerAdvice
 └── filter/
-    └── GatewayAuthFilter.java       # X-Gateway-Secret 검증 (ADR-0019)
+    └── GatewayAuthFilter.java       # X-Gateway-Secret 검증 (ADR-0019) · !local에서만 · /actuator 제외
 ```
+
+> 서비스의 컴포넌트 스캔은 `com.routinely.{svc}_service`에서 시작해 `com.routinely.web`을 보지 못한다.
+> common-web의 빈은 `@Component`가 아니라 `WebAutoConfiguration`의 `@Import`에 적어야 등록된다 (#208).
 
 #### common-jpa ✅
 
