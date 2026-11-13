@@ -181,9 +181,10 @@
 
 ## 6. CI/CD
 
-- `GitHub Actions`
-  - PR 시: build / test
-  - main merge 시: docker build / push
+- `GitHub Actions` — `.github/workflows/ci.yml` (#200)
+  - PR(→ main) · main push 시: `./gradlew build` (테스트 포함). 실패하면 테스트 리포트를 artifact로 7일 보관
+  - 추가 검사는 워크플로가 아니라 Gradle `check`에 붙인다 (`build`가 `check`에 의존)
+  - main merge 시 docker build / push: **미구현** (배포 단계에서 다룬다)
 
 ---
 
