@@ -11,56 +11,71 @@
 @Table(name = "challenge_outbox")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class ChallengeOutbox extends BaseEntity {
+public class ChallengeOutbox {          // updated_at이 없어 BaseEntity를 상속하지 않는다
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
-    private String topic;
+    @Column(name = "aggregate_type", nullable = false, length = 50)
+    private String aggregateType;
 
-    @Column(nullable = false)
-    private String partitionKey;   // Kafka 파티션 키
+    @Column(name = "aggregate_id", nullable = false)
+    private Long aggregateId;
 
-    @Column(columnDefinition = "TEXT", nullable = false)
-    private String payload;        // JSON 직렬화된 이벤트
+    @Column(name = "event_type", nullable = false, length = 100)
+    private String eventType;           // = Kafka 토픽
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb", nullable = false)
+    private String payload;             // JSON 직렬화된 이벤트
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private OutboxStatus status = OutboxStatus.PENDING;
+    @Column(nullable = false, length = 20)
+    private OutboxStatus status;
 
-    public static ChallengeOutbox of(String topic, String partitionKey, String payload) {
-        ChallengeOutbox outbox = new ChallengeOutbox();
-        outbox.topic        = topic;
-        outbox.partitionKey = partitionKey;
-        outbox.payload      = payload;
-        return outbox;
-    }
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;    // 폴링 정렬 키
 
-    public void markPublished() {
-        this.status = OutboxStatus.PUBLISHED;
-    }
+    @Column(name = "published_at")
+    private LocalDateTime publishedAt;
+
+    @Column(name = "idempotency_key", unique = true, length = 200)
+    private String idempotencyKey;
+
+    // 시각은 호출부가 주입된 Clock으로 넘긴다 — 엔티티 안에서 now()를 부르지 않는다(#213)
+    public static ChallengeOutbox create(String aggregateType, Long aggregateId, String eventType,
+                                         String payload, String idempotencyKey, LocalDateTime createdAt) { … }
+
+    public void markPublished(LocalDateTime now) { … }
 }
 ```
+
+`RoutineOutbox`는 같은 모양에 Kafka 키용 `partition_key`가 더 있다. Inbox(`ChallengeInbox` · `RoutineInbox`)도 수신 시각을
+`received(…, LocalDateTime.now(clock))`로 받는다. 서버 시각 규칙 전체는 `entity-repository.md` "서버 시각".
 
 ---
 
 ## 도메인 저장 + Outbox INSERT (같은 트랜잭션)
 
 ```java
+// ChallengeService.joinChallenge를 줄인 것
 @Transactional
-public void join(Long challengeId, Long userId) {
-    Challenge challenge = findChallengeByIdOrThrow(challengeId);
-    ChallengeMembers member = challenge.addMember(userId);
-    challengeMemberRepository.save(member);
+public ChallengeMemberResult joinChallenge(Long challengeId, Long userId) {
+    Challenge challenge = findChallengeByIdForUpdateOrThrow(challengeId);   // 검증 · 재참여 분기 생략
+    LocalDateTime joinedAt = LocalDateTime.now(clock);          // 시각은 주입된 Clock에서 한 번만 만든다
+    ChallengeMember member = challengeMemberRepository.save(
+            ChallengeMember.createMember(challenge, userId, joinedAt));
 
     // 같은 트랜잭션 내 Outbox INSERT — DB 커밋과 동시에 보장
-    ChallengeMemberJoinedEvent event = new ChallengeMemberJoinedEvent(challengeId, userId);
-    String payload = objectMapper.writeValueAsString(event);
-    outboxRepository.save(
-        ChallengeOutbox.of(KafkaTopics.CHALLENGE_MEMBER_JOINED, String.valueOf(challengeId), payload)
-    );
+    String occurredAt = joinedAt.atZone(clock.getZone()).toInstant().toString();
+    String payload = serializeEvent(new ChallengeMemberJoinedEvent(
+            UUID.randomUUID().toString(), occurredAt, challengeId, challenge.getTitle(), userId, member.getRole().name()));
+    String idempotencyKey = KafkaTopic.CHALLENGE_MEMBER_JOINED + ":" + challengeId + ":" + userId + ":" + occurredAt;
+    challengeOutboxRepository.save(ChallengeOutbox.create(
+            AGGREGATE_TYPE, challengeId, KafkaTopic.CHALLENGE_MEMBER_JOINED, payload, idempotencyKey,
+            LocalDateTime.now(clock)));                         // created_at — 폴링 정렬 키
+    return ChallengeMemberResult.from(member);
 }
 ```
 
@@ -107,7 +122,7 @@ RoutineEventPublisher가 완료·취소·알림 일정 스냅샷을 JSON으로 �
 
 - V6는 기존 테이블을 유지하며 (created_at, id) PENDING 부분 인덱스와
   partition_key, routine_event_revision_seq를 추가한다. 기존 행은 payload의 userId로 키를 복원한다.
-- Outbox는 V1에 updated_at이 없는 이벤트 저장소라 challenge 선례처럼 BaseEntity를 상속하지 않는다.
+- Outbox는 V1에 updated_at이 없는 이벤트 저장소라 challenge 선례처럼 BaseEntity를 상속하지 않는다(상속하면 `ddl-auto: validate`가 updated_at을 찾다 기동에 실패한다).
 - 폴러는 1초 간격으로 최대 100행을 FOR UPDATE SKIP LOCKED로 잠근다.
   Kafka 키는 aggregate ID가 아니라 partition_key(userId)다.
 - send()가 반환한 future의 ACK를 최대 3초 기다린다. send() 자체의 메타데이터 대기는
@@ -121,7 +136,9 @@ RoutineEventPublisher가 완료·취소·알림 일정 스냅샷을 JSON으로 �
   0보다 크면 수동 확인 대상이다. 스레드 인터럽트는 복원하고 현재 배치 처리를 중단한다.
 - 여러 인스턴스는 SKIP LOCKED로 서로 다른 행을 동시에 보내므로 **Kafka 도착 순서는 보장하지 않는다.**
   순서가 중요한 소비자는 payload의 revision으로 판정한다.
-- created_at은 발행 창구가 Clock으로 넣는다(폴링 정렬 키 — 테스트에서 고정 가능).
+- created_at은 발행 창구가 Clock으로 넣는다(폴링 정렬 키 — 테스트에서 고정 가능). challenge · routine 두 Outbox와 두 Inbox(received_at) 모두 같다(#213).
+- **#213에서 챌린지 Outbox `created_at`의 시간대가 JVM 기본 → 서비스 Clock(Asia/Seoul)으로 바뀌었다**(`RoutineOutbox`와 같아짐). 폴러는 `created_at, id`로 정렬하므로, JVM 시간대가 서울이 아닌 환경에서 **구버전과 신버전이 같은 DB에 동시에 PENDING 행을 쓰면** 그 사이 발행 순서가 뒤집힐 수 있다. 변경 시점에 배포 환경이 없어 전환 기간이 생기지 않았다. 서버 시간대 통일 때 Outbox 시각 기준도 함께 정한다. Inbox 폴러는 `id`로 정렬해 영향이 없다.
+- 멱등 키에 `occurredAt`이 들어가는 이벤트(챌린지 참여 · 탈퇴)는 키의 구분 능력이 시각 정밀도(마이크로초)에 기댄다. 같은 사용자 · 같은 유형 이벤트가 같은 µs에 두 번 생기면 두 번째 INSERT가 거부된다 — 운영에서는 별개 요청이라 사실상 없고, 고정 Clock 테스트에서는 생길 수 있다.
 - ACK 후 DB 커밋 실패나 ACK 타임아웃은 재전송을 만들 수 있다. 전달 보장은 at-least-once이며,
   Outbox UNIQUE 키는 중복 INSERT를 막고 소비자는 payload의 동일한 eventId로 중복 처리를 막아야 한다.
 - 챌린지 실행 이벤트만 시퀀스 revision · acceptedCount · reachedAt을 포함한다. 개인 루틴의 실행 이벤트는 셋 다 생략한다.

@@ -1,8 +1,11 @@
 plugins {
     id 'java-library'
+    id 'java-test-fixtures'
 }
 
 dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-annotations'
     testImplementation 'tools.jackson.core:jackson-databind'
+    // 서버 시각 정적 검사 규칙(ServerTimeRules)을 서비스 테스트가 함께 쓴다(#213)
+    testFixturesApi 'com.tngtech.archunit:archunit:1.4.1'
 }

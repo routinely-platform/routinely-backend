@@ -1,12 +1,11 @@
 package com.routinely.challenge_service.domain.summary;
 
+import com.routinely.jpa.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -19,7 +18,8 @@ import java.time.LocalDateTime;
 @Table(name = "challenge_member_summary")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class ChallengeMemberSummary {
+/** {@code created_at} · {@code updated_at}은 {@link BaseEntity}의 Auditing이 채운다(#213 — 서버 시각은 Clock에서만). */
+public class ChallengeMemberSummary extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -39,12 +39,6 @@ public class ChallengeMemberSummary {
 
     @Column(name = "last_completed_at")
     private LocalDateTime lastCompletedAt;
-
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
-    @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updatedAt;
 
     /** 멤버 참여 시점의 인정 횟수 0회, revision 0인 집계 행. */
     public static ChallengeMemberSummary create(Long challengeId, Long userId) {
@@ -69,15 +63,4 @@ public class ChallengeMemberSummary {
         this.revision = revision;
     }
 
-    @PrePersist
-    protected void onCreate() {
-        LocalDateTime now = LocalDateTime.now();
-        this.createdAt = now;
-        this.updatedAt = now;
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        this.updatedAt = LocalDateTime.now();
-    }
 }

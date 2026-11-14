@@ -264,7 +264,7 @@ public class ChallengeService {
         String payload = serializeEvent(event);
         String idempotencyKey = KafkaTopic.CHALLENGE_MEMBER_JOINED + ":" + challenge.getId() + ":" + userId + ":" + occurredAt;
         challengeOutboxRepository.save(
-                ChallengeOutbox.create(AGGREGATE_TYPE, challenge.getId(), KafkaTopic.CHALLENGE_MEMBER_JOINED, payload, idempotencyKey)
+                ChallengeOutbox.create(AGGREGATE_TYPE, challenge.getId(), KafkaTopic.CHALLENGE_MEMBER_JOINED, payload, idempotencyKey, now())
         );
     }
 
@@ -279,7 +279,7 @@ public class ChallengeService {
         String payload = serializeEvent(event);
         String idempotencyKey = KafkaTopic.CHALLENGE_MEMBER_LEFT + ":" + challengeId + ":" + userId + ":" + occurredAt;
         challengeOutboxRepository.save(
-                ChallengeOutbox.create(AGGREGATE_TYPE, challengeId, KafkaTopic.CHALLENGE_MEMBER_LEFT, payload, idempotencyKey)
+                ChallengeOutbox.create(AGGREGATE_TYPE, challengeId, KafkaTopic.CHALLENGE_MEMBER_LEFT, payload, idempotencyKey, now())
         );
     }
 

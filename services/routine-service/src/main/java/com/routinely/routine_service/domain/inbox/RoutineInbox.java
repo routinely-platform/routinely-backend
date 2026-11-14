@@ -7,7 +7,6 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -68,7 +67,8 @@ public class RoutineInbox {
     private String lastError;
 
     public static RoutineInbox received(String messageId, String eventType, String payload,
-                                        String aggregateType, Long aggregateId) {
+                                        String aggregateType, Long aggregateId,
+                                        LocalDateTime receivedAt) {
         RoutineInbox inbox = new RoutineInbox();
         inbox.messageId = messageId;
         inbox.eventType = eventType;
@@ -76,14 +76,9 @@ public class RoutineInbox {
         inbox.aggregateType = aggregateType;
         inbox.aggregateId = aggregateId;
         inbox.status = InboxStatus.RECEIVED;
+        // 수신 시각은 호출부의 Clock으로 정한다 — 서버 시각은 주입된 Clock에서만 만든다(#213).
+        inbox.receivedAt = receivedAt;
         return inbox;
-    }
-
-    @PrePersist
-    protected void onReceive() {
-        if (receivedAt == null) {
-            receivedAt = LocalDateTime.now();
-        }
     }
 
     public void markProcessed(LocalDateTime now) {

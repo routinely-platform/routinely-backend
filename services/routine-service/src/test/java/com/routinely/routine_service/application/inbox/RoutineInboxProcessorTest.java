@@ -67,7 +67,7 @@ class RoutineInboxProcessorTest {
     }
 
     private RoutineInbox receivedInbox(String eventType) {
-        RoutineInbox inbox = RoutineInbox.received("evt-1", eventType, "{}", "CHALLENGE", 42L);
+        RoutineInbox inbox = RoutineInbox.received("evt-1", eventType, "{}", "CHALLENGE", 42L, LocalDateTime.now(CLOCK));
         ReflectionTestUtils.setField(inbox, "id", 1L);
         return inbox;
     }

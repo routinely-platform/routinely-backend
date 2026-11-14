@@ -16,6 +16,7 @@ import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.LocalDateTime;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
@@ -275,6 +276,7 @@ class ChallengeRankingInboxProcessorTest {
     }
 
     private ChallengeInbox receivedInbox(String eventType, String payload) {
-        return ChallengeInbox.received("msg-id", eventType, payload, "CHALLENGE", CHALLENGE_ID);
+        return ChallengeInbox.received("msg-id", eventType, payload, "CHALLENGE", CHALLENGE_ID,
+                LocalDateTime.parse("2026-06-30T09:00:00"));
     }
 }

@@ -14,6 +14,9 @@ dependencies {
 	implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
 	runtimeOnly 'org.postgresql:postgresql'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	testRuntimeOnly 'com.h2database:h2'
+	testImplementation testFixtures(project(':libs:common-core'))
+	testImplementation 'org.springframework.boot:spring-boot-data-jpa-test'
 	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
 	testImplementation 'org.testcontainers:testcontainers-jdbc'
 	testImplementation 'org.testcontainers:testcontainers-postgresql'
