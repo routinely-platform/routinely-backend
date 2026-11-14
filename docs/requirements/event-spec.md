@@ -31,7 +31,7 @@
 | 필드 | 타입 | 설명 |
 |------|------|------|
 | `eventId` | string (UUID) | 이벤트 고유 식별자 — 멱등성 키 |
-| `occurredAt` | string (ISO 8601) | 이벤트 발생 시각 — 서버 Clock(`RoutinelyClocks`)에서 만들어 소수부는 **최대 마이크로초 6자리**다(#213). 0으로 끝나는 자리는 생략된다(`Instant.toString`) |
+| `occurredAt` | string (ISO 8601) | 이벤트 발생 시각 — 서버 Clock(`RoutinelyClocks`)에서 만들어 소수부는 **최대 마이크로초 6자리**다(#213). `Instant.toString`이라 소수부 길이는 0 · 3 · 6자리 중 하나다(`.123400` → `.123400`, `.120000` → `.120`, `.000000` → 생략) |
 
 ---
 

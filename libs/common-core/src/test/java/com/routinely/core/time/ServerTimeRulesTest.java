@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @DisplayName("ServerTimeRules — 서버 시각 정적 검사")
@@ -25,7 +26,9 @@ class ServerTimeRulesTest {
                 arguments(DirectNowViolations.InstantNow.class, ServerTimeRules.NO_DIRECT_SYSTEM_TIME),
                 arguments(DirectNowViolations.SystemUtcClock.class, ServerTimeRules.CLOCKS_ONLY_FROM_FACTORY),
                 arguments(DirectNowViolations.SystemClockBean.class, ServerTimeRules.CLOCKS_ONLY_FROM_FACTORY),
-                arguments(DirectNowViolations.MethodReference.class, ServerTimeRules.CLOCKS_ONLY_FROM_FACTORY));
+                arguments(DirectNowViolations.MethodReference.class, ServerTimeRules.CLOCKS_ONLY_FROM_FACTORY),
+                arguments(DirectNowViolations.InstantSourceSystem.class, ServerTimeRules.CLOCKS_ONLY_FROM_FACTORY),
+                arguments(SamePackageViolation.class, ServerTimeRules.CLOCKS_ONLY_FROM_FACTORY));
     }
 
     @ParameterizedTest(name = "{0}")
@@ -47,10 +50,28 @@ class ServerTimeRulesTest {
     }
 
     @Test
-    @DisplayName("팩토리(RoutinelyClocks)는 Clock 정적 팩토리를 써도 된다")
-    void factory_isAllowedToCreateClocks() {
-        JavaClasses classes = new ClassFileImporter().importClasses(RoutinelyClocks.class);
+    @DisplayName("팩토리(RoutinelyClocks · MicrosClock)는 Clock 정적 팩토리를 써도 된다")
+    void factory_isAllowedToCreateClocks() throws ClassNotFoundException {
+        JavaClasses classes = new ClassFileImporter().importClasses(
+                RoutinelyClocks.class, Class.forName("com.routinely.core.time.MicrosClock"), DirectNowViolations.Allowed.class);
 
         assertThat(ServerTimeRules.CLOCKS_ONLY_FROM_FACTORY.evaluate(classes).hasViolation()).isFalse();
+    }
+
+    @Test
+    @DisplayName("서비스 패키지 클래스가 하나도 읽히지 않으면 통과시키지 않는다")
+    void check_noClassesOfServicePackage_fails() {
+        assertThatThrownBy(() -> ServerTimeRules.check("no.such.package"))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("no.such.package");
+    }
+
+    @Test
+    @DisplayName("검사 대상에 test-fixtures(규칙 자신)는 들어가지 않는다")
+    void importProductionClasses_excludesTestFixtures() {
+        JavaClasses classes = ServerTimeRules.importProductionClasses("com.routinely.core.time");
+
+        assertThat(classes.contain(RoutinelyClocks.class)).isTrue();
+        assertThat(classes.contain(ServerTimeRules.class)).isFalse();
     }
 }

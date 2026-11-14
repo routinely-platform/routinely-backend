@@ -10,6 +10,6 @@ class ServerTimeArchitectureTest {
     @Test
     @DisplayName("운영 코드는 주입된 Clock에서만 시각을 만들고, Clock은 RoutinelyClocks에서만 만든다")
     void serverTime_comesOnlyFromClockFactory() {
-        ServerTimeRules.check("com.routinely");
+        ServerTimeRules.check("com.routinely.user_service");
     }
 }

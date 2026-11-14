@@ -17,6 +17,8 @@ import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabas
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -60,21 +62,27 @@ abstract class ServerTimePrecisionPersistenceTest {
     @Autowired UserRepository users;
     @Autowired EntityManager entityManager;
 
+    /**
+     * 운영처럼 PATCH가 자기 트랜잭션에서 커밋하고, GET이 새 트랜잭션에서 커밋된 행을 읽는다.
+     * 테스트 트랜잭션에 묶이면 같은 영속성 컨텍스트 · 같은 트랜잭션 안의 재조회가 되어 커밋 경계를 건너뛴다.
+     */
     @Test
-    @DisplayName("닉네임 변경 PATCH 응답과 이후 GET 응답의 nicknameChangeableAt · createdAt이 같다")
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @DisplayName("닉네임 변경 PATCH 응답과 이후 GET 응답(커밋 뒤 새 트랜잭션)의 nicknameChangeableAt · createdAt이 같다")
     void updateProfile_responseEqualsReloadedProfile() {
         Long userId = users.saveAndFlush(User.createUser("precision@routinely.test", "hash", "before")).getId();
-        entityManager.clear();
+        try {
+            ProfileResult patched = userService.updateProfile(new UpdateProfileCommand(userId, "after", "bio"));
+            ProfileResult reloaded = userService.getMyProfile(userId);
 
-        ProfileResult patched = userService.updateProfile(new UpdateProfileCommand(userId, "after", "bio"));
-        entityManager.flush();
-        entityManager.clear();
-        ProfileResult reloaded = userService.getMyProfile(userId);
-
-        assertThat(patched.nicknameChangeableAt())
-                .isEqualTo(LocalDateTime.parse("2026-11-13T14:58:44.740903").plusDays(COOLDOWN_DAYS));
-        assertThat(reloaded.nicknameChangeableAt()).isEqualTo(patched.nicknameChangeableAt());
-        assertThat(reloaded.createdAt()).isEqualTo(patched.createdAt());
+            assertThat(patched.nicknameChangeableAt())
+                    .isEqualTo(LocalDateTime.parse("2026-11-13T14:58:44.740903").plusDays(COOLDOWN_DAYS));
+            assertThat(reloaded.nicknameChangeableAt()).isEqualTo(patched.nicknameChangeableAt());
+            assertThat(reloaded.createdAt()).isEqualTo(patched.createdAt());
+        } finally {
+            // 테스트 트랜잭션 밖이라 롤백되지 않는다 — 직접 지운다
+            users.deleteById(userId);
+        }
     }
 
     @Test

@@ -59,18 +59,23 @@ public class ChallengeOutbox {          // updated_at이 없어 BaseEntity를 �
 ## 도메인 저장 + Outbox INSERT (같은 트랜잭션)
 
 ```java
+// ChallengeService.joinChallenge를 줄인 것
 @Transactional
-public void join(Long challengeId, Long userId) {
-    Challenge challenge = findChallengeByIdOrThrow(challengeId);
-    ChallengeMembers member = challenge.addMember(userId);
-    challengeMemberRepository.save(member);
+public ChallengeMemberResult joinChallenge(Long challengeId, Long userId) {
+    Challenge challenge = findChallengeByIdForUpdateOrThrow(challengeId);   // 검증 · 재참여 분기 생략
+    LocalDateTime joinedAt = LocalDateTime.now(clock);          // 시각은 주입된 Clock에서 한 번만 만든다
+    ChallengeMember member = challengeMemberRepository.save(
+            ChallengeMember.createMember(challenge, userId, joinedAt));
 
     // 같은 트랜잭션 내 Outbox INSERT — DB 커밋과 동시에 보장
-    ChallengeMemberJoinedEvent event = new ChallengeMemberJoinedEvent(challengeId, userId);
-    String payload = objectMapper.writeValueAsString(event);
-    outboxRepository.save(
-        ChallengeOutbox.of(KafkaTopics.CHALLENGE_MEMBER_JOINED, String.valueOf(challengeId), payload)
-    );
+    String occurredAt = joinedAt.atZone(clock.getZone()).toInstant().toString();
+    String payload = serializeEvent(new ChallengeMemberJoinedEvent(
+            UUID.randomUUID().toString(), occurredAt, challengeId, challenge.getTitle(), userId, member.getRole().name()));
+    String idempotencyKey = KafkaTopic.CHALLENGE_MEMBER_JOINED + ":" + challengeId + ":" + userId + ":" + occurredAt;
+    challengeOutboxRepository.save(ChallengeOutbox.create(
+            AGGREGATE_TYPE, challengeId, KafkaTopic.CHALLENGE_MEMBER_JOINED, payload, idempotencyKey,
+            LocalDateTime.now(clock)));                         // created_at — 폴링 정렬 키
+    return ChallengeMemberResult.from(member);
 }
 ```
 
@@ -132,6 +137,7 @@ RoutineEventPublisher가 완료·취소·알림 일정 스냅샷을 JSON으로 �
 - 여러 인스턴스는 SKIP LOCKED로 서로 다른 행을 동시에 보내므로 **Kafka 도착 순서는 보장하지 않는다.**
   순서가 중요한 소비자는 payload의 revision으로 판정한다.
 - created_at은 발행 창구가 Clock으로 넣는다(폴링 정렬 키 — 테스트에서 고정 가능). challenge · routine 두 Outbox와 두 Inbox(received_at) 모두 같다(#213).
+- **#213에서 챌린지 Outbox `created_at`의 시간대가 JVM 기본 → 서비스 Clock(Asia/Seoul)으로 바뀌었다**(`RoutineOutbox`와 같아짐). 폴러는 `created_at, id`로 정렬하므로, JVM 시간대가 서울이 아닌 환경에서 **구버전과 신버전이 같은 DB에 동시에 PENDING 행을 쓰면** 그 사이 발행 순서가 뒤집힐 수 있다. 변경 시점에 배포 환경이 없어 전환 기간이 생기지 않았다. 서버 시간대 통일 때 Outbox 시각 기준도 함께 정한다. Inbox 폴러는 `id`로 정렬해 영향이 없다.
 - 멱등 키에 `occurredAt`이 들어가는 이벤트(챌린지 참여 · 탈퇴)는 키의 구분 능력이 시각 정밀도(마이크로초)에 기댄다. 같은 사용자 · 같은 유형 이벤트가 같은 µs에 두 번 생기면 두 번째 INSERT가 거부된다 — 운영에서는 별개 요청이라 사실상 없고, 고정 Clock 테스트에서는 생길 수 있다.
 - ACK 후 DB 커밋 실패나 ACK 타임아웃은 재전송을 만들 수 있다. 전달 보장은 at-least-once이며,
   Outbox UNIQUE 키는 중복 INSERT를 막고 소비자는 payload의 동일한 eventId로 중복 처리를 막아야 한다.

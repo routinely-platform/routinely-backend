@@ -2,6 +2,7 @@ package com.routinely.core.time.violation;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.InstantSource;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -33,6 +34,10 @@ public class DirectNowViolations {
 
     public static class MethodReference {
         Supplier<Clock> clock() { return Clock::systemUTC; }
+    }
+
+    public static class InstantSourceSystem {
+        Instant now() { return InstantSource.system().instant(); }
     }
 
     /** 허용 — 주입된 Clock과 날짜 */

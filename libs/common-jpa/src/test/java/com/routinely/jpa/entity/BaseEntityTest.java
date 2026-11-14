@@ -13,6 +13,8 @@ import lombok.Setter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -42,6 +44,8 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect"
 })
 @DisplayName("BaseEntity")
+// 테스트 시계가 컨텍스트 빈이라 메서드끼리 공유한다 — 병렬 실행을 켜도 이 클래스는 순차로 돈다
+@Execution(ExecutionMode.SAME_THREAD)
 class BaseEntityTest {
 
     @SpringBootConfiguration
