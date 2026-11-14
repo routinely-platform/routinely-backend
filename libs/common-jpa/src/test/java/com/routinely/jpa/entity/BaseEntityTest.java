@@ -88,8 +88,8 @@ class BaseEntityTest {
         Long id = repository.saveAndFlush(entity).getId();
         entityManager.clear();
 
-        // 기준값도 DB에서 읽는다. 감사(auditing) 값은 메모리에 JVM 시계 정밀도(리눅스는 나노초)로 남고,
-        // DB에는 컬럼 정밀도(마이크로초)로 반올림돼 저장된다. 메모리 값과 비교하면 OS에 따라 결과가 갈린다.
+        // 기준값도 DB에서 읽는다. 감사(auditing) 값은 메모리에 JVM 시각 정밀도 그대로 남고(리눅스 CI에서 나노초 9자리 확인),
+        // DB에는 컬럼 정밀도(마이크로초)로 반올림돼 저장된다. 메모리 값과 비교하면 실행 환경의 시계 정밀도에 따라 결과가 갈린다.
         TestEntity persisted = repository.findById(id).orElseThrow();
         LocalDateTime originalCreated = persisted.getCreatedAt();
 
