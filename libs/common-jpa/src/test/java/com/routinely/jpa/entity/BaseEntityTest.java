@@ -85,15 +85,20 @@ class BaseEntityTest {
     void createdAt_isImmutable() {
         TestEntity entity = new TestEntity();
         entity.setName("frozen");
-        TestEntity saved = repository.saveAndFlush(entity);
-        LocalDateTime originalCreated = saved.getCreatedAt();
-
-        ReflectionTestUtils.setField(saved, "createdAt", originalCreated.minusYears(10));
-        saved.setName("mutated");
-        repository.saveAndFlush(saved);
+        Long id = repository.saveAndFlush(entity).getId();
         entityManager.clear();
 
-        TestEntity reloaded = repository.findById(saved.getId()).orElseThrow();
+        // 기준값도 DB에서 읽는다. 감사(auditing) 값은 메모리에 JVM 시각 정밀도 그대로 남고(리눅스 CI에서 나노초 9자리 확인),
+        // DB에는 컬럼 정밀도(마이크로초)로 반올림돼 저장된다. 메모리 값과 비교하면 실행 환경의 시계 정밀도에 따라 결과가 갈린다.
+        TestEntity persisted = repository.findById(id).orElseThrow();
+        LocalDateTime originalCreated = persisted.getCreatedAt();
+
+        ReflectionTestUtils.setField(persisted, "createdAt", originalCreated.minusYears(10));
+        persisted.setName("mutated");
+        repository.saveAndFlush(persisted);
+        entityManager.clear();
+
+        TestEntity reloaded = repository.findById(id).orElseThrow();
         assertThat(reloaded.getCreatedAt()).isEqualTo(originalCreated);
     }
 

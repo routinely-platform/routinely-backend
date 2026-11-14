@@ -1,0 +1,57 @@
+# PR(→ main)과 main push에서 전체 빌드 · 테스트를 돌린다. 검증만 하고 배포하지 않는다.
+# 추가 검사(OpenAPI 스냅샷 · buf breaking · 이벤트 계약 등)는 Gradle `check`에 붙인다 —
+# `build`가 `check`에 의존하므로 이 워크플로는 고치지 않는다.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# PR: 같은 PR의 새 push가 오면 이전 실행을 취소한다 (마지막 커밋 결과만 의미가 있다).
+# main push: 실행마다 그룹을 따로 둔다. 한 그룹은 "실행 중 1 + 대기 1"만 허용해
+# 대기 중인 실행이 교체로 취소되므로, 그룹을 나눠야 push마다 결과가 남는다.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: build
+    # Testcontainers(Postgres · Redis)가 Docker를 쓴다. 호스티드 ubuntu 러너에는 Docker가 기본으로 있다.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # 의존성 캐시 + gradle-wrapper.jar 체크섬 검증(기본).
+      # 캐시는 기본 브랜치(main)에서만 쓰고, PR에서는 읽기만 한다(기본).
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build
+        id: build
+        run: ./gradlew build
+
+      # build 단계가 실패했을 때만 올린다. checkout · JDK 설치 실패에는 리포트가 없다.
+      - name: Upload test reports
+        if: failure() && steps.build.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+          retention-days: 7
