@@ -7,7 +7,6 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -58,7 +57,7 @@ public class ChallengeOutbox {
 
     public static ChallengeOutbox create(String aggregateType, Long aggregateId,
                                          String eventType, String payload,
-                                         String idempotencyKey) {
+                                         String idempotencyKey, LocalDateTime createdAt) {
         ChallengeOutbox outbox = new ChallengeOutbox();
         outbox.aggregateType = aggregateType;
         outbox.aggregateId = aggregateId;
@@ -67,14 +66,9 @@ public class ChallengeOutbox {
         outbox.idempotencyKey = idempotencyKey;
         outbox.status = OutboxStatus.PENDING;
         outbox.retryCount = 0;
+        // 폴링 정렬 키라 호출부의 Clock으로 정한다 — 테스트에서 시각을 고정할 수 있다(RoutineOutbox와 같다, #213).
+        outbox.createdAt = createdAt;
         return outbox;
-    }
-
-    @PrePersist
-    protected void onCreate() {
-        if (createdAt == null) {
-            createdAt = LocalDateTime.now();
-        }
     }
 
     public void markPublished(LocalDateTime now) {

@@ -13,6 +13,9 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
+
 import static com.routinely.core.exception.ErrorCode.INTERNAL_SERVER_ERROR;
 
 /**
@@ -45,6 +48,7 @@ public class ChallengeRankingInboxConsumer {
 
     private final ChallengeInboxRepository inboxRepository;
     private final ObjectMapper objectMapper;
+    private final Clock clock;
 
     @KafkaListener(
             topics = KafkaTopic.CHALLENGE_MEMBER_JOINED,
@@ -87,7 +91,7 @@ public class ChallengeRankingInboxConsumer {
         // 2차 멱등성: 동시 수신 race로 저장 시점에 UNIQUE(message_id)가 위반되면 무시하고 ACK한다.
         try {
             inboxRepository.save(ChallengeInbox.received(
-                    messageId, eventType, message, AGGREGATE_TYPE_CHALLENGE, challengeId));
+                    messageId, eventType, message, AGGREGATE_TYPE_CHALLENGE, challengeId, LocalDateTime.now(clock)));
             log.info("[Inbox] 수신 저장 - messageId: {}, eventType: {}, challengeId: {}",
                     messageId, eventType, challengeId);
         } catch (DataIntegrityViolationException e) {

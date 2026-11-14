@@ -110,7 +110,8 @@ public class ChallengeStatusTransitionScheduler {
         String payload = serializeEvent(event);
         String idempotencyKey = KafkaTopic.CHALLENGE_STARTED + ":" + challenge.getId();
         challengeOutboxRepository.save(
-                ChallengeOutbox.create("challenge", challenge.getId(), KafkaTopic.CHALLENGE_STARTED, payload, idempotencyKey)
+                ChallengeOutbox.create("challenge", challenge.getId(), KafkaTopic.CHALLENGE_STARTED, payload, idempotencyKey,
+                        LocalDateTime.now(clock))
         );
     }
 

@@ -5,6 +5,7 @@ import com.routinely.core.exception.BusinessException;
 import com.routinely.routine_service.domain.inbox.InboxStatus;
 import com.routinely.routine_service.domain.inbox.RoutineInbox;
 import com.routinely.routine_service.domain.inbox.RoutineInboxRepository;
+import com.routinely.core.time.RoutinelyClocks;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,11 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
@@ -27,6 +33,9 @@ import static org.mockito.Mockito.when;
 @DisplayName("ChallengeStartedConsumer")
 class ChallengeStartedConsumerTest {
 
+    private static final Clock CLOCK =
+            RoutinelyClocks.micros(Clock.fixed(Instant.parse("2026-11-10T00:00:05.123456789Z"), ZoneId.of("Asia/Seoul")));
+
     private static final String MESSAGE = """
             {"eventId":"evt-1","occurredAt":"2026-11-10T00:00:00Z","challengeId":5,\
             "challengeName":"30일 러닝 챌린지","startedAt":"2026-11-10","endedAt":"2026-12-09",\
@@ -40,7 +49,7 @@ class ChallengeStartedConsumerTest {
     @BeforeEach
     void setUp() {
         inboxRepository = mock(RoutineInboxRepository.class);
-        consumer = new ChallengeStartedConsumer(inboxRepository, new ObjectMapper());
+        consumer = new ChallengeStartedConsumer(inboxRepository, new ObjectMapper(), CLOCK);
     }
 
     @Test
@@ -53,6 +62,8 @@ class ChallengeStartedConsumerTest {
         ArgumentCaptor<RoutineInbox> captor = ArgumentCaptor.forClass(RoutineInbox.class);
         verify(inboxRepository).save(captor.capture());
         RoutineInbox saved = captor.getValue();
+        // 수신 시각은 주입된 Clock에서 마이크로초로 만든다(#213)
+        assertThat(saved.getReceivedAt()).isEqualTo(LocalDateTime.parse("2026-11-10T09:00:05.123456"));
         assertThat(saved.getMessageId()).isEqualTo("evt-1");
         assertThat(saved.getEventType()).isEqualTo("challenge.started");
         assertThat(saved.getStatus()).isEqualTo(InboxStatus.RECEIVED);

@@ -158,7 +158,8 @@ class ChallengeOutboxPollerTest {
                 1L,
                 eventType,
                 payload,
-                "CHALLENGE:1:" + eventType + ":" + id
+                "CHALLENGE:1:" + eventType + ":" + id,
+                LocalDateTime.now(FIXED_CLOCK)
         );
         ReflectionTestUtils.setField(outbox, "id", id);
         return outbox;
