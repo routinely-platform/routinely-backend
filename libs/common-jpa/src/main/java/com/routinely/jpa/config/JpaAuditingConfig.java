@@ -33,7 +33,7 @@ public class JpaAuditingConfig {
     public DateTimeProvider routinelyAuditingDateTimeProvider(ObjectProvider<Clock> clockProvider) {
         return () -> {
             Clock clock = RoutinelyClocks.micros(
-                    clockProvider.getIfAvailable(Clock::systemDefaultZone));
+                    clockProvider.getIfAvailable(RoutinelyClocks::systemDefaultZone));
             return Optional.of(LocalDateTime.ofInstant(clock.instant(), ZoneId.systemDefault()));
         };
     }

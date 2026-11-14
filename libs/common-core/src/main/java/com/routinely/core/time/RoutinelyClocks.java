@@ -1,6 +1,7 @@
 package com.routinely.core.time;
 
 import java.time.Clock;
+import java.time.ZoneId;
 import java.util.Objects;
 
 /**
@@ -18,7 +19,17 @@ public final class RoutinelyClocks {
     private RoutinelyClocks() {
     }
 
-    /** {@code base}의 시각을 마이크로초 아래에서 버리는 Clock. 시간대는 {@code base}를 따른다. */
+    /** 운영 시스템 시계(마이크로초). 서비스 Clock 빈은 이걸로 만든다. */
+    public static Clock system(ZoneId zone) {
+        return micros(Clock.system(zone));
+    }
+
+    /** JVM 기본 시간대의 시스템 시계(마이크로초). */
+    public static Clock systemDefaultZone() {
+        return micros(Clock.systemDefaultZone());
+    }
+
+    /** {@code base}의 시각을 마이크로초 아래에서 버리는 Clock. 시간대는 {@code base}를 따른다. 테스트는 나노초 원천을 여기에 넣는다. */
     public static Clock micros(Clock base) {
         Objects.requireNonNull(base, "base");
         if (base instanceof MicrosClock) {

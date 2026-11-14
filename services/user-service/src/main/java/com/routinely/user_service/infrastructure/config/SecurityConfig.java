@@ -21,6 +21,6 @@ public class SecurityConfig {
     @Bean
     public Clock clock() {
         // 마이크로초 Clock — DB 컬럼 정밀도와 맞춘다(#213). 시간대는 그대로다.
-        return RoutinelyClocks.micros(Clock.systemDefaultZone());
+        return RoutinelyClocks.systemDefaultZone();
     }
 }

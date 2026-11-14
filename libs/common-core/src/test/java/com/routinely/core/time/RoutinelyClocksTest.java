@@ -54,6 +54,16 @@ class RoutinelyClocksTest {
     }
 
     @Test
+    @DisplayName("운영 시스템 시계도 마이크로초 아래가 0이고 시간대를 지킨다")
+    void system_isMicrosInGivenZone() {
+        Clock clock = RoutinelyClocks.system(SEOUL);
+
+        assertThat(clock.getZone()).isEqualTo(SEOUL);
+        assertThat(clock.instant().getNano() % 1_000).isZero();
+        assertThat(RoutinelyClocks.systemDefaultZone().getZone()).isEqualTo(ZoneId.systemDefault());
+    }
+
+    @Test
     @DisplayName("이미 마이크로초 Clock이면 다시 감싸지 않는다")
     void micros_alreadyMicros_returnsSame() {
         Clock clock = RoutinelyClocks.micros(Clock.systemUTC());
