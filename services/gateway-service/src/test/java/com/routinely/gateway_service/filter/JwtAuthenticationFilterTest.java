@@ -88,6 +88,48 @@ class JwtAuthenticationFilterTest {
                 .getFirst(HeaderConstants.GATEWAY_SECRET)).isEqualTo(GATEWAY_SECRET);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "/api/v1/auth/login",
+            "/api/v1/auth/signup",
+            "/api/v1/auth/refresh",
+            "/api/v1/auth/logout"
+    })
+    @DisplayName("공개경로_위조한_X-User-Id는_정화필터를_거치면_체인에_전달되지_않는다")
+    void filter_publicPathWithForgedUserId_notForwardedAfterSanitization(String path) {
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.post(path)
+                        .header(HeaderConstants.USER_ID, "42")
+                        .header(HeaderConstants.GATEWAY_SECRET, "forged-secret"));
+
+        sanitizeThenAuthenticate(exchange);
+
+        ArgumentCaptor<ServerWebExchange> captor = ArgumentCaptor.forClass(ServerWebExchange.class);
+        verify(chain).filter(captor.capture());
+        HttpHeaders forwarded = captor.getValue().getRequest().getHeaders();
+        assertThat(forwarded.get(HeaderConstants.USER_ID)).isNull();
+        assertThat(forwarded.get(HeaderConstants.GATEWAY_SECRET)).containsExactly(GATEWAY_SECRET);
+    }
+
+    @Test
+    @DisplayName("인증경로_위조한_X-User-Id는_JWT의_값으로_덮어쓴다")
+    void filter_authenticatedPathWithForgedUserId_overwrittenByJwtValue() {
+        String token = createToken(42L, 60_000);
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/v1/users/me")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .header(HeaderConstants.USER_ID, "7", "8")
+                        .header(HeaderConstants.GATEWAY_SECRET, "forged-secret"));
+
+        sanitizeThenAuthenticate(exchange);
+
+        ArgumentCaptor<ServerWebExchange> captor = ArgumentCaptor.forClass(ServerWebExchange.class);
+        verify(chain).filter(captor.capture());
+        HttpHeaders forwarded = captor.getValue().getRequest().getHeaders();
+        assertThat(forwarded.get(HeaderConstants.USER_ID)).containsExactly("42");
+        assertThat(forwarded.get(HeaderConstants.GATEWAY_SECRET)).containsExactly(GATEWAY_SECRET);
+    }
+
     @Test
     @DisplayName("인증경로_토큰없음_401응답")
     void filter_noToken_respondsUnauthorized() {
@@ -145,6 +187,12 @@ class JwtAuthenticationFilterTest {
     @DisplayName("필터순서_0")
     void getOrder_returnsZero() {
         assertThat(filter.getOrder()).isEqualTo(0);
+    }
+
+    private void sanitizeThenAuthenticate(ServerWebExchange exchange) {
+        new TrustedHeaderSanitizationFilter()
+                .filter(exchange, sanitized -> filter.filter(sanitized, chain))
+                .block();
     }
 
     private String createToken(Long userId, long validityMillis) {

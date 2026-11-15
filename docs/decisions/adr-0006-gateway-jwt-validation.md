@@ -129,6 +129,9 @@ Gateway 필터에서 JWT 검증 전, 해당 요청이 인증이 필요한 요청
 
 ### Gateway Authentication Filter (JWT 직접 검증 + claims 전달)
 
+> 아래는 결정 당시의 예시 코드다. 현재 공개 경로(`logout` 포함, 메서드 + 경로 비교)와 클라이언트 신뢰 헤더 정화 · 글로벌 필터 순서는
+> [ADR-0019](adr-0019-internal-service-security.md) "신뢰 헤더 발급 경계 (#154)"를 본다.
+
 ```java
 @Component
 public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
