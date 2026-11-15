@@ -136,6 +136,64 @@ gateway:
 
 ---
 
+### Gateway — 신뢰 헤더 발급 경계 (#154)
+
+`X-User-Id` · `X-Gateway-Secret`(`HeaderConstants`의 두 값)은 **게이트웨이만 발급한다.**
+클라이언트가 같은 이름으로 보낸 값은 게이트웨이 진입 시점에 버린다.
+
+처음에는 이 경계가 코드로 보장되지 않았다. 인증 경로는 `JwtAuthenticationFilter`가 `.header()`(덮어쓰기)로 두 값을 넣어
+우연히 안전했지만, **공개 경로**(`signup` · `login` · `refresh` · `logout`)는 시크릿만 더하고 클라이언트의 `X-User-Id`를 그대로 두었다.
+`RateLimitFilter`는 `X-User-Id`가 있으면 그 값을 카운터 키로 쓰므로, 값을 바꿔 가며 보내면 요청마다 새 버킷이 생겨
+IP 한도(기본 60초 30회)를 우회했다. 남의 userId로 그 사용자의 버킷을 소진시킬 수도 있었다.
+
+그래서 정화를 인증 필터에서 떼어 **전용 글로벌 필터**로 둔다.
+
+```java
+@Component   // 프로파일 조건 없음 — 항상 켠다
+public class TrustedHeaderSanitizationFilter implements GlobalFilter, Ordered {
+    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        ServerHttpRequest sanitized = exchange.getRequest().mutate()
+                .headers(headers -> {
+                    headers.remove(HeaderConstants.USER_ID);
+                    headers.remove(HeaderConstants.GATEWAY_SECRET);
+                })
+                .build();
+        return chain.filter(exchange.mutate().request(sanitized).build());
+    }
+    public int getOrder() { return Ordered.HIGHEST_PRECEDENCE; }
+}
+```
+
+#### 게이트웨이 글로벌 필터 순서
+
+| order | 필터 | 신뢰 헤더에 하는 일 |
+|---|---|---|
+| `HIGHEST_PRECEDENCE` | `TrustedHeaderSanitizationFilter` | 클라이언트가 보낸 두 헤더를 지운다(대소문자 · 값 여러 개 포함) |
+| 0 | `JwtAuthenticationFilter` (`!local`) | 인증 경로: JWT의 userId와 시크릿을 넣는다 / 공개 경로: 시크릿만 넣는다 |
+| 1 | `RateLimitFilter` | `X-User-Id`가 있으면 `rate_limit:{userId}`, 없으면 `rate_limit:ip:{IP}` |
+| 1~ | 라우트 필터 (`CircuitBreaker` 등) | — |
+
+`RateLimitFilter`가 읽는 `X-User-Id`는 이제 항상 게이트웨이가 넣은 값이거나 없다. 공개 경로는 전부 IP 키로 집계된다.
+그래서 IP 해석(`X-Forwarded-For` 처리)의 정확성이 곧 가용성에 걸린다 — #156.
+
+#### 채택하지 않은 방법
+
+| 방법 | 이유 |
+|---|---|
+| `JwtAuthenticationFilter` 진입부에서 지우기 | 동작은 하지만 인증 정책과 헤더 위생이 한 클래스에 섞인다. 인증 필터는 `local`에서 꺼지므로 정화도 같이 꺼진다 |
+| 라우트 `RemoveRequestHeader=X-User-Id` | 라우트 필터는 order 1부터라 `RateLimitFilter`(1)보다 늦어 1차 방어가 못 된다. 2차 방어로 더해도 `JwtAuthenticationFilter` **뒤에** 돌아 인증 경로의 정상 `X-User-Id`까지 지운다 |
+| 정화 필터에 `@Profile("!local")` | #201에서 local도 두 인증 필터를 켜기로 해 꺼 둘 이유가 사라졌다. 켜 두면 local 게이트웨이도 운영과 같은 경계를 지킨다 |
+
+#### 검증
+
+| 테스트 | 확인하는 것 |
+|---|---|
+| `TrustedHeaderSanitizationFilterTest` | 두 헤더 제거 · 다른 헤더 보존 · 헤더명 대소문자 · 값 여러 개 · order = `HIGHEST_PRECEDENCE` |
+| `JwtAuthenticationFilterTest` | 정화 → 인증 순으로 이었을 때 공개 경로의 위조 `X-User-Id`가 전달되지 않고, 인증 경로는 JWT 값으로 바뀐다 |
+| `TrustedHeaderRateLimitIntegrationTest` | 실제 컨텍스트(`test`) · Testcontainers Redis로 `X-User-Id`를 매번 바꿔 보내도 31번째가 429, 키는 `rate_limit:ip:*` 하나, 업스트림에는 `X-User-Id`가 없다 |
+
+---
+
 ### user-service — 로그인 구현
 
 Spring Security의 `UsernamePasswordAuthenticationFilter`를 사용하지 않고 일반 컨트롤러로 구현한다.
@@ -276,6 +334,10 @@ Gateway의 `JwtAuthenticationFilter`도 `@Profile("!local")`이라 **local에서
 두 필터는 짝이라 한쪽만 켜면 local에서 Gateway 경유 호출이 전부 401이 된다.
 local에서 두 필터를 켤지는 **#201(Swagger UI)에서 함께 재검토한다.**
 
+반면 게이트웨이의 `TrustedHeaderSanitizationFilter`는 **local에서도 켜져 있다**(#154). 그래서 local 게이트웨이를 거치는 요청에
+`X-User-Id`를 손으로 넣어도 지워진다. 두 인증 필터를 local에서 켜는 #201 전까지는 local 게이트웨이 경유 보호 API에
+`X-User-Id`가 들어가지 않는다. 서비스를 직접 호출하는 local 테스트는 영향이 없다.
+
 ```yaml
 # application-local.yaml (user · routine · challenge) — 필터가 없으므로 값은 쓰이지 않는다
 gateway:
@@ -291,6 +353,7 @@ gateway:
         │ HTTPS :8080
         ▼
 [ Gateway ]
+  ├── 클라이언트가 보낸 X-User-Id · X-Gateway-Secret 제거
   ├── JWT 검증
   ├── X-User-Id 헤더 추가
   ├── X-Gateway-Secret 헤더 추가
