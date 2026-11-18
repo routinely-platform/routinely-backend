@@ -102,3 +102,9 @@ routinely:
       bucket: ${S3_BUCKET:routinely-dev}
       region: ${S3_REGION:ap-northeast-2}
       public-base-url: ${S3_PUBLIC_BASE_URL:}
+
+# OpenAPI 명세(#201). 기본은 끈다 — prod에서는 /v3/api-docs를 열지 않는다. local에서만 켠다(application-local.yaml).
+# 명세는 게이트웨이 Swagger UI(/swagger-ui.html)가 문서 라우트(/__docs/routine-service)로 가져간다.
+springdoc:
+  api-docs:
+    enabled: false

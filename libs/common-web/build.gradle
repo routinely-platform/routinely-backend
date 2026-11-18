@@ -1,5 +1,6 @@
 plugins {
     id 'java-library'
+    id 'java-test-fixtures'
 }
 
 dependencies {
@@ -7,4 +8,12 @@ dependencies {
     api 'org.springframework.boot:spring-boot-starter-validation'
     api 'org.springframework.boot:spring-boot-starter-web'
     testImplementation 'org.springframework.boot:spring-boot-webmvc-test'
+
+    // OpenAPI 공통 설정(#201). springdoc을 쓰는 서비스(user · routine · challenge)만 런타임에 갖는다.
+    // chat · notification에는 없으므로 OpenApiAutoConfiguration은 @ConditionalOnClass로 빠진다.
+    compileOnly "org.springdoc:springdoc-openapi-starter-webmvc-api:${springdocVersion}"
+    testImplementation "org.springdoc:springdoc-openapi-starter-webmvc-api:${springdocVersion}"
+
+    // 서비스 OpenAPI 계약 테스트가 공유하는 정규화 · 검증 · 스냅샷 비교(testFixtures)
+    testFixturesImplementation "io.swagger.parser.v3:swagger-parser-v3:${swaggerParserVersion}"
 }

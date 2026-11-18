@@ -1,0 +1,439 @@
+{
+  "components" : {
+    "schemas" : {
+      "ApiResponseAuthSessionResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/AuthSessionResponse"
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseProfileResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ProfileResponse"
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseUserResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/UserResponse"
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseVoid" : {
+        "properties" : {
+          "data" : { },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "AuthSessionResponse" : {
+        "properties" : {
+          "accessToken" : {
+            "type" : "string"
+          },
+          "user" : {
+            "$ref" : "#/components/schemas/SessionUserResponse"
+          }
+        },
+        "type" : "object"
+      },
+      "LoginRequest" : {
+        "properties" : {
+          "email" : {
+            "format" : "email",
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "password" : {
+            "minLength" : 1,
+            "type" : "string"
+          }
+        },
+        "required" : [ "email", "password" ],
+        "type" : "object"
+      },
+      "ProfileResponse" : {
+        "properties" : {
+          "bio" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "nickname" : {
+            "type" : "string"
+          },
+          "nickname_changeable_at" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "profileImageUrl" : {
+            "type" : "string"
+          },
+          "userId" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "SessionUserResponse" : {
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          },
+          "nickname" : {
+            "type" : "string"
+          },
+          "profileImageUrl" : {
+            "type" : "string"
+          },
+          "userId" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "SignUpRequest" : {
+        "properties" : {
+          "email" : {
+            "format" : "email",
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "nickname" : {
+            "maxLength" : 20,
+            "minLength" : 2,
+            "type" : "string"
+          },
+          "password" : {
+            "maxLength" : 2147483647,
+            "minLength" : 8,
+            "type" : "string"
+          }
+        },
+        "required" : [ "email", "nickname", "password" ],
+        "type" : "object"
+      },
+      "UpdateProfileRequest" : {
+        "properties" : {
+          "bio" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "nickname" : {
+            "maxLength" : 20,
+            "minLength" : 2,
+            "type" : "string"
+          }
+        },
+        "required" : [ "nickname" ],
+        "type" : "object"
+      },
+      "UserResponse" : {
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          },
+          "nickname" : {
+            "type" : "string"
+          },
+          "userId" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      }
+    },
+    "securitySchemes" : {
+      "bearerAuth" : {
+        "bearerFormat" : "JWT",
+        "scheme" : "bearer",
+        "type" : "http"
+      }
+    }
+  },
+  "info" : {
+    "description" : "게이트웨이 Swagger UI(/swagger-ui.html)에서 호출한다. 보호 API는 로그인 응답의 accessToken을 Authorize에 넣는다.",
+    "title" : "user-service API",
+    "version" : "v1"
+  },
+  "openapi" : "3.1.0",
+  "paths" : {
+    "/api/v1/auth/login" : {
+      "post" : {
+        "operationId" : "login",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseAuthSessionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ ],
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/v1/auth/logout" : {
+      "post" : {
+        "operationId" : "logout",
+        "parameters" : [ {
+          "in" : "cookie",
+          "name" : "refresh_token",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ ],
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/v1/auth/refresh" : {
+      "post" : {
+        "operationId" : "refresh",
+        "parameters" : [ {
+          "in" : "cookie",
+          "name" : "refresh_token",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseAuthSessionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "security" : [ ],
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/v1/auth/signup" : {
+      "post" : {
+        "operationId" : "signUp",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SignUpRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseUserResponse"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "security" : [ ],
+        "tags" : [ "auth-controller" ]
+      }
+    },
+    "/api/v1/users/me" : {
+      "delete" : {
+        "operationId" : "withdraw",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "user-controller" ]
+      },
+      "get" : {
+        "operationId" : "getMyProfile",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseProfileResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "user-controller" ]
+      },
+      "patch" : {
+        "operationId" : "updateProfile",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateProfileRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseProfileResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "user-controller" ]
+      }
+    },
+    "/api/v1/users/me/profile-image" : {
+      "delete" : {
+        "operationId" : "deleteProfileImage",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseProfileResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "user-controller" ]
+      },
+      "put" : {
+        "operationId" : "uploadProfileImage",
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "properties" : {
+                  "image" : {
+                    "description" : "image/jpeg · image/png · image/webp, 최대 5MB",
+                    "format" : "binary",
+                    "type" : "string"
+                  }
+                },
+                "required" : [ "image" ],
+                "type" : "object"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseProfileResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "user-controller" ]
+      }
+    }
+  },
+  "security" : [ {
+    "bearerAuth" : [ ]
+  } ]
+}

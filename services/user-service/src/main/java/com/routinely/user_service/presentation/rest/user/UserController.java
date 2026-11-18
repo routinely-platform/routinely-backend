@@ -25,6 +25,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.media.SchemaProperty;
 
 @RestController
 @RequestMapping("/api/v1/users")
@@ -64,6 +67,14 @@ public class UserController {
     }
 
     @PutMapping(value = "/me/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    // image가 비어 있으면 EMPTY_FILE(400)로 거절한다. @RequestParam(required = true)로 바꾸면 Spring 예외가 되어
+    // 응답이 달라지므로 동작은 두고 명세에만 필수로 적는다(#201). springdoc은 @Parameter(required)를 폼 필드에 반영하지 않는다
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, content = @Content(
+            mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+            schema = @Schema(type = "object", requiredProperties = "image"),
+            schemaProperties = @SchemaProperty(name = "image", schema = @Schema(
+                    type = "string", format = "binary",
+                    description = "image/jpeg · image/png · image/webp, 최대 5MB"))))
     public ResponseEntity<ApiResponse<ProfileResponse>> uploadProfileImage(
             @RequestHeader(HeaderConstants.USER_ID) Long userId,
             @RequestParam(value = "image", required = false) MultipartFile image) {

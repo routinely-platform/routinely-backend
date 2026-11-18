@@ -48,6 +48,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.media.SchemaProperty;
 
 import static com.routinely.core.exception.ErrorCode.VALIDATION_FAILED;
 import static org.springframework.http.HttpStatus.CREATED;
@@ -75,6 +79,7 @@ public class ChallengeController {
     }
 
     @PostMapping
+    @ResponseStatus(CREATED) // 명세에 201을 적는다(springdoc은 ResponseEntity.status를 읽지 못한다). 실제 상태는 아래 ResponseEntity
     public ResponseEntity<ApiResponse<ChallengeResponse>> createChallenge(
             @RequestHeader(HeaderConstants.USER_ID) Long userId,
             @RequestBody @Valid CreateChallengeRequest request) {
@@ -155,6 +160,7 @@ public class ChallengeController {
     }
 
     @PostMapping("/{challengeId}/members")
+    @ResponseStatus(CREATED)
     public ResponseEntity<ApiResponse<ChallengeMemberResponse>> joinChallenge(
             @RequestHeader(HeaderConstants.USER_ID) Long userId,
             @PathVariable Long challengeId) {
@@ -174,6 +180,14 @@ public class ChallengeController {
     }
 
     @PutMapping(value = "/{challengeId}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    // image가 비어 있으면 EMPTY_FILE(400)로 거절한다. @RequestParam(required = true)로 바꾸면 Spring 예외가 되어
+    // 응답이 달라지므로 동작은 두고 명세에만 필수로 적는다(#201). springdoc은 @Parameter(required)를 폼 필드에 반영하지 않는다
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, content = @Content(
+            mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+            schema = @Schema(type = "object", requiredProperties = "image"),
+            schemaProperties = @SchemaProperty(name = "image", schema = @Schema(
+                    type = "string", format = "binary",
+                    description = "image/jpeg · image/png · image/webp, 최대 5MB"))))
     public ResponseEntity<ApiResponse<ChallengeDetailResponse>> uploadChallengeImage(
             @RequestHeader(HeaderConstants.USER_ID) Long userId,
             @PathVariable Long challengeId,

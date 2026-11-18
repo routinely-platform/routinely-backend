@@ -1,1 +1,2 @@
 com.routinely.web.config.WebAutoConfiguration
+com.routinely.web.openapi.OpenApiAutoConfiguration
