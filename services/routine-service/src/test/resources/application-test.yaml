@@ -31,6 +31,6 @@ routinely:
       bucket: test-bucket
       region: ap-northeast-2
 
-# GatewayAuthFilter(!local)가 등록되므로 테스트 컨텍스트에도 시크릿이 필요하다 (ADR-0019).
+# GatewayAuthFilter는 모든 프로파일에서 등록되므로 테스트 컨텍스트에도 시크릿이 필요하다 (ADR-0019).
 gateway:
   secret: test-gateway-secret

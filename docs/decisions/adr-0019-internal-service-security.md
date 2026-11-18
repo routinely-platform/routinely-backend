@@ -169,7 +169,7 @@ public class TrustedHeaderSanitizationFilter implements GlobalFilter, Ordered {
 | order | 필터 | 신뢰 헤더에 하는 일 |
 |---|---|---|
 | `HIGHEST_PRECEDENCE` | `TrustedHeaderSanitizationFilter` | 클라이언트가 보낸 두 헤더를 지운다(대소문자 · 값 여러 개 포함) |
-| 0 | `JwtAuthenticationFilter` (`!local`) | 인증 경로: JWT의 userId와 시크릿을 넣는다 / 공개 경로: 시크릿만 넣는다 |
+| 0 | `JwtAuthenticationFilter` (모든 프로파일, #201) | 인증 경로: JWT의 userId와 시크릿을 넣는다 / 공개 경로: 시크릿만 넣는다 |
 | 1 | `RateLimitFilter` | `X-User-Id`가 있으면 `rate_limit:{userId}`, 없으면 `rate_limit:ip:{IP}` |
 | 1~ | 라우트 필터 (`CircuitBreaker` 등) | — |
 
@@ -180,7 +180,7 @@ public class TrustedHeaderSanitizationFilter implements GlobalFilter, Ordered {
 
 | 방법 | 이유 |
 |---|---|
-| `JwtAuthenticationFilter` 진입부에서 지우기 | 동작은 하지만 인증 정책과 헤더 위생이 한 클래스에 섞인다. 인증 필터는 `local`에서 꺼지므로 정화도 같이 꺼진다 |
+| `JwtAuthenticationFilter` 진입부에서 지우기 | 동작은 하지만 인증 정책과 헤더 위생이 한 클래스에 섞인다. (당시 인증 필터는 `local`에서 꺼져 정화도 같이 꺼졌다 — #201에서 local도 켰다) |
 | 라우트 `RemoveRequestHeader=X-User-Id` | 라우트 필터는 order 1부터라 `RateLimitFilter`(1)보다 늦어 1차 방어가 못 된다. 2차 방어로 더해도 `JwtAuthenticationFilter` **뒤에** 돌아 인증 경로의 정상 `X-User-Id`까지 지운다 |
 | 정화 필터에 `@Profile("!local")` | #201에서 local도 두 인증 필터를 켜기로 해 꺼 둘 이유가 사라졌다. 켜 두면 local 게이트웨이도 운영과 같은 경계를 지킨다 |
 
@@ -251,12 +251,12 @@ jar 안의 `META-INF/spring/...AutoConfiguration.imports`를 받고, Boot가 기
 @Import({GlobalExceptionHandler.class, GatewayAuthFilter.class})
 public class WebAutoConfiguration { }
 
-@Profile("!local")          // @Component 없음 — 등록은 위 @Import가 맡는다
+// @Component 없음 — 등록은 위 @Import가 맡는다. 프로파일 조건도 없다(#201 — local에서도 켠다)
 public class GatewayAuthFilter extends OncePerRequestFilter { ... }
 ```
 
 - 서비스별 활성화 속성(`enabled`)은 두지 않는다 — 방어가 꺼지는 경로가 늘어난다
-- `!local`에서 `gateway.secret`이 **없거나 비어 있으면 기동이 실패한다.** 시크릿이 없을 때 필터를 생략하는 조건은 두지 않는다
+- `gateway.secret`이 **없거나 비어 있으면 local을 포함해 기동이 실패한다.** 시크릿이 없을 때 필터를 생략하는 조건은 두지 않는다
 - 순서는 지정하지 않는다(기본 = 가장 나중). Boot의 관측 필터가 먼저 돌아 401에도 traceId · 메트릭이 남는다
 
 #### 적용 범위
@@ -273,7 +273,7 @@ public class GatewayAuthFilter extends OncePerRequestFilter { ... }
 gateway:
   secret: ${GATEWAY_SECRET}   # 환경변수로 관리. Gateway와 동일한 값 공유
 
-# 각 서비스 application-test.yaml — test는 !local이라 필터가 등록된다
+# 각 서비스 application-test.yaml — 필터가 모든 프로파일에서 등록되므로 테스트에도 필요하다
 gateway:
   secret: test-gateway-secret
 ```
@@ -282,11 +282,11 @@ gateway:
 
 | 테스트 | 확인하는 것 |
 |---|---|
-| `common-web` `WebAutoConfigurationTest` | 기본 · `test` · `prod` → 등록 / `local` 계열 → 미등록 / 시크릿 없음 · 빈 값 → 기동 실패 |
+| `common-web` `WebAutoConfigurationTest` | 기본 · `test` · `prod` · `local` 계열 → 모두 등록 / 시크릿 없음 · 빈 값 → `prod` · `local` 모두 기동 실패 |
 | `common-web` `GatewayAuthFilterIntegrationTest` | 자동설정이 등록한 필터로 헤더 없음 · 틀린 값 401, 맞는 값 통과, `/actuator` 통과 |
 | `common-web` `GatewayAuthFilterTomcatPathTest` | **내장 Tomcat에 원시 요청 줄**로 `/actuator/../` · `%2e%2e` · `;` · 이중 슬래시 · 대소문자 · 인코딩된 슬래시를 보내도 보호 경로가 400(Tomcat 거부) 또는 401(필터 차단)이다. MockMvc는 컨테이너의 경로 정규화를 거치지 않아 이 경우를 검증하지 못한다 |
 | 서비스 `GatewayAuthFilterRegistrationTest` (5개) | 실제 서비스 컨텍스트(`test`)에 필터가 있다 |
-| routine · challenge `GatewayAuthFilterLocalProfileTest` | 실제 서비스 컨텍스트(`local,test`)에 필터가 없다 |
+| routine · challenge `GatewayAuthFilterLocalProfileTest` | 실제 서비스 컨텍스트(`local,test`)에도 필터가 있다(#201) |
 
 ---
 
@@ -325,24 +325,35 @@ services:
 
 ---
 
-### 로컬 개발 — GatewayAuthFilter 비활성화
+### 로컬 개발 — local에서도 두 인증 필터를 켠다 (#201)
 
-서비스 단독 개발/테스트 시 Gateway 없이 직접 호출하면 `X-Gateway-Secret` 헤더가 없어 전부 401이 된다.
-`local` 프로파일에서는 필터를 Bean으로 등록하지 않는다(`@Profile("!local")`).
+**결정 (2026-11-14)**: 게이트웨이 `JwtAuthenticationFilter`와 서비스 `GatewayAuthFilter`에서 `@Profile("!local")`을 없앴다.
+local도 운영과 같은 순서로 돈다 — 정화(#154) → JWT 검증 · `X-User-Id` · 시크릿 주입 → Rate Limit.
 
-Gateway의 `JwtAuthenticationFilter`도 `@Profile("!local")`이라 **local에서는 시크릿을 붙이지 않는다.**
-두 필터는 짝이라 한쪽만 켜면 local에서 Gateway 경유 호출이 전부 401이 된다.
-local에서 두 필터를 켤지는 **#201(Swagger UI)에서 함께 재검토한다.**
+| | 전 (`!local`) | 후 (#201) |
+|---|---|---|
+| 게이트웨이 경유 보호 API | 토큰을 보지 않아 `X-User-Id`가 비어 400. 정화(#154) 뒤라 손으로 넣은 값도 지워졌다 | 토큰의 `id`가 `X-User-Id`로 들어가 정상 호출. 위조 값은 덮어쓴다 |
+| 서비스 직접 호출 (IDE · curl) | 헤더 없이 통과 | `X-Gateway-Secret: local-secret`이 없으면 401 |
+| Swagger UI의 login → Authorize → 보호 API | 동작하지 않았다 | 동작한다 |
 
-반면 게이트웨이의 `TrustedHeaderSanitizationFilter`는 **local에서도 켜져 있다**(#154). 그래서 local 게이트웨이를 거치는 요청에
-`X-User-Id`를 손으로 넣어도 지워진다. 두 인증 필터를 local에서 켜는 #201 전까지는 local 게이트웨이 경유 보호 API에
-`X-User-Id`가 들어가지 않는다. 서비스를 직접 호출하는 local 테스트는 영향이 없다.
+**배경** — 두 필터는 짝이라 local에서 한쪽만 켜면 게이트웨이 경유 호출이 전부 401이 된다. 둘을 끈 상태에서는 local로 인증 흐름을
+확인할 수 없어, 실제로는 local 테스트 때마다 두 필터를 직접 켜고 쓰고 있었다. 그 사용 방식을 코드로 옮겼다.
+
+**대가** — 서비스를 직접 호출할 때 시크릿을 붙여야 한다. 값은 게이트웨이와 모든 서비스의 local 설정에 같은 기본값으로 들어 있다.
+
+```bash
+curl localhost:8082/api/v1/routines -H 'X-Gateway-Secret: local-secret' -H 'X-User-Id: 1'
+```
 
 ```yaml
-# application-local.yaml (user · routine · challenge) — 필터가 없으므로 값은 쓰이지 않는다
+# application-local.yaml (gateway · user · routine · challenge · chat · notification)
 gateway:
   secret: ${GATEWAY_SECRET:local-secret}
 ```
+
+- chat · notification에는 local 설정 파일이 없어, 필터를 켜면 `GATEWAY_SECRET` 없이 띄울 때 "빈 시크릿"으로 기동이 실패했다. 같은 기본값을 담은 `application-local.yaml`을 두었다
+- **`local`과 `prod`를 함께 켜는 조합은 지원하지 않는다.** local 전용 구성(문서 라우트 · Swagger · gRPC reflection)이 prod에 섞인다. 기동을 막는 가드는 #215
+- local 서비스 포트는 개발자 머신 밖으로 노출하지 않는다는 전제다. 시크릿 기본값이 공개 저장소에 있기 때문이다
 
 ---
 
