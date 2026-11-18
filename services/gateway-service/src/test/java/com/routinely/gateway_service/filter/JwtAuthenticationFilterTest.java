@@ -12,6 +12,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
@@ -68,6 +69,38 @@ class JwtAuthenticationFilterTest {
         assertThat(exchange.getResponse().getStatusCode()).isNotEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(captor.getValue().getRequest().getHeaders()
                 .getFirst(HeaderConstants.GATEWAY_SECRET)).isEqualTo(GATEWAY_SECRET);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "/__docs/user-service",
+            "/__docs/routine-service",
+            "/__docs/challenge-service"
+    })
+    @DisplayName("문서경로_GET은_JWT없이_통과하고_X-Gateway-Secret_주입 (#201)")
+    void filter_apiDocsGet_passesWithoutJwtAndInjectsGatewaySecret(String path) {
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get(path));
+
+        filter.filter(exchange, chain).block();
+
+        ArgumentCaptor<ServerWebExchange> captor = ArgumentCaptor.forClass(ServerWebExchange.class);
+        verify(chain).filter(captor.capture());
+        assertThat(captor.getValue().getRequest().getHeaders()
+                .getFirst(HeaderConstants.GATEWAY_SECRET)).isEqualTo(GATEWAY_SECRET);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"POST /__docs/user-service", "GET /__docs/user-service/extra", "GET /__docs/unknown-service"})
+    @DisplayName("문서경로는_GET과_정확한_경로만_공개_그외는_401 (#201)")
+    void filter_apiDocsOtherMethodOrPath_unauthorized(String request) {
+        String[] methodAndPath = request.split(" ");
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.method(HttpMethod.valueOf(methodAndPath[0]), methodAndPath[1]));
+
+        filter.filter(exchange, chain).block();
+
+        verify(chain, never()).filter(any());
+        assertUnauthorizedResponse(exchange);
     }
 
     @Test

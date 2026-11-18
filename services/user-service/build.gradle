@@ -8,12 +8,14 @@ ext {
 
 dependencies {
 	implementation project(':libs:common-web')
+	implementation "org.springdoc:springdoc-openapi-starter-webmvc-api:${springdocVersion}"
 	implementation project(':libs:common-jpa')
 	implementation project(':libs:common-observability')
 	implementation project(':libs:common-storage')
 	implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
 	runtimeOnly 'org.postgresql:postgresql'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	testImplementation testFixtures(project(':libs:common-web'))
 	testRuntimeOnly 'com.h2database:h2'
 	testImplementation testFixtures(project(':libs:common-core'))
 	testImplementation 'org.springframework.boot:spring-boot-data-jpa-test'

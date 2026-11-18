@@ -6,6 +6,11 @@ spring:
     name: gateway-service
   main:
     web-application-type: reactive
+  # 게이트웨이는 정적 파일을 서빙하지 않는다. 켜 두면 springdoc을 꺼도 jar 안의 Swagger UI 파일이
+  # /webjars/swagger-ui/**로 열린다(#201 리뷰). local의 Swagger UI 파일은 springdoc이 자체 핸들러로 서빙한다.
+  web:
+    resources:
+      add-mappings: false
   cloud:
     gateway:
       server:
@@ -171,3 +176,10 @@ resilience4j:
       routine-service-cb:
         # routine-service는 상대적으로 느릴 수 있어 timeout을 조금 더 여유 있게 설정
         timeoutDuration: 5s
+
+# Swagger UI(#201). 기본은 UI · 명세 모두 끈다 — prod에서는 열지 않는다. local에서만 켠다(application-local.yaml).
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

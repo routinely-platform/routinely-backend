@@ -1,5 +1,6 @@
 package com.routinely.gateway_service.controller;
 
+import com.routinely.gateway_service.support.TestAccessTokens;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import java.time.Duration;
@@ -11,9 +12,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
+import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -29,6 +32,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.when;
 
+// local에서도 JwtAuthenticationFilter가 켜진다(#201). routine 경로는 보호 경로라 토큰을 붙인다.
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles({"test", "local"})
 @DisplayName("Circuit Breaker Integration")
@@ -49,6 +53,9 @@ class CircuitBreakerIntegrationTest {
 
     @LocalServerPort
     private int port;
+
+    @Value("${jwt.secret}")
+    private String jwtSecret;
 
     private WebTestClient webTestClient;
 
@@ -152,6 +159,7 @@ class CircuitBreakerIntegrationTest {
     void routineServiceTimeout_returnsFallbackResponse() {
         webTestClient.get()
                 .uri("/api/v1/routines/timeout")
+                .header(HttpHeaders.AUTHORIZATION, TestAccessTokens.bearer(jwtSecret, 1L))
                 .exchange()
                 .expectStatus().isEqualTo(HttpResponseStatus.SERVICE_UNAVAILABLE.code())
                 .expectBody()
@@ -167,6 +175,7 @@ class CircuitBreakerIntegrationTest {
         for (int i = 0; i < 5; i++) {
             webTestClient.get()
                     .uri("/api/v1/routines/slow-open")
+                    .header(HttpHeaders.AUTHORIZATION, TestAccessTokens.bearer(jwtSecret, 1L))
                     .exchange()
                     .expectStatus().isOk()
                     .expectBody(String.class)
@@ -175,6 +184,7 @@ class CircuitBreakerIntegrationTest {
 
         webTestClient.get()
                 .uri("/api/v1/routines/slow-open")
+                .header(HttpHeaders.AUTHORIZATION, TestAccessTokens.bearer(jwtSecret, 1L))
                 .exchange()
                 .expectStatus().isEqualTo(HttpResponseStatus.SERVICE_UNAVAILABLE.code())
                 .expectBody()

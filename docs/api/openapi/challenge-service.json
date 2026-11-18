@@ -1,0 +1,898 @@
+{
+  "components" : {
+    "schemas" : {
+      "ApiResponseChallengeDetailResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ChallengeDetailResponse"
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseChallengeListResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ChallengeListResponse"
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseChallengeMemberResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ChallengeMemberResponse"
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseChallengeRankingResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ChallengeRankingResponse"
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseChallengeResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ChallengeResponse"
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseVoid" : {
+        "properties" : {
+          "data" : { },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ChallengeDetailResponse" : {
+        "properties" : {
+          "categoryCode" : {
+            "type" : "string"
+          },
+          "challengeId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "creatorUserId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "currentMembers" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "daysOfWeek" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "endedAt" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "imageUrl" : {
+            "type" : "string"
+          },
+          "inviteCode" : {
+            "type" : "string"
+          },
+          "isPublic" : {
+            "type" : "boolean"
+          },
+          "maxMembers" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "myRole" : {
+            "enum" : [ "LEADER", "MEMBER" ],
+            "type" : "string"
+          },
+          "routineTitle" : {
+            "type" : "string"
+          },
+          "scheduleType" : {
+            "enum" : [ "DAILY", "SPECIFIC_DAYS", "WEEKLY_COUNT", "MONTHLY_COUNT" ],
+            "type" : "string"
+          },
+          "startedAt" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "WAITING", "ACTIVE", "ENDED" ],
+            "type" : "string"
+          },
+          "targetCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "title" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ChallengeListResponse" : {
+        "properties" : {
+          "content" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ChallengeSummaryResponse"
+            },
+            "type" : "array"
+          },
+          "page" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "size" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "totalElements" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "totalPages" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "ChallengeMemberResponse" : {
+        "properties" : {
+          "challengeId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "challengeMemberId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "joinedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "role" : {
+            "enum" : [ "LEADER", "MEMBER" ],
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "ACTIVE", "LEFT", "EXPELLED" ],
+            "type" : "string"
+          },
+          "userId" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "ChallengeRankingResponse" : {
+        "properties" : {
+          "myRanking" : {
+            "$ref" : "#/components/schemas/RankEntryResponse"
+          },
+          "rankings" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RankEntryResponse"
+            },
+            "type" : "array"
+          },
+          "totalMembers" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "ChallengeResponse" : {
+        "properties" : {
+          "categoryCode" : {
+            "type" : "string"
+          },
+          "challengeId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "creatorUserId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "currentMembers" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "daysOfWeek" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "endedAt" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "imageUrl" : {
+            "type" : "string"
+          },
+          "inviteCode" : {
+            "type" : "string"
+          },
+          "isPublic" : {
+            "type" : "boolean"
+          },
+          "maxMembers" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "myRole" : {
+            "enum" : [ "LEADER", "MEMBER" ],
+            "type" : "string"
+          },
+          "routineTitle" : {
+            "type" : "string"
+          },
+          "scheduleType" : {
+            "enum" : [ "DAILY", "SPECIFIC_DAYS", "WEEKLY_COUNT", "MONTHLY_COUNT" ],
+            "type" : "string"
+          },
+          "startedAt" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "WAITING", "ACTIVE", "ENDED" ],
+            "type" : "string"
+          },
+          "targetCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "title" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ChallengeSummaryResponse" : {
+        "properties" : {
+          "categoryCode" : {
+            "type" : "string"
+          },
+          "challengeId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "currentMembers" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "daysOfWeek" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "endedAt" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "imageUrl" : {
+            "type" : "string"
+          },
+          "maxMembers" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "myRole" : {
+            "enum" : [ "LEADER", "MEMBER" ],
+            "type" : "string"
+          },
+          "routineTitle" : {
+            "type" : "string"
+          },
+          "scheduleType" : {
+            "enum" : [ "DAILY", "SPECIFIC_DAYS", "WEEKLY_COUNT", "MONTHLY_COUNT" ],
+            "type" : "string"
+          },
+          "startedAt" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "WAITING", "ACTIVE", "ENDED" ],
+            "type" : "string"
+          },
+          "targetCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "title" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "CreateChallengeRequest" : {
+        "properties" : {
+          "categoryCode" : {
+            "maxLength" : 30,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "daysOfWeek" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "description" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "endedAt" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "isPublic" : {
+            "type" : "boolean"
+          },
+          "maxMembers" : {
+            "format" : "int32",
+            "maximum" : 20,
+            "minimum" : 2,
+            "type" : "integer"
+          },
+          "routineTitle" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "scheduleType" : {
+            "minLength" : 1,
+            "pattern" : "^(DAILY|SPECIFIC_DAYS|WEEKLY_COUNT|MONTHLY_COUNT)$",
+            "type" : "string"
+          },
+          "startedAt" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "targetCount" : {
+            "format" : "int32",
+            "minimum" : 1,
+            "type" : "integer"
+          },
+          "title" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "categoryCode", "endedAt", "isPublic", "maxMembers", "routineTitle", "scheduleType", "startedAt", "title" ],
+        "type" : "object"
+      },
+      "RankEntryResponse" : {
+        "properties" : {
+          "acceptedCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "isMe" : {
+            "type" : "boolean"
+          },
+          "rank" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "userId" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "UpdateChallengeRequest" : {
+        "properties" : {
+          "description" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "endedAt" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "isPublic" : {
+            "type" : "boolean"
+          },
+          "maxMembers" : {
+            "format" : "int32",
+            "maximum" : 20,
+            "minimum" : 2,
+            "type" : "integer"
+          },
+          "routineTitle" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "pattern" : ".*\\S.*",
+            "type" : "string"
+          },
+          "startedAt" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "title" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "pattern" : ".*\\S.*",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      }
+    },
+    "securitySchemes" : {
+      "bearerAuth" : {
+        "bearerFormat" : "JWT",
+        "scheme" : "bearer",
+        "type" : "http"
+      }
+    }
+  },
+  "info" : {
+    "description" : "게이트웨이 Swagger UI(/swagger-ui.html)에서 호출한다. 보호 API는 로그인 응답의 accessToken을 Authorize에 넣는다.",
+    "title" : "challenge-service API",
+    "version" : "v1"
+  },
+  "openapi" : "3.1.0",
+  "paths" : {
+    "/api/v1/challenges" : {
+      "get" : {
+        "operationId" : "getPublicChallenges",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "categoryCode",
+          "required" : false,
+          "schema" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          }
+        }, {
+          "in" : "query",
+          "name" : "keyword",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : "0",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : "20",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseChallengeListResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "challenge-controller" ]
+      },
+      "post" : {
+        "operationId" : "createChallenge",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateChallengeRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseChallengeResponse"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "tags" : [ "challenge-controller" ]
+      }
+    },
+    "/api/v1/challenges/me" : {
+      "get" : {
+        "operationId" : "getMyJoinedChallenges",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "categoryCode",
+          "required" : false,
+          "schema" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          }
+        }, {
+          "in" : "query",
+          "name" : "keyword",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "page",
+          "required" : false,
+          "schema" : {
+            "default" : "0",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "size",
+          "required" : false,
+          "schema" : {
+            "default" : "20",
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "sort",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "status",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseChallengeListResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "challenge-controller" ]
+      }
+    },
+    "/api/v1/challenges/{challengeId}/image" : {
+      "delete" : {
+        "operationId" : "deleteChallengeImage",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "challengeId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseChallengeDetailResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "challenge-controller" ]
+      },
+      "put" : {
+        "operationId" : "uploadChallengeImage",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "challengeId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "properties" : {
+                  "image" : {
+                    "description" : "image/jpeg · image/png · image/webp, 최대 5MB",
+                    "format" : "binary",
+                    "type" : "string"
+                  }
+                },
+                "required" : [ "image" ],
+                "type" : "object"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseChallengeDetailResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "challenge-controller" ]
+      }
+    },
+    "/api/v1/challenges/{challengeId}/members" : {
+      "post" : {
+        "operationId" : "joinChallenge",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "challengeId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseChallengeMemberResponse"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "tags" : [ "challenge-controller" ]
+      }
+    },
+    "/api/v1/challenges/{challengeId}/members/me/leave" : {
+      "post" : {
+        "operationId" : "leaveChallenge",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "challengeId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "challenge-controller" ]
+      }
+    },
+    "/api/v1/challenges/{id}" : {
+      "get" : {
+        "operationId" : "getChallengeDetail",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseChallengeDetailResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "challenge-controller" ]
+      },
+      "patch" : {
+        "operationId" : "updateChallenge",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateChallengeRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseChallengeResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "challenge-controller" ]
+      }
+    },
+    "/api/v1/challenges/{id}/ranking" : {
+      "get" : {
+        "operationId" : "getChallengeRanking",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "limit",
+          "required" : false,
+          "schema" : {
+            "default" : "3",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseChallengeRankingResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "challenge-controller" ]
+      }
+    }
+  },
+  "security" : [ {
+    "bearerAuth" : [ ]
+  } ]
+}

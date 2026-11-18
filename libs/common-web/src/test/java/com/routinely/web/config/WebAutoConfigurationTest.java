@@ -3,7 +3,6 @@ package com.routinely.web.config;
 import com.routinely.web.filter.GatewayAuthFilter;
 import com.routinely.web.handler.GlobalExceptionHandler;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -14,7 +13,7 @@ import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 자동설정이 어떤 프로파일에서 GatewayAuthFilter를 등록하는지 검증한다 (#208).
+ * 자동설정이 프로파일과 무관하게 GatewayAuthFilter를 등록하는지 검증한다 (#208 · #201).
  *
  * <p>서비스는 prod 프로파일로 테스트 컨텍스트를 띄울 수 없다(실제 DB 접속값 필요).
  * 그래서 prod를 포함한 프로파일별 등록 여부는 자동설정 단위로 여기서 본다.
@@ -31,9 +30,9 @@ class WebAutoConfigurationTest {
                     WebAutoConfiguration.class));
 
     @ParameterizedTest(name = "프로파일 [{0}]")
-    @ValueSource(strings = {"", "test", "prod", "prod,observability"})
-    @DisplayName("local이 아닌 프로파일에서는 GatewayAuthFilter와 GlobalExceptionHandler가 등록된다")
-    void register_nonLocalProfile_filterRegistered(String profiles) {
+    @ValueSource(strings = {"", "test", "prod", "prod,observability", "local", "local,test", "local,observability"})
+    @DisplayName("local을 포함한 모든 프로파일에서 GatewayAuthFilter와 GlobalExceptionHandler가 등록된다")
+    void register_anyProfile_filterRegistered(String profiles) {
         runner.withInitializer(ctx -> ctx.getEnvironment().setActiveProfiles(split(profiles)))
                 .withPropertyValues("gateway.secret=secret")
                 .run(ctx -> {
@@ -43,29 +42,19 @@ class WebAutoConfigurationTest {
     }
 
     @ParameterizedTest(name = "프로파일 [{0}]")
-    @ValueSource(strings = {"local", "local,test", "local,observability"})
-    @DisplayName("local 프로파일에서는 GatewayAuthFilter가 등록되지 않고 시크릿도 요구하지 않는다")
-    void register_localProfile_filterNotRegistered(String profiles) {
+    @ValueSource(strings = {"prod", "local"})
+    @DisplayName("gateway.secret이 없으면 local이어도 기동이 실패한다")
+    void register_withoutSecret_failsToStart(String profiles) {
         runner.withInitializer(ctx -> ctx.getEnvironment().setActiveProfiles(split(profiles)))
-                .run(ctx -> {
-                    assertThat(ctx).hasNotFailed();
-                    assertThat(ctx).doesNotHaveBean(GatewayAuthFilter.class);
-                    assertThat(ctx).hasSingleBean(GlobalExceptionHandler.class);
-                });
-    }
-
-    @Test
-    @DisplayName("local이 아닌 프로파일에서 gateway.secret이 없으면 기동이 실패한다")
-    void register_nonLocalWithoutSecret_failsToStart() {
-        runner.withInitializer(ctx -> ctx.getEnvironment().setActiveProfiles("prod"))
                 .run(ctx -> assertThat(ctx).hasFailed()
                         .getFailure().rootCause().hasMessageContaining("gateway.secret"));
     }
 
-    @Test
-    @DisplayName("local이 아닌 프로파일에서 gateway.secret이 비어 있으면 기동이 실패한다")
-    void register_nonLocalWithBlankSecret_failsToStart() {
-        runner.withInitializer(ctx -> ctx.getEnvironment().setActiveProfiles("prod"))
+    @ParameterizedTest(name = "프로파일 [{0}]")
+    @ValueSource(strings = {"prod", "local"})
+    @DisplayName("gateway.secret이 비어 있으면 local이어도 기동이 실패한다")
+    void register_withBlankSecret_failsToStart(String profiles) {
+        runner.withInitializer(ctx -> ctx.getEnvironment().setActiveProfiles(split(profiles)))
                 .withPropertyValues("gateway.secret=")
                 .run(ctx -> assertThat(ctx).hasFailed()
                         .getFailure().rootCause().hasMessageContaining("gateway.secret"));

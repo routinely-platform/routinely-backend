@@ -11,6 +11,7 @@ import com.routinely.user_service.presentation.rest.auth.dto.request.LoginReques
 import com.routinely.user_service.presentation.rest.auth.dto.request.SignUpRequest;
 import com.routinely.user_service.presentation.rest.auth.dto.response.AuthSessionResponse;
 import com.routinely.user_service.presentation.rest.auth.dto.response.UserResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -21,9 +22,13 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.ResponseStatus;
 
+// signup · login · refresh · logout은 게이트웨이 공개 경로(JwtAuthenticationFilter.PUBLIC_ENDPOINTS)다.
+// 빈 @SecurityRequirements로 명세에서 전역 Bearer를 빼 security: []로 표시한다(#201).
 @RestController
 @RequestMapping("/api/v1/auth")
+@SecurityRequirements
 public class AuthController {
 
     private static final String REFRESH_TOKEN_COOKIE = "refresh_token";
@@ -37,6 +42,7 @@ public class AuthController {
     }
 
     @PostMapping("/signup")
+    @ResponseStatus(HttpStatus.CREATED) // 명세에 201을 적는다(springdoc은 ResponseEntity.status를 읽지 못한다)
     public ResponseEntity<ApiResponse<UserResponse>> signUp(
             @RequestBody @Valid SignUpRequest request) {
 

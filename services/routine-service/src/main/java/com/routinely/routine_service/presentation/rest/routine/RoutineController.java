@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import static com.routinely.core.exception.ErrorCode.VALIDATION_FAILED;
 import static org.springframework.http.HttpStatus.CREATED;
 
@@ -36,6 +37,7 @@ public class RoutineController {
     }
 
     @PostMapping
+    @ResponseStatus(CREATED) // 명세에 201을 적는다(springdoc은 ResponseEntity.status를 읽지 못한다)
     public ResponseEntity<ApiResponse<RoutineResponse>> startRoutine(
             @RequestHeader(HeaderConstants.USER_ID) Long userId,
             @RequestBody @Valid StartRoutineRequest request) {

@@ -1,0 +1,1008 @@
+{
+  "components" : {
+    "schemas" : {
+      "ApiResponseBulkCompleteResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/BulkCompleteResponse"
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseExecutionCompleteResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ExecutionCompleteResponse"
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseListCategoryResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/CategoryResponse"
+            },
+            "type" : "array"
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseListExecutionResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ExecutionResponse"
+            },
+            "type" : "array"
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseListRoutineResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RoutineResponse"
+            },
+            "type" : "array"
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseListRoutineTemplateResponse" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RoutineTemplateResponse"
+            },
+            "type" : "array"
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseRoutineResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/RoutineResponse"
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseRoutineTemplateResponse" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/RoutineTemplateResponse"
+          },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseVoid" : {
+        "properties" : {
+          "data" : { },
+          "errorCode" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "BulkCompleteRequest" : {
+        "properties" : {
+          "routineIds" : {
+            "items" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "type" : "array"
+          },
+          "scheduledDate" : {
+            "format" : "date",
+            "type" : "string"
+          }
+        },
+        "required" : [ "routineIds", "scheduledDate" ],
+        "type" : "object"
+      },
+      "BulkCompleteResponse" : {
+        "properties" : {
+          "createdCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "executions" : {
+            "items" : {
+              "$ref" : "#/components/schemas/ExecutionCompleteResponse"
+            },
+            "type" : "array"
+          }
+        },
+        "type" : "object"
+      },
+      "CategoryResponse" : {
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "displayOrder" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "icon" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "CreateRoutineTemplateRequest" : {
+        "properties" : {
+          "categoryCode" : {
+            "maxLength" : 30,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "daysOfWeek" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "scheduleType" : {
+            "minLength" : 1,
+            "pattern" : "^(DAILY|SPECIFIC_DAYS|WEEKLY_COUNT|MONTHLY_COUNT)$",
+            "type" : "string"
+          },
+          "targetCount" : {
+            "format" : "int32",
+            "minimum" : 1,
+            "type" : "integer"
+          },
+          "title" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "categoryCode", "scheduleType", "title" ],
+        "type" : "object"
+      },
+      "ExecutionCompleteResponse" : {
+        "properties" : {
+          "completedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "executionId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "feedCardId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "photoUrl" : {
+            "type" : "string"
+          },
+          "routineId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "scheduledDate" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ExecutionResponse" : {
+        "properties" : {
+          "backfillable" : {
+            "type" : "boolean"
+          },
+          "completedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "executionId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "feedCardId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "memo" : {
+            "type" : "string"
+          },
+          "photoUrl" : {
+            "type" : "string"
+          },
+          "routineId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "scheduledDate" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "RoutineResponse" : {
+        "properties" : {
+          "categoryCode" : {
+            "type" : "string"
+          },
+          "challengeId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "daysOfWeek" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "endedAt" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "isActive" : {
+            "type" : "boolean"
+          },
+          "preferredDays" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "preferredTime" : {
+            "type" : "string"
+          },
+          "routineId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "routineTemplateId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "scheduleType" : {
+            "type" : "string"
+          },
+          "startedAt" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "targetCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "title" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "RoutineTemplateResponse" : {
+        "properties" : {
+          "categoryCode" : {
+            "type" : "string"
+          },
+          "daysOfWeek" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "scheduleType" : {
+            "type" : "string"
+          },
+          "targetCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "templateId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "title" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "StartRoutineRequest" : {
+        "properties" : {
+          "categoryCode" : {
+            "maxLength" : 30,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "daysOfWeek" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "endedAt" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "preferredTime" : {
+            "pattern" : "^([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d$",
+            "type" : "string"
+          },
+          "routineTemplateId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "scheduleType" : {
+            "pattern" : "^(DAILY|SPECIFIC_DAYS|WEEKLY_COUNT|MONTHLY_COUNT)$",
+            "type" : "string"
+          },
+          "startedAt" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "targetCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "title" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "startedAt" ],
+        "type" : "object"
+      },
+      "UpdateRequest" : {
+        "properties" : {
+          "categoryCode" : {
+            "maxLength" : 30,
+            "minLength" : 0,
+            "pattern" : "(?s).*\\S.*",
+            "type" : "string"
+          },
+          "clearEndedAt" : {
+            "type" : "boolean"
+          },
+          "clearPreferredDays" : {
+            "type" : "boolean"
+          },
+          "clearPreferredTime" : {
+            "type" : "boolean"
+          },
+          "daysOfWeek" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "endedAt" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "preferredDays" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "preferredTime" : {
+            "pattern" : "^([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d$",
+            "type" : "string"
+          },
+          "scheduleType" : {
+            "pattern" : "^(DAILY|SPECIFIC_DAYS|WEEKLY_COUNT|MONTHLY_COUNT)$",
+            "type" : "string"
+          },
+          "startedAt" : {
+            "format" : "date",
+            "type" : "string"
+          },
+          "targetCount" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "title" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "pattern" : "(?s).*\\S.*",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "UpdateRoutineTemplateRequest" : {
+        "properties" : {
+          "categoryCode" : {
+            "maxLength" : 30,
+            "minLength" : 0,
+            "pattern" : ".*\\S.*",
+            "type" : "string"
+          },
+          "daysOfWeek" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "scheduleType" : {
+            "pattern" : "^(DAILY|SPECIFIC_DAYS|WEEKLY_COUNT|MONTHLY_COUNT)$",
+            "type" : "string"
+          },
+          "targetCount" : {
+            "format" : "int32",
+            "minimum" : 1,
+            "type" : "integer"
+          },
+          "title" : {
+            "maxLength" : 100,
+            "minLength" : 0,
+            "pattern" : ".*\\S.*",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      }
+    },
+    "securitySchemes" : {
+      "bearerAuth" : {
+        "bearerFormat" : "JWT",
+        "scheme" : "bearer",
+        "type" : "http"
+      }
+    }
+  },
+  "info" : {
+    "description" : "게이트웨이 Swagger UI(/swagger-ui.html)에서 호출한다. 보호 API는 로그인 응답의 accessToken을 Authorize에 넣는다.",
+    "title" : "routine-service API",
+    "version" : "v1"
+  },
+  "openapi" : "3.1.0",
+  "paths" : {
+    "/api/v1/categories" : {
+      "get" : {
+        "operationId" : "listCategories",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListCategoryResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "category-controller" ]
+      }
+    },
+    "/api/v1/routine-executions" : {
+      "get" : {
+        "operationId" : "getMyExecutions",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "date",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "endDate",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "routineId",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "startDate",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "status",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListExecutionResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "routine-execution-controller" ]
+      }
+    },
+    "/api/v1/routine-executions/bulk-complete" : {
+      "post" : {
+        "operationId" : "bulkComplete",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/BulkCompleteRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseBulkCompleteResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "routine-execution-controller" ]
+      }
+    },
+    "/api/v1/routine-templates" : {
+      "get" : {
+        "operationId" : "getMyTemplates",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "categoryCode",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListRoutineTemplateResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "routine-template-controller" ]
+      },
+      "post" : {
+        "operationId" : "createTemplate",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateRoutineTemplateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRoutineTemplateResponse"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "tags" : [ "routine-template-controller" ]
+      }
+    },
+    "/api/v1/routine-templates/{templateId}" : {
+      "delete" : {
+        "operationId" : "deleteTemplate",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "templateId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "routine-template-controller" ]
+      },
+      "get" : {
+        "operationId" : "getTemplate",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "templateId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRoutineTemplateResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "routine-template-controller" ]
+      },
+      "patch" : {
+        "operationId" : "updateTemplate",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "templateId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateRoutineTemplateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRoutineTemplateResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "routine-template-controller" ]
+      }
+    },
+    "/api/v1/routines" : {
+      "get" : {
+        "operationId" : "getMyRoutines",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "challengeId",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "isActive",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListRoutineResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "routine-controller" ]
+      },
+      "post" : {
+        "operationId" : "startRoutine",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/StartRoutineRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRoutineResponse"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "tags" : [ "routine-controller" ]
+      }
+    },
+    "/api/v1/routines/{routineId}" : {
+      "delete" : {
+        "operationId" : "stopRoutine",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "routineId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "routine-controller" ]
+      },
+      "patch" : {
+        "operationId" : "updateRoutine",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "routineId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRoutineResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "routine-controller" ]
+      }
+    },
+    "/api/v1/routines/{routineId}/executions/{date}/complete" : {
+      "delete" : {
+        "operationId" : "cancelExecutionComplete",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "date",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "path",
+          "name" : "routineId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseExecutionCompleteResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "routine-execution-controller" ]
+      },
+      "post" : {
+        "operationId" : "completeExecution",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "date",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "path",
+          "name" : "routineId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "query",
+          "name" : "memo",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "properties" : {
+                  "photo" : {
+                    "format" : "binary",
+                    "type" : "string"
+                  }
+                },
+                "type" : "object"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseExecutionCompleteResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "routine-execution-controller" ]
+      }
+    }
+  },
+  "security" : [ {
+    "bearerAuth" : [ ]
+  } ]
+}
