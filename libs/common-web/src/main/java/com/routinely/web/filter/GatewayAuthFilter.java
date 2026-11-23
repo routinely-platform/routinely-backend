@@ -8,7 +8,6 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.util.Assert;
@@ -26,13 +25,13 @@ import java.nio.charset.StandardCharsets;
  * 이 패키지({@code com.routinely.web})는 서비스의 스캔 범위({@code com.routinely.{svc}_service}) 밖이라
  * {@code @Component}를 붙여도 등록되지 않는다.
  *
- * <p><b>local</b> — Gateway의 {@code JwtAuthenticationFilter}도 local에서는 꺼져 시크릿을 붙이지 않으므로
- * 이 필터도 등록하지 않는다. local 정책은 #201에서 두 필터를 함께 정한다.
+ * <p><b>프로파일</b> — local을 포함한 모든 프로파일에서 등록된다(#201). Gateway의 {@code JwtAuthenticationFilter}도
+ * local에서 켜져 시크릿을 붙이므로 두 필터는 짝으로 동작한다. 서비스를 직접 호출할 때는
+ * {@code X-Gateway-Secret} 헤더에 local 시크릿({@code local-secret})을 직접 넣는다.
  *
  * <p><b>순서</b> — {@code @Order}를 두지 않아 가장 나중에 실행된다. Boot의 관측 필터가 먼저 돌아
  * 401 응답에도 traceId · 메트릭이 남는다.
  */
-@Profile("!local")
 public class GatewayAuthFilter extends OncePerRequestFilter {
 
     private static final String ACTUATOR_PATH = "/actuator";

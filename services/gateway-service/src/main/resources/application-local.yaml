@@ -25,3 +25,27 @@ cors:
   allowed-methods: ${CORS_ALLOWED_METHODS:GET,POST,PUT,PATCH,DELETE,OPTIONS}
   allowed-headers: ${CORS_ALLOWED_HEADERS:*}
   allow-credentials: ${CORS_ALLOW_CREDENTIALS:true}
+
+# Swagger UI(#201) — http://localhost:8080/swagger-ui.html
+# 드롭다운의 각 명세는 local 전용 문서 라우트(ApiDocsRouteConfig, /__docs/{서비스})로 서비스 /v3/api-docs를 가져온다.
+# api-docs.enabled=false로 끄면 /v3/api-docs/swagger-config까지 사라져 UI가 404가 된다. 그래서 켜 두고
+# paths-to-exclude로 게이트웨이 자체 명세(/fallback/**)를 빈 문서로 만든다. 드롭다운에는 urls만 나온다.
+# 서비스 목록은 ApiDocsRoutes.SERVICES와 같아야 한다(ApiDocsLocalIntegrationTest가 확인한다).
+springdoc:
+  api-docs:
+    enabled: true
+  paths-to-exclude: /**
+  swagger-ui:
+    enabled: true
+    # 드롭다운에서 명세를 바꾸면 Swagger UI가 Authorize한 토큰을 지운다. user-service에서 로그인한 토큰으로
+    # routine · challenge를 호출할 수 있게 브라우저 저장소에 유지한다(local 전용 — prod에는 UI가 없다).
+    persist-authorization: true
+    # 드롭다운은 이름순이라 기본 선택이 challenge-service가 된다. 로그인부터 하도록 user-service를 먼저 연다
+    urls-primary-name: user-service
+    urls:
+      - name: user-service
+        url: /__docs/user-service
+      - name: routine-service
+        url: /__docs/routine-service
+      - name: challenge-service
+        url: /__docs/challenge-service

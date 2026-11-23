@@ -9,6 +9,7 @@ ext {
 
 dependencies {
 	implementation project(':libs:common-web')
+	implementation "org.springdoc:springdoc-openapi-starter-webmvc-api:${springdocVersion}"
 	implementation project(':libs:common-jpa')
 	implementation project(':libs:common-observability')
 	implementation project(':libs:common-storage')
@@ -35,6 +36,7 @@ dependencies {
 	testImplementation 'org.testcontainers:testcontainers-jdbc'
 	testImplementation 'org.testcontainers:testcontainers-postgresql'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	testImplementation testFixtures(project(':libs:common-web'))
 }
 
 dependencyManagement {

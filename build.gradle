@@ -4,6 +4,12 @@ plugins {
     id 'io.spring.dependency-management' version '1.1.7' apply false
 }
 
+// REST API 문서화(#201). Boot 4.0.x 라인은 3.0.x다(3.1+는 Boot 4.1 기준).
+ext {
+    springdocVersion = '3.0.3'
+    swaggerParserVersion = '2.1.48'
+}
+
 allprojects {
     group = 'com.routinely'
     version = '0.0.1-SNAPSHOT'
@@ -40,5 +46,16 @@ subprojects {
 
     test {
         useJUnitPlatform()
+    }
+}
+
+// OpenAPI 기준 스냅샷(#201) — REST 컨트롤러가 있는 서비스만. 스냅샷은 docs/api/openapi/{서비스}.json에 커밋한다.
+// check(test)는 비교만 한다. 갱신은 ./gradlew :services:{서비스}:test --tests '*OpenApiContractTest' -Popenapi.update=true
+configure([':services:user-service', ':services:routine-service', ':services:challenge-service'].collect { project(it) }) {
+    tasks.named('test') {
+        def snapshotDir = rootProject.file('docs/api/openapi')
+        inputs.dir(snapshotDir).withPropertyName('openApiSnapshots')
+        systemProperty 'openapi.snapshot.dir', snapshotDir.absolutePath
+        systemProperty 'openapi.snapshot.update', providers.gradleProperty('openapi.update').getOrElse('false')
     }
 }

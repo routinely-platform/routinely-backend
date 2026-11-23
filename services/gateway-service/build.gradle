@@ -13,6 +13,8 @@ dependencies {
 	implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
 	implementation 'org.springframework.cloud:spring-cloud-starter-circuitbreaker-reactor-resilience4j'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis-reactive'
+	// Swagger UI(#201) — 서비스 명세를 드롭다운으로 고른다. local에서만 켠다(application-local.yaml)
+	implementation "org.springdoc:springdoc-openapi-starter-webflux-ui:${springdocVersion}"
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'

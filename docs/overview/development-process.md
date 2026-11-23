@@ -199,8 +199,10 @@ com.routinely.web/
 │   └── WebAutoConfiguration.java    # 자동설정 — 아래 두 빈을 @Import로 서비스에 등록
 ├── handler/
 │   └── GlobalExceptionHandler.java  # @RestControllerAdvice
-└── filter/
-    └── GatewayAuthFilter.java       # X-Gateway-Secret 검증 (ADR-0019) · !local에서만 · /actuator 제외
+├── filter/
+│   └── GatewayAuthFilter.java       # X-Gateway-Secret 검증 (ADR-0019) · 모든 프로파일(#201) · /actuator 제외
+└── openapi/
+    └── OpenApiAutoConfiguration.java # 별도 자동설정(#201) — springdoc이 있는 서비스에서만 · servers / · Bearer · 신뢰 헤더 숨김
 ```
 
 > 서비스의 컴포넌트 스캔은 `com.routinely.{svc}_service`에서 시작해 `com.routinely.web`을 보지 못한다.

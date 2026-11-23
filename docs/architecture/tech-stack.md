@@ -267,7 +267,7 @@
 | 대상 | 도구 | 비고 |
 |---|---|---|
 | gRPC API | `protoc-gen-doc` | `.proto` 파일에서 HTML / Markdown 자동 생성 |
-| REST API | `Swagger (OpenAPI)` | Springdoc openapi-starter 기반, `/swagger-ui.html` 제공 |
+| REST API | `Swagger (OpenAPI)` | springdoc 3.0.3 — 서비스(user · routine · challenge)는 `webmvc-api`로 `/v3/api-docs`만, 게이트웨이는 `webflux-ui`로 `/swagger-ui.html`을 띄워 서비스 명세를 드롭다운으로 고른다(#201). 정규화한 기준 스냅샷은 `docs/api/openapi/` |
 | Kafka 이벤트 | `AsyncAPI` | 토픽 / 페이로드 / 컨슈머 그룹 스펙 명세 (`docs/requirements/event-spec.md` 참조) |
 | 환경 변수 | `infra/.env.example` | 실제 시크릿 없이 필요한 환경변수 목록과 설명 제공, `infra/`에 커밋. prod 프로파일이 기본값 없이 읽는 값(DB 접속 · 시크릿)은 비우면 기동 시점에 실패한다 |
 | 로컬 개발 가이드 | `README.md` | 서비스별 실행 방법, 환경변수 설정, Docker Compose 사용법 |
@@ -275,6 +275,7 @@
 **운영 원칙**
 
 - `infra/.env` 파일은 `.gitignore`에 추가하고, `infra/.env.example`만 커밋한다.
-- Swagger UI는 `local` / `dev` 프로파일에서만 활성화한다 (`springdoc.api-docs.enabled: false` in prod).
+- Swagger UI와 `/v3/api-docs`는 **`local` 프로파일에서만** 켠다. 기본(`application.yaml`)이 `springdoc.api-docs.enabled: false`라 prod에서는 열리지 않는다. 게이트웨이의 문서 라우트(`/__docs/{서비스}`)도 local에서만 등록된다.
+- OpenAPI 스냅샷은 `check`(테스트)가 생성 결과와 비교한다. 갱신: `./gradlew :services:{서비스}:test --tests '*OpenApiContractTest' -Popenapi.update=true`
 - gRPC 문서는 빌드 파이프라인에서 자동 생성하여 `docs/grpc/` 디렉토리에 출력한다.
 - Kafka 이벤트 명세는 `docs/requirements/event-spec.md`를 단일 소스로 유지한다.

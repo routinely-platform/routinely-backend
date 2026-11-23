@@ -40,3 +40,8 @@ routinely:
       path-style-access: true
       access-key: test
       secret-key: test
+
+# OpenAPI 명세(#201) — 게이트웨이 Swagger UI가 문서 라우트로 가져간다.
+springdoc:
+  api-docs:
+    enabled: true

@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Import;
  * 이 클래스는 {@code META-INF/spring/...AutoConfiguration.imports}에 적혀 있어 자동설정으로 로드되고,
  * 여기서 {@code @Import}한 빈만 서비스에 등록된다. 새 공통 빈을 추가할 때는 여기에 적는다.
  *
- * <p>{@link GatewayAuthFilter}는 자체 {@code @Profile("!local")}로 local에서 빠진다.
+ * <p>{@link GatewayAuthFilter}는 프로파일과 무관하게 등록된다(#201 — local에서도 켠다).
  */
 @AutoConfiguration
 @Import({GlobalExceptionHandler.class, GatewayAuthFilter.class})

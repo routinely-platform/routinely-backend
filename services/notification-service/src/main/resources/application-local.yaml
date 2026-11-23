@@ -1,0 +1,4 @@
+# GatewayAuthFilter는 local에서도 켜진다(#201). 게이트웨이 local 시크릿과 같은 값을 기본으로 둔다.
+# 서비스를 직접 호출할 때는 X-Gateway-Secret: local-secret 헤더를 붙인다.
+gateway:
+  secret: ${GATEWAY_SECRET:local-secret}

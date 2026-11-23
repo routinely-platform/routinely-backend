@@ -178,13 +178,13 @@ void join_alreadyJoined_throwsException() { }
 ## @Profile 활용 패턴
 
 ```java
-// local 프로파일에서 GatewayAuthFilter 비활성화 (ADR-0019)
-// @Component가 아니다 — common-web은 서비스 스캔 범위 밖이라 WebAutoConfiguration의 @Import로 등록한다 (#208)
-@Profile("!local")
-public class GatewayAuthFilter extends OncePerRequestFilter { ... }
-// → 조건은 "활성 프로파일에 local이 없다"이다. test 단독이면 등록되므로 @SpringBootTest 컨텍스트에
+// local 프로파일에서만 문서 라우트 등록 (#201) — prod에서는 빈이 없어 /__docs/** 가 404다
+@Configuration
+@Profile("local")
+public class ApiDocsRouteConfig { ... }
+// → @Profile("local")의 반대편은 "빈이 없다"를 테스트한다(ApiDocsProdExposureTest: prod,test에서 빈 · 라우트 부재 + 404).
+//   GatewayAuthFilter는 프로파일 조건이 없다(#201 — local에서도 켠다). 그래서 모든 @SpringBootTest 컨텍스트에
 //   gateway.secret이 필요하다(각 서비스 application-test.yaml의 test-gateway-secret).
-//   local,test처럼 local이 함께 켜지면 등록되지 않는다(GatewayAuthFilterLocalProfileTest가 이를 단언한다)
 
 // prod 프로파일에서만 S3 실제 클라이언트 등록
 @Bean

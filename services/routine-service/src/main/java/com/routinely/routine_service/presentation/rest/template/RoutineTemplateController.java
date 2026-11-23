@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import org.springframework.web.bind.annotation.ResponseStatus;
 
 import static org.springframework.http.HttpStatus.CREATED;
 
@@ -35,6 +36,7 @@ public class RoutineTemplateController {
     }
 
     @PostMapping
+    @ResponseStatus(CREATED) // 명세에 201을 적는다(springdoc은 ResponseEntity.status를 읽지 못한다)
     public ResponseEntity<ApiResponse<RoutineTemplateResponse>> createTemplate(
             @RequestHeader(HeaderConstants.USER_ID) Long userId,
             @RequestBody @Valid CreateRoutineTemplateRequest request) {

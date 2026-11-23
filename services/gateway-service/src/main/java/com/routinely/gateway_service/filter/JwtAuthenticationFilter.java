@@ -2,13 +2,15 @@ package com.routinely.gateway_service.filter;
 
 import com.routinely.core.constant.HeaderConstants;
 import com.routinely.core.exception.ErrorCode;
+import com.routinely.gateway_service.docs.ApiDocsRoutes;
 import com.routinely.gateway_service.security.JwtTokenProvider;
 import io.jsonwebtoken.Claims;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
-import org.springframework.context.annotation.Profile;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpHeaders;
@@ -24,17 +26,22 @@ import reactor.core.publisher.Mono;
 import java.nio.charset.StandardCharsets;
 
 @Component
-@Profile("!local")
 public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
     private static final String BEARER_PREFIX = "Bearer ";
 
-    private static final Set<String> PUBLIC_ENDPOINTS = Set.of(
-            "POST /api/v1/auth/signup",
-            "POST /api/v1/auth/login",
-            "POST /api/v1/auth/refresh",
-            "POST /api/v1/auth/logout"
-    );
+    /**
+     * 토큰 없이 통과하는 경로. 메서드 + 경로 정확 일치로 판정한다.
+     * 문서 경로(#201)는 GET만 공개다. 라우트는 local에만 있어 prod에서는 404가 난다.
+     */
+    private static final Set<String> PUBLIC_ENDPOINTS = Stream.concat(
+            Stream.of(
+                    "POST /api/v1/auth/signup",
+                    "POST /api/v1/auth/login",
+                    "POST /api/v1/auth/refresh",
+                    "POST /api/v1/auth/logout"),
+            ApiDocsRoutes.paths().stream().map(path -> "GET " + path)
+    ).collect(Collectors.toUnmodifiableSet());
 
     private final JwtTokenProvider jwtTokenProvider;
     private final String gatewaySecret;

@@ -3,6 +3,71 @@
 > 모든 요청은 `Spring Cloud Gateway`를 통해 라우팅된다.
 > 인증이 필요한 API는 `Authorization: Bearer {accessToken}` 헤더 필수.
 
+**구현된 API의 요청 · 응답 필드는 OpenAPI 명세가 단일 출처다(#201).** 이 문서는 명세에 담기지 않는 것만 둔다 —
+인증 사용법 · 오류 정책 · 엔드포인트별 규칙과 시나리오 · 아직 구현되지 않은 API의 설계.
+
+| 보는 곳 | 내용 |
+|---|---|
+| Swagger UI — `http://localhost:8080/swagger-ui.html` (**local에서만**) | 게이트웨이 한 곳에서 서비스 명세를 드롭다운(user · routine · challenge)으로 골라 실제로 호출한다 |
+| 기준 스냅샷 — [`docs/api/openapi/`](../api/openapi/) | 정규화한 명세(`{서비스}.json`). PR에서 계약 변경이 diff로 보인다. `check`가 생성 결과와 비교한다 |
+
+## 인증 사용법
+
+### Swagger UI로 호출하기 (local)
+
+1. 인프라와 서비스(gateway · user · routine · challenge · registry)를 `local` 프로파일로 띄우고 `http://localhost:8080/swagger-ui.html`을 연다
+2. 처음 열리는 `user-service`(드롭다운 기본값)에서 `POST /api/v1/auth/signup` → `POST /api/v1/auth/login`을 호출한다
+3. 응답의 `data.accessToken`을 **Authorize → bearerAuth**에 넣는다(`Bearer ` 접두사 없이 토큰만)
+4. 드롭다운에서 `routine-service` · `challenge-service`로 바꿔도 토큰은 유지된다(`persist-authorization` — 브라우저 저장소에 남는다. 지우려면 Authorize → Logout)
+5. 보호 API를 호출한다. 게이트웨이가 토큰을 검증해 `X-User-Id`를 넣는다 — Swagger에는 이 헤더 입력란이 없다
+6. Access Token이 만료되면 `POST /api/v1/auth/refresh`를 호출한다. refresh token은 HttpOnly 쿠키(`SameSite=Strict`, `Path=/api/v1/auth`)라 같은 origin에서 브라우저가 알아서 보낸다
+
+- 공개 경로(토큰 없이 통과): `POST /api/v1/auth/{signup,login,refresh,logout}`. 명세에서는 `security: []`로 표시된다
+- 명세의 `servers`는 `/`(게이트웨이 origin)다. 경로에 이미 `/api/v1`이 있어 접두사를 붙이지 않는다
+
+### 신뢰 헤더 — 클라이언트가 보내도 무시된다
+
+| 헤더 | 누가 넣나 | 클라이언트가 보내면 |
+|---|---|---|
+| `X-User-Id` | 게이트웨이 — JWT의 `id` 클레임 | 게이트웨이가 지운다(공개 경로) · 토큰 값으로 덮어쓴다(인증 경로) — #154 · ADR-0019 |
+| `X-Gateway-Secret` | 게이트웨이 | 게이트웨이가 지우고 자기 값을 넣는다. 서비스는 값이 틀리면 401 |
+
+Swagger에서 두 헤더를 숨기는 것은 **보안 통제가 아니다**(입력 편의일 뿐). 보호는 게이트웨이의 정화 · 덮어쓰기가 한다.
+
+### 서비스를 직접 호출하기 (local)
+
+local에서도 서비스의 `GatewayAuthFilter`가 켜져 있다(#201). 게이트웨이를 거치지 않으면 두 헤더를 직접 넣는다.
+
+```bash
+curl localhost:8082/api/v1/routines -H 'X-Gateway-Secret: local-secret' -H 'X-User-Id: 1'
+```
+
+## 미구현 API
+
+아래는 설계만 있고 코드가 없다. 구현하면 필드 설명을 지우고 Swagger로 넘긴다.
+
+| API | 내용 |
+|---|---|
+| `POST /api/v1/challenges/{challengeId}/end` | 챌린지 종료 (V2 예정) |
+| `POST /api/v1/challenges/join` | 초대 코드로 참여 (V2 예정) |
+| `GET /api/v1/challenges/{challengeId}/members` | 멤버 목록 조회 |
+| `GET /api/v1/routines/today` | 오늘의 루틴 목록 |
+| `GET /api/v1/statistics/me` | 개인 통계 |
+| `GET /api/v1/statistics/challenges/{challengeId}` | 챌린지 통계 |
+| `GET /api/v1/feed/challenges/{challengeId}` | 챌린지 피드 조회 |
+| `POST /api/v1/feed/{feedCardId}/reactions` | 리액션 추가 |
+| `DELETE /api/v1/feed/{feedCardId}/reactions/{reactionId}` | 리액션 취소 |
+| `GET /api/v1/chat/rooms` | 내 채팅방 목록 |
+| `GET /api/v1/chat/rooms/{roomId}` | 채팅방 상세 |
+| `GET /api/v1/chat/rooms/{roomId}/messages` | 메시지 조회 (커서 기반) |
+| `POST /api/v1/chat/rooms/{roomId}/read` | 읽음 처리 |
+| `GET /api/v1/notifications` | 알림 목록 조회 |
+| `PATCH /api/v1/notifications/{notificationId}/read` | 알림 읽음 처리 |
+| `POST /api/v1/notifications/read-all` | 전체 읽음 처리 |
+| `GET /api/v1/notifications/stream` | SSE 연결 |
+| `GET /api/v1/notifications/settings` | 알림 설정 조회 |
+| `PATCH /api/v1/notifications/settings` | 알림 설정 수정 |
+
 ---
 
 ## 공통 규약
@@ -94,6 +159,7 @@ public class ApiResponse<T> {
 | `/api/v1/chat/**` | chat-service |
 | `/ws/chat/**` | chat-service (WebSocket) |
 | `/api/v1/notifications/**` | notification-service |
+| `GET /__docs/{service}` (**local만**) | 각 서비스 `/v3/api-docs` — Swagger UI 드롭다운이 쓴다. 토큰 없이 통과, Rate Limit은 IP 키로 소모 |
 
 ---
 
@@ -103,52 +169,17 @@ public class ApiResponse<T> {
 
 #### `POST /api/v1/auth/signup` — 회원가입
 - Auth: ❌
+- 필드: Swagger UI의 `user-service` 명세 · 스냅샷 [`docs/api/openapi/user-service.json`](../api/openapi/user-service.json)
 
-**Request**
-```json
-{
-  "email": "user@example.com",
-  "password": "password123!",
-  "nickname": "김루틴"
-}
-```
-
-**Response** `201`
-```json
-{
-  "success": true,
-  "message": "회원가입에 성공했습니다.",
-  "data": {
-    "userId": 1,
-    "email": "user@example.com",
-    "nickname": "김루틴"
-  }
-}
-```
+- 성공 응답: `201`
 
 ---
 
 #### `POST /api/v1/auth/login` — 로그인
 - Auth: ❌
+- 필드: Swagger UI의 `user-service` 명세 · 스냅샷 [`docs/api/openapi/user-service.json`](../api/openapi/user-service.json)
 
-**Request**
-```json
-{
-  "email": "user@example.com",
-  "password": "password123!"
-}
-```
-
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "로그인에 성공했습니다.",
-  "data": {
-    "accessToken": "eyJhbGci..."
-  }
-}
-```
+- 성공 응답: `200`
 > Refresh Token은 응답 바디에 포함되지 않는다.  
 > `Set-Cookie: refresh_token=<UUID>; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth` 헤더로 전달된다.  
 > Refresh Token은 opaque token(UUID)으로 Redis에 저장된다.
@@ -157,33 +188,19 @@ public class ApiResponse<T> {
 
 #### `POST /api/v1/auth/refresh` — 토큰 갱신
 - Auth: ❌
+- 필드: Swagger UI의 `user-service` 명세 · 스냅샷 [`docs/api/openapi/user-service.json`](../api/openapi/user-service.json)
 
-**Request**
 > 요청 바디 없음. Refresh Token은 HttpOnly 쿠키(`refresh_token`)로 자동 전송된다.
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "토큰이 갱신되었습니다.",
-  "data": {
-    "accessToken": "eyJhbGci..."
-  }
-}
-```
+- 성공 응답: `200`
 
 ---
 
 #### `POST /api/v1/auth/logout` — 로그아웃
-- Auth: ✅
+- Auth: ❌ — 게이트웨이 공개 경로다. Access Token이 아니라 `refresh_token` 쿠키로 세션을 찾아 지우고, 만료 쿠키(`Max-Age=0`)를 돌려준다
+- 필드: Swagger UI의 `user-service` 명세 · 스냅샷 [`docs/api/openapi/user-service.json`](../api/openapi/user-service.json)
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "로그아웃되었습니다."
-}
-```
+- 성공 응답: `200`
 
 ---
 
@@ -191,23 +208,9 @@ public class ApiResponse<T> {
 
 #### `GET /api/v1/users/me` — 내 프로필 조회
 - Auth: ✅
+- 필드: Swagger UI의 `user-service` 명세 · 스냅샷 [`docs/api/openapi/user-service.json`](../api/openapi/user-service.json)
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "사용자 정보가 조회되었습니다.",
-  "data": {
-    "userId": 1,
-    "email": "user@example.com",
-    "nickname": "김루틴",
-    "bio": null,
-    "profileImageUrl": null,
-    "createdAt": "2024-03-15T10:00:00Z",
-    "nicknameChangeableAt": null
-  }
-}
-```
+- 성공 응답: `200`
 
 > `bio`가 null이면 클라이언트에서 한 줄 소개 영역을 미표시한다.  
 > `createdAt` 기반 "함께한 지 N일째" 계산은 클라이언트에서 수행한다.  
@@ -218,51 +221,23 @@ public class ApiResponse<T> {
 #### `PATCH /api/v1/users/me` — 프로필 수정 (닉네임 + 한 줄 소개)
 - Auth: ✅
 - Content-Type: `application/json`
-
-**Request**
-```json
-{
-  "nickname": "새닉네임",
-  "bio": "매일 조금씩 성장하는 중"
-}
-```
+- 필드: Swagger UI의 `user-service` 명세 · 스냅샷 [`docs/api/openapi/user-service.json`](../api/openapi/user-service.json)
 
 > `bio`를 빈 문자열 또는 null로 전송하면 소개가 삭제된다.  
 > 닉네임 변경 후 30일 이내 재변경 시 `NICKNAME_CHANGE_COOLDOWN_ACTIVE` (409) 응답.  
 > 쿨다운 기간은 `NICKNAME_COOLDOWN_DAYS` 환경변수로 조정 가능 (기본: 30일).
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "사용자 정보 변경이 완료되었습니다.",
-  "data": {
-    "userId": 1,
-    "email": "user@example.com",
-    "nickname": "새닉네임",
-    "bio": "매일 조금씩 성장하는 중",
-    "profileImageUrl": null,
-    "createdAt": "2024-03-15T10:00:00Z",
-    "nicknameChangeableAt": "2024-04-14T10:00:00Z"
-  }
-}
-```
-
-**Response** `409` — 쿨다운 미경과
-```json
-{
-  "success": false,
-  "message": "닉네임은 변경 후 30일이 지나야 다시 변경할 수 있습니다. (남은 기간: 15일)",
-  "data": null
-}
-```
+- 성공 응답: `200`
+- 오류 응답: `409` — 쿨다운 미경과
 
 ---
 
 #### `PUT /api/v1/users/me/profile-image` — 프로필 이미지 생성/교체
 - Auth: ✅
-- Content-Type: `multipart/form-data`
+- Content-Type: `multipart/form-data`, 파트명 `image`(필수)
+- 제약: MIME `image/jpeg` · `image/png` · `image/webp`, 최대 5MB. 파트가 없거나 비어 있으면 `400 EMPTY_FILE`
 - 구현 이슈: #95
+- 필드: Swagger UI의 `user-service` 명세 · 스냅샷 [`docs/api/openapi/user-service.json`](../api/openapi/user-service.json)
 
 **구현 메모**
 - 이미지 저장소의 객체 삭제/교체를 위해 `users.profile_image_object_key VARCHAR(500) NULL` 컬럼을 추가한다.
@@ -271,67 +246,27 @@ public class ApiResponse<T> {
 - MIME 타입과 파일 시그니처를 함께 검증한다.
 - 응답 바디는 `GET`/`PATCH /me` 와 동일한 전체 프로필(`ProfileResponse`)을 반환한다.
 
-**Request**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `image` | file | ✅ | `image/jpeg`, `image/png`, `image/webp` (최대 5MB) |
-
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "프로필 이미지가 변경되었습니다.",
-  "data": {
-    "userId": 1,
-    "email": "user@example.com",
-    "nickname": "새닉네임",
-    "bio": "매일 조금씩 성장하는 중",
-    "profileImageUrl": "https://cdn.example.com/profile-images/2026/07/uuid.jpg",
-    "createdAt": "2024-03-15T10:00:00Z",
-    "nicknameChangeableAt": "2024-04-14T10:00:00Z"
-  }
-}
-```
+- 성공 응답: `200`
 
 ---
 
 #### `DELETE /api/v1/users/me/profile-image` — 프로필 이미지 삭제
 - Auth: ✅
 - 구현 이슈: #95
+- 필드: Swagger UI의 `user-service` 명세 · 스냅샷 [`docs/api/openapi/user-service.json`](../api/openapi/user-service.json)
 
 삭제 시 DB의 `profile_image_url`, `profile_image_object_key`를 함께 `NULL`로 변경하고, 트랜잭션 커밋 이후 storage 객체를 best-effort 삭제한다. 이미지가 없으면 no-op. 응답은 전체 프로필(`ProfileResponse`)을 반환한다.
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "프로필 이미지가 삭제되었습니다.",
-  "data": {
-    "userId": 1,
-    "email": "user@example.com",
-    "nickname": "새닉네임",
-    "bio": "매일 조금씩 성장하는 중",
-    "profileImageUrl": null,
-    "createdAt": "2024-03-15T10:00:00Z",
-    "nicknameChangeableAt": "2024-04-14T10:00:00Z"
-  }
-}
-```
+- 성공 응답: `200`
 
 ---
 
 #### `DELETE /api/v1/users/me` — 회원 탈퇴 [v2]
 - Auth: ✅
 - `is_active = false` 소프트 딜리트, 이메일/닉네임 재사용 불가
+- 필드: Swagger UI의 `user-service` 명세 · 스냅샷 [`docs/api/openapi/user-service.json`](../api/openapi/user-service.json)
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "회원 탈퇴가 완료되었습니다."
-}
-```
+- 성공 응답: `200`
 
 ---
 
@@ -342,6 +277,7 @@ public class ApiResponse<T> {
 #### `POST /api/v1/challenges` — 챌린지 생성
 - Auth: ✅
 - MVP 값 제약 (#160)
+- 필드: Swagger UI의 `challenge-service` 명세 · 스냅샷 [`docs/api/openapi/challenge-service.json`](../api/openapi/challenge-service.json)
 
 | 필드 | 제약 |
 |---|---|
@@ -351,23 +287,6 @@ public class ApiResponse<T> {
 
 > 기간은 **시작일과 종료일을 모두 포함해** 센다 — `2025-02-01 ~ 2025-05-11`이 정확히 100일이다.
 > `challenge_member_summary.total_scheduled = ended_at - started_at + 1`과 같은 기준이다.
-
-**Request**
-```json
-{
-  "title": "30일 아침 운동 챌린지",
-  "description": "매일 아침 30분 운동하기",
-  "categoryCode": "EXERCISE",
-  "isPublic": true,
-  "maxMembers": 10,
-  "startedAt": "2025-02-01",
-  "endedAt": "2025-03-02",
-  "routineTitle": "아침 운동 30분",
-  "scheduleType": "SPECIFIC_DAYS",
-  "daysOfWeek": ["MON", "WED", "FRI"],
-  "targetCount": null
-}
-```
 
 > 루틴 정의(`routineTitle`, `scheduleType`, `daysOfWeek`, `targetCount`)도 함께 입력한다. **challenge-service가 `challenges`에 저장하고**
 > 챌린지가 시작될 때 `challenge.started` 이벤트로 routine-service에 전달한다 (ADR-0044, #167). 카테고리는 챌린지의 `categoryCode`를 그대로 쓴다.
@@ -383,112 +302,38 @@ public class ApiResponse<T> {
 > 시작 전 참여가 사전 동의이므로 챌린지도 `SPECIFIC_DAYS`를 쓸 수 있다 (ADR-0039 §2.3, 2026-08-29 개정).
 > 선호 수행 시각은 챌린지 생성 시 입력받지 않는다. 챌린지 루틴은 모든 멤버에게 동일하지만(ADR-0026), 알림 시각은 개인 일과에 종속되므로 멤버 각자가 본인 `routines` 인스턴스에서 설정한다 (ADR-0035).
 
-**Response** `201`
-```json
-{
-  "success": true,
-  "message": "챌린지가 생성되었습니다.",
-  "data": {
-    "challengeId": 1,
-    "title": "30일 아침 운동 챌린지",
-    "description": "매일 아침 운동하기",
-    "categoryCode": "EXERCISE",
-    "routineTitle": "아침 운동 30분",
-    "scheduleType": "SPECIFIC_DAYS",
-    "daysOfWeek": ["MON", "WED", "FRI"],
-    "targetCount": null,
-    "isPublic": true,
-    "inviteCode": null,
-    "maxMembers": 10,
-    "status": "WAITING",
-    "startedAt": "2025-02-01",
-    "endedAt": "2025-03-02",
-    "createdAt": "2025-01-15T10:00:00Z"
-  }
-}
-```
+- 성공 응답: `201`
 
 ---
 
 #### `GET /api/v1/challenges` — 공개 챌린지 목록 조회
 - Auth: ✅
 - Query: `page`, `size`
+- 필드: Swagger UI의 `challenge-service` 명세 · 스냅샷 [`docs/api/openapi/challenge-service.json`](../api/openapi/challenge-service.json)
 
 > MVP: `status`는 `WAITING`으로 고정되며 쿼리 파라미터로 변경할 수 없다. 진행 중인 챌린지(ACTIVE)는 목록에 노출되지 않는다.
 > `keyword`, `categoryCode`, 정렬 옵션은 #120에서 Querydsl 동적 쿼리와 함께 구현한다.
 > v2에서 리더가 `joinableUntilPercent`를 설정하면 ACTIVE 상태 챌린지도 조건부 노출된다 (`product-planning.md` 9.3.2 참고).
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "챌린지 목록이 조회되었습니다.",
-  "data": {
-    "content": [
-      {
-        "challengeId": 1,
-        "title": "30일 아침 운동 챌린지",
-        "description": "매일 아침 운동하기",
-        "categoryCode": "EXERCISE",
-        "routineTitle": "아침 운동 30분",
-        "scheduleType": "WEEKLY_COUNT",
-        "daysOfWeek": null,
-        "targetCount": 3,
-        "status": "WAITING",
-        "currentMembers": 5,
-        "maxMembers": 10,
-        "startedAt": "2025-02-01",
-        "endedAt": "2025-03-02"
-      }
-    ],
-    "page": 0,
-    "size": 20,
-    "totalElements": 50,
-    "totalPages": 3
-  }
-}
-```
+- 성공 응답: `200`
 
 ---
 
 #### `GET /api/v1/challenges/me` — 내 챌린지 목록
 - Auth: ✅
 - Query: `page`, `size`
+- 필드: Swagger UI의 `challenge-service` 명세 · 스냅샷 [`docs/api/openapi/challenge-service.json`](../api/openapi/challenge-service.json)
 
-**Response** `200` — 위와 동일한 페이징 구조
+- 성공 응답: `200` — 위와 동일한 페이징 구조
 <!-- TODO: 후속 이슈 - status 필터, myStatus(ACTIVE/LEFT) 필드 추가 필요 -->
 
 ---
 
 #### `GET /api/v1/challenges/{challengeId}` — 챌린지 상세 조회
 - Auth: ✅
+- 필드: Swagger UI의 `challenge-service` 명세 · 스냅샷 [`docs/api/openapi/challenge-service.json`](../api/openapi/challenge-service.json)
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "챌린지 상세 조회가 완료되었습니다.",
-  "data": {
-    "challengeId": 1,
-    "title": "30일 아침 운동 챌린지",
-    "description": "매일 아침 운동하기",
-    "categoryCode": "EXERCISE",
-    "routineTitle": "아침 운동 30분",
-    "scheduleType": "DAILY",
-    "daysOfWeek": null,
-    "targetCount": null,
-    "isPublic": true,
-    "inviteCode": null,
-    "maxMembers": 10,
-    "currentMembers": 5,
-    "status": "ACTIVE",
-    "startedAt": "2025-02-01",
-    "endedAt": "2025-03-02",
-    "creatorUserId": 1,
-    "myRole": "LEADER"
-  }
-}
-```
+- 성공 응답: `200`
 
 ---
 
@@ -496,6 +341,7 @@ public class ApiResponse<T> {
 - Auth: ✅ (LEADER만)
 - 수정 정책은 필드 유형과 활성 멤버 수에 따라 달라진다.
 - 상세 정책: `docs/requirements/challenge-update-policy.md`
+- 필드: Swagger UI의 `challenge-service` 명세 · 스냅샷 [`docs/api/openapi/challenge-service.json`](../api/openapi/challenge-service.json)
 
 **isPublic 수정 정책**
 
@@ -524,28 +370,7 @@ public class ApiResponse<T> {
     `endedAt`만 보낸 연장 요청도 병합 후 기간으로 판정한다 (#160).
 - `maxMembers`는 **20 이하**여야 한다 (#160).
 
-**Request**
-```json
-{
-  "title": "수정된 제목",
-  "description": "수정된 설명",
-  "maxMembers": 15
-}
-```
-
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "챌린지 정보가 수정되었습니다.",
-  "data": {
-    "challengeId": 1,
-    "title": "수정된 제목",
-    "description": "수정된 설명",
-    "maxMembers": 15
-  }
-}
-```
+- 성공 응답: `200`
 
 ---
 
@@ -556,30 +381,9 @@ public class ApiResponse<T> {
 - 저장 key 규칙: `challenge-images/{yyyy}/{MM}/{uuid}.{ext}` (매 업로드마다 새 key 발급 → 이전 객체는 트랜잭션 커밋 이후 best-effort 삭제)
 - 응답은 갱신된 챌린지 상세(`imageUrl` 포함)
 - 구현 이슈: #142
+- 필드: Swagger UI의 `challenge-service` 명세 · 스냅샷 [`docs/api/openapi/challenge-service.json`](../api/openapi/challenge-service.json)
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "챌린지 대표 이미지가 변경되었습니다.",
-  "data": {
-    "challengeId": 1,
-    "title": "매일 30분 독서",
-    "description": "함께 책 읽어요",
-    "categoryCode": "READING",
-    "isPublic": true,
-    "inviteCode": null,
-    "maxMembers": 10,
-    "currentMembers": 3,
-    "status": "WAITING",
-    "startedAt": "2026-07-20",
-    "endedAt": "2026-08-20",
-    "creatorUserId": 42,
-    "imageUrl": "https://cdn.example.com/challenge-images/2026/07/uuid.jpg",
-    "myRole": "LEADER"
-  }
-}
-```
+- 성공 응답: `200`
 
 **Error**
 - `403 NOT_CHALLENGE_MEMBER` — 챌린지 멤버가 아님
@@ -593,19 +397,9 @@ public class ApiResponse<T> {
 - DB의 `image_url`/`image_object_key`를 NULL로 변경하고, 트랜잭션 커밋 이후 storage 객체를 best-effort 삭제한다.
 - 응답은 갱신된 챌린지 상세(`imageUrl`은 `null`)
 - 구현 이슈: #142
+- 필드: Swagger UI의 `challenge-service` 명세 · 스냅샷 [`docs/api/openapi/challenge-service.json`](../api/openapi/challenge-service.json)
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "챌린지 대표 이미지가 삭제되었습니다.",
-  "data": {
-    "challengeId": 1,
-    "imageUrl": null,
-    "myRole": "LEADER"
-  }
-}
-```
+- 성공 응답: `200`
 
 ---
 
@@ -636,22 +430,9 @@ public class ApiResponse<T> {
 - Auth: ✅
 - 이전에 탈퇴한 공개 대기 챌린지도 재참여 가능 (정원·상태·강퇴 여부 검증)
 - 재참여 시 이전 수행 기록은 유지되며 기존 멤버십 행의 상태와 참여 시각을 갱신
+- 필드: Swagger UI의 `challenge-service` 명세 · 스냅샷 [`docs/api/openapi/challenge-service.json`](../api/openapi/challenge-service.json)
 
-**Response** `201`
-```json
-{
-  "success": true,
-  "message": "챌린지에 참여되었습니다.",
-  "data": {
-    "challengeMemberId": 10,
-    "challengeId": 1,
-    "userId": 2,
-    "role": "MEMBER",
-    "status": "ACTIVE",
-    "joinedAt": "2025-02-01T09:00:00Z"
-  }
-}
-```
+- 성공 응답: `201`
 
 ---
 
@@ -673,14 +454,9 @@ public class ApiResponse<T> {
 
 #### `POST /api/v1/challenges/{challengeId}/members/me/leave` — 챌린지 탈퇴
 - Auth: ✅
+- 필드: Swagger UI의 `challenge-service` 명세 · 스냅샷 [`docs/api/openapi/challenge-service.json`](../api/openapi/challenge-service.json)
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "챌린지에서 탈퇴되었습니다."
-}
-```
+- 성공 응답: `200`
 
 ---
 
@@ -712,22 +488,9 @@ public class ApiResponse<T> {
 - Auth: ✅ 활성 멤버만 조회
 - 인정 횟수 내림차순 공동 등수. 동점 나열은 last_completed_at 오름차순(NULL 마지막), 이후 userId.
 - #61: 응답의 achievementRate를 정수 acceptedCount로 교체한다.
+- 필드: Swagger UI의 `challenge-service` 명세 · 스냅샷 [`docs/api/openapi/challenge-service.json`](../api/openapi/challenge-service.json)
 
-**Response** 200
-```json
-{
-  "success": true,
-  "message": "랭킹 조회가 완료되었습니다.",
-  "data": {
-    "rankings": [
-      {"rank": 1, "userId": 3, "acceptedCount": 28, "isMe": false},
-      {"rank": 2, "userId": 1, "acceptedCount": 25, "isMe": true}
-    ],
-    "myRanking": {"rank": 2, "userId": 1, "acceptedCount": 25, "isMe": true},
-    "totalMembers": 2
-  }
-}
-```
+- 성공 응답: `200` — 전체 순위(`rankings`)와 내 순위(`myRanking`), 멤버 수(`totalMembers`)
 
 ---
 
@@ -738,28 +501,9 @@ public class ApiResponse<T> {
 #### `GET /api/v1/categories` — 카테고리 목록 조회
 - Auth: ✅
 - 챌린지/루틴 생성 화면 카테고리 드롭다운에서 사용한다.
+- 필드: Swagger UI의 `routine-service` 명세 · 스냅샷 [`docs/api/openapi/routine-service.json`](../api/openapi/routine-service.json)
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "카테고리 목록이 조회되었습니다.",
-  "data": [
-    { "code": "EXERCISE",     "name": "운동",        "icon": "🏃", "displayOrder": 1 },
-    { "code": "READING",      "name": "독서",        "icon": "📚", "displayOrder": 2 },
-    { "code": "STUDY",        "name": "공부/학습",   "icon": "📖", "displayOrder": 3 },
-    { "code": "LANGUAGE",     "name": "어학",        "icon": "🗣️", "displayOrder": 4 },
-    { "code": "HEALTH",       "name": "건강",        "icon": "💊", "displayOrder": 5 },
-    { "code": "SLEEP",        "name": "수면",        "icon": "😴", "displayOrder": 6 },
-    { "code": "DIET",         "name": "식습관",      "icon": "🥗", "displayOrder": 7 },
-    { "code": "MEDITATION",   "name": "명상/마음챙김","icon": "🧘", "displayOrder": 8 },
-    { "code": "SELF_IMPROVE", "name": "자기계발",    "icon": "🌱", "displayOrder": 9 },
-    { "code": "PRODUCTIVITY", "name": "생산성",      "icon": "⚡", "displayOrder": 10 },
-    { "code": "HOBBY",        "name": "취미",        "icon": "🎨", "displayOrder": 11 },
-    { "code": "QUIT_HABIT",   "name": "금연/금주",   "icon": "🚭", "displayOrder": 12 }
-  ]
-}
-```
+- 성공 응답: `200`
 
 ---
 
@@ -767,17 +511,7 @@ public class ApiResponse<T> {
 
 #### `POST /api/v1/routine-templates` — 루틴 템플릿 생성
 - Auth: ✅
-
-**Request**
-```json
-{
-  "title": "아침 달리기",
-  "categoryCode": "EXERCISE",
-  "scheduleType": "SPECIFIC_DAYS",
-  "daysOfWeek": ["MON", "WED", "FRI"],
-  "targetCount": null
-}
-```
+- 필드: Swagger UI의 `routine-service` 명세 · 스냅샷 [`docs/api/openapi/routine-service.json`](../api/openapi/routine-service.json)
 
 > 템플릿은 **사용자가 저장한 틀 전용**이다. 챌린지 루틴 정의는 challenge-service가 소유하고 템플릿을 만들지 않는다 (ADR-0044, #167).  
 > 선호 수행 시각(`preferredTime`)·선호 요일(`preferredDays`)은 템플릿(정의)이 아니라 루틴 인스턴스 속성이다. 시각은 `POST /api/v1/routines` 또는 `PATCH /api/v1/routines/{routineId}`에서, 선호 요일은 `PATCH`에서 설정한다 (ADR-0035, ADR-0039).  
@@ -786,21 +520,7 @@ public class ApiResponse<T> {
 > - `SPECIFIC_DAYS`(요일 지정·강제) — `daysOfWeek`(MON~SUN 배열) 필수, `targetCount` 생략. 지정 요일에 수행하지 않으면 결석(MISSED)  
 > - `WEEKLY_COUNT`(주 N회) / `MONTHLY_COUNT`(월 N회) — `targetCount` 필수(≥1), `daysOfWeek` 생략. 아무 날이나 수행 가능(유연)
 
-**Response** `201`
-```json
-{
-  "success": true,
-  "message": "루틴 템플릿이 생성되었습니다.",
-  "data": {
-    "templateId": 1,
-    "title": "아침 달리기",
-    "categoryCode": "EXERCISE",
-    "scheduleType": "SPECIFIC_DAYS",
-    "daysOfWeek": ["MON", "WED", "FRI"],
-    "targetCount": null
-  }
-}
-```
+- 성공 응답: `201`
 
 **Error**
 - `400 VALIDATION_FAILED` — 필수 필드 누락 / 유효하지 않은 카테고리 코드 / 스케줄 정합성 위반 (`SPECIFIC_DAYS`는 `daysOfWeek` 필수, `WEEKLY_COUNT`/`MONTHLY_COUNT`는 `targetCount` 필수, `DAILY`는 둘 다 생략) / 유효하지 않은 요일 코드
@@ -810,56 +530,20 @@ public class ApiResponse<T> {
 #### `GET /api/v1/routine-templates` — 내 루틴 템플릿 목록
 - Auth: ✅
 - Query: `categoryCode` (선택)
+- 필드: Swagger UI의 `routine-service` 명세 · 스냅샷 [`docs/api/openapi/routine-service.json`](../api/openapi/routine-service.json)
 
 > 본인의 미삭제 템플릿을 반환한다.  
 > 정렬: 최신 생성 순 (id 내림차순).
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "루틴 템플릿 목록이 조회되었습니다.",
-  "data": [
-    {
-      "templateId": 2,
-      "title": "독서 30분",
-      "categoryCode": "READING",
-      "scheduleType": "WEEKLY_COUNT",
-      "daysOfWeek": null,
-      "targetCount": 3
-    },
-    {
-      "templateId": 1,
-      "title": "아침 달리기",
-      "categoryCode": "EXERCISE",
-      "scheduleType": "DAILY",
-      "daysOfWeek": null,
-      "targetCount": null
-    }
-  ]
-}
-```
+- 성공 응답: `200`
 
 ---
 
 #### `GET /api/v1/routine-templates/{templateId}` — 루틴 템플릿 상세
 - Auth: ✅ (소유자만)
+- 필드: Swagger UI의 `routine-service` 명세 · 스냅샷 [`docs/api/openapi/routine-service.json`](../api/openapi/routine-service.json)
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "루틴 템플릿이 조회되었습니다.",
-  "data": {
-    "templateId": 1,
-    "title": "아침 달리기",
-    "categoryCode": "EXERCISE",
-    "scheduleType": "DAILY",
-    "daysOfWeek": null,
-    "targetCount": null
-  }
-}
-```
+- 성공 응답: `200`
 
 **Error**
 - `404 ROUTINE_TEMPLATE_NOT_FOUND` — 없거나 삭제된 템플릿
@@ -869,35 +553,14 @@ public class ApiResponse<T> {
 
 #### `PATCH /api/v1/routine-templates/{templateId}` — 루틴 템플릿 수정
 - Auth: ✅ (소유자만)
+- 필드: Swagger UI의 `routine-service` 명세 · 스냅샷 [`docs/api/openapi/routine-service.json`](../api/openapi/routine-service.json)
 
-**Request** (부분 수정 — 보낸 필드만 변경)
-```json
-{
-  "title": "저녁 달리기",
-  "categoryCode": "EXERCISE",
-  "scheduleType": "WEEKLY_COUNT",
-  "targetCount": 3
-}
-```
+- 부분 수정 — 보낸 필드만 변경한다.
 
 > 템플릿은 루틴의 정의(`title`, `categoryCode`, `scheduleType`, `daysOfWeek`, `targetCount`)만 수정한다. 선호 수행 시각·요일은 `PATCH /api/v1/routines/{routineId}`에서 수정한다 (ADR-0035, ADR-0039).  
 > 스케줄은 항상 한 묶음으로 수정한다 — `daysOfWeek`/`targetCount`는 `scheduleType`과 함께만 보낼 수 있고, 유형별 정합성(`SPECIFIC_DAYS`→`daysOfWeek`, `WEEKLY_COUNT`/`MONTHLY_COUNT`→`targetCount`, `DAILY`→둘 다 없음)을 지켜야 한다 (`ck_rt_schedule` 제약 미러링).
 
-**Response** `200` — 수정 후 전체 템플릿 반환
-```json
-{
-  "success": true,
-  "message": "루틴 템플릿이 수정되었습니다.",
-  "data": {
-    "templateId": 1,
-    "title": "저녁 달리기",
-    "categoryCode": "EXERCISE",
-    "scheduleType": "WEEKLY_COUNT",
-    "daysOfWeek": null,
-    "targetCount": 3
-  }
-}
-```
+- 성공 응답: `200` — 수정 후 전체 템플릿 반환
 
 **Error**
 - `400 VALIDATION_FAILED` — 수정 필드 없음 / 유효하지 않은 카테고리 코드 / 스케줄 정합성 위반
@@ -908,17 +571,11 @@ public class ApiResponse<T> {
 
 #### `DELETE /api/v1/routine-templates/{templateId}` — 루틴 템플릿 삭제 (소프트)
 - Auth: ✅ (소유자만)
+- 필드: Swagger UI의 `routine-service` 명세 · 스냅샷 [`docs/api/openapi/routine-service.json`](../api/openapi/routine-service.json)
 
 > 물리 삭제하지 않고 `is_deleted = true` + `deleted_at`만 기록한다.
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "루틴 템플릿이 삭제되었습니다.",
-  "data": null
-}
-```
+- 성공 응답: `200`
 
 **Error**
 - `403 FORBIDDEN` — 소유자가 아님
@@ -932,16 +589,7 @@ public class ApiResponse<T> {
 
 #### `POST /api/v1/routines` — 루틴 시작
 - Auth: ✅
-
-**Request**
-```json
-{
-  "routineTemplateId": 1,
-  "startedAt": "2025-02-01",
-  "endedAt": "2025-03-02",
-  "preferredTime": "07:00:00"
-}
-```
+- 필드: Swagger UI의 `routine-service` 명세 · 스냅샷 [`docs/api/openapi/routine-service.json`](../api/openapi/routine-service.json)
 
 **직접 정의 입력도 가능** — `routineTemplateId` 대신 아래 필드를 보낸다. 둘 다 주거나 둘 다 없으면 400.
 ```json
@@ -964,28 +612,7 @@ public class ApiResponse<T> {
 > `preferredTime`(HH:mm:ss)은 알림 발송 기준 시각이며 선택값이다. 생략(`null`)하면 리마인더를 발송하지 않는다.
 > **선호 요일(`preferredDays`)은 이 API에서 받지 않는다** — 루틴 시작 후 `PATCH /api/v1/routines/{routineId}`에서 설정한다. 응답에는 현재 값(생성 직후 `null`)이 포함된다 (ADR-0039).
 
-**Response** `201`
-```json
-{
-  "success": true,
-  "message": "루틴이 시작되었습니다.",
-  "data": {
-    "routineId": 1,
-    "routineTemplateId": 1,
-    "title": "아침 달리기",
-    "categoryCode": "EXERCISE",
-    "scheduleType": "DAILY",
-    "daysOfWeek": null,
-    "targetCount": null,
-    "challengeId": null,
-    "startedAt": "2025-02-01",
-    "endedAt": "2025-03-02",
-    "preferredTime": "07:00:00",
-    "preferredDays": null,
-    "isActive": true
-  }
-}
-```
+- 성공 응답: `201`
 
 **Error**
 - `400 VALIDATION_FAILED` — 필수 필드 누락 / 종료일 < 시작일 / preferredTime 형식 오류
@@ -999,29 +626,11 @@ public class ApiResponse<T> {
 #### `GET /api/v1/routines` — 내 루틴 목록
 - Auth: ✅
 - Query: `isActive` (true/false, 선택), `challengeId` (선택)
+- 필드: Swagger UI의 `routine-service` 명세 · 스냅샷 [`docs/api/openapi/routine-service.json`](../api/openapi/routine-service.json)
 
 > 본인 루틴(개인 + 챌린지) 전체를 최신 생성 순(id 내림차순)으로 반환한다. `title`은 기반 템플릿 이름이다.
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "루틴 목록이 조회되었습니다.",
-  "data": [
-    {
-      "routineId": 1,
-      "routineTemplateId": 1,
-      "title": "아침 달리기",
-      "challengeId": null,
-      "startedAt": "2025-02-01",
-      "endedAt": "2025-03-02",
-      "preferredTime": "07:00:00",
-      "preferredDays": ["MON", "WED", "FRI"],
-      "isActive": true
-    }
-  ]
-}
-```
+- 성공 응답: `200`
 
 **Error**
 - `400 VALIDATION_FAILED` — `isActive`가 true/false가 아님 / `challengeId`가 숫자가 아님
@@ -1057,15 +666,9 @@ public class ApiResponse<T> {
 
 #### `PATCH /api/v1/routines/{routineId}` — 루틴 정의·기간·선호 설정 수정
 - Auth: ✅
+- 필드: Swagger UI의 `routine-service` 명세 · 스냅샷 [`docs/api/openapi/routine-service.json`](../api/openapi/routine-service.json)
 
-**Request** — 모든 필드는 선택. 생략 또는 `null`은 기존 값을 유지한다.
-```json
-{
-  "title": "저녁 달리기",
-  "preferredTime": "19:00:00",
-  "clearEndedAt": true
-}
-```
+- 모든 필드는 선택이다. 생략 또는 `null`은 기존 값을 유지한다.
 
 | 필드 | 개인 루틴 | 챌린지 루틴 |
 |---|---|---|
@@ -1082,7 +685,7 @@ public class ApiResponse<T> {
 - 주기·시작일은 완료 기록이 한 건이라도 있으면 `400 VALIDATION_FAILED`다. 과거 MISSED 판정이
   통째로 뒤집히기 때문이다(ADR-0040). 정의를 바꾸려면 루틴을 중단하고 새로 시작한다.
 
-**Response** `200` — `message: "루틴이 수정되었습니다."`, `data`는 루틴 생성·목록과 같은 `RoutineResponse`다.
+- 성공 응답: `200` — `message: "루틴이 수정되었습니다."`, `data`는 루틴 생성·목록과 같은 `RoutineResponse`다.
 `categoryCode`, `scheduleType`, `daysOfWeek`, `targetCount`도 루틴 자체 정의로 반환한다.
 
 **Error**
@@ -1095,6 +698,7 @@ public class ApiResponse<T> {
 
 #### `DELETE /api/v1/routines/{routineId}` — 루틴 중단
 - Auth: ✅ (소유자만)
+- 필드: Swagger UI의 `routine-service` 명세 · 스냅샷 [`docs/api/openapi/routine-service.json`](../api/openapi/routine-service.json)
 
 > 물리 삭제하지 않고 `is_active = false`로 전환한다(중단). 이미 중단된 루틴에 대해서도 멱등하게 동작한다.
 > 중단한 루틴은 "오늘 할 일" 파생과 달성률 집계에서 빠지고 완료 이력만 남는다 (ADR-0038).
@@ -1103,14 +707,7 @@ public class ApiResponse<T> {
 > (ADR-0036) 인스턴스가 멤버 수만큼 존재해 한 사람이 내려도 챌린지가 끝나지 않는다. 중단을 허용하면
 > 랭킹에서 조용히 이탈하는 통로가 되므로, 챌린지에서 빠지는 수단은 챌린지 탈퇴 하나로 둔다.
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "루틴이 중단되었습니다.",
-  "data": null
-}
-```
+- 성공 응답: `200`
 
 **Error**
 - `404 ROUTINE_NOT_FOUND` — 없거나 본인 소유가 아닌 루틴
@@ -1133,6 +730,7 @@ public class ApiResponse<T> {
 #### `GET /api/v1/routine-executions` — 실행 기록 조회 (완료 + 파생 병합)
 - Auth: ✅
 - Query: `date` (YYYY-MM-DD) **또는** `startDate`+`endDate` (둘 중 하나 필수, 함께 사용 불가, 최대 366일),
+- 필드: Swagger UI의 `routine-service` 명세 · 스냅샷 [`docs/api/openapi/routine-service.json`](../api/openapi/routine-service.json)
   `routineId`(선택), `status`(선택: `PENDING`/`COMPLETED`/`MISSED`)
 - `executionId`/`feedCardId`/`completedAt`/`photoUrl`/`memo`는 저장된 완료 기록에만 있고, 파생 PENDING/MISSED에서는 `null`
 - `backfillable` (#58) — **이 날짜를 지금 인증할 수 있는가.** 프론트는 이 값으로 인증 버튼만 켜고 끄며 날짜 계산을 하지 않는다.
@@ -1144,39 +742,7 @@ public class ApiResponse<T> {
   - `COMPLETED` 행도 같은 규칙으로 계산한다 — 취소 후 다시 인증할 수 있는지를 뜻한다.
     **완료 취소 가능 여부와는 무관하다**(취소는 날짜 제한이 없다)
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "루틴 실행 기록이 조회되었습니다.",
-  "data": [
-    {
-      "executionId": 101,
-      "feedCardId": 201,
-      "routineId": 1,
-      "title": "아침 달리기",
-      "scheduledDate": "2026-07-24",
-      "status": "COMPLETED",
-      "completedAt": "2026-07-24T07:30:00Z",
-      "photoUrl": "https://s3.../photo.jpg",
-      "memo": "오늘도 완료!",
-      "backfillable": true
-    },
-    {
-      "executionId": null,
-      "feedCardId": null,
-      "routineId": 2,
-      "title": "주 3회 헬스",
-      "scheduledDate": "2026-07-24",
-      "status": "PENDING",
-      "completedAt": null,
-      "photoUrl": null,
-      "memo": null,
-      "backfillable": true
-    }
-  ]
-}
-```
+- 성공 응답: `200`
 
 ---
 
@@ -1184,6 +750,7 @@ public class ApiResponse<T> {
 - Auth: ✅
 - Content-Type: `multipart/form-data` — `photo`(파일, 선택), `memo`(텍스트, 선택)
 - `{date}`는 **미래가 아니어야** 하고(지난 날짜 허용 — 백필), 루틴 수행 기간 내·수행 가능 요일이어야 하며,
+- 필드: Swagger UI의 `routine-service` 명세 · 스냅샷 [`docs/api/openapi/routine-service.json`](../api/openapi/routine-service.json)
   이미 완료면 `409 EXECUTION_ALREADY_COMPLETED`
 - 중단한 루틴은 완료할 수 없다 (`400 VALIDATION_FAILED`)
 - **챌린지 루틴** (#58) — 백필은 **오늘 + 지난 3일**(`date >= today - 3`, `Asia/Seoul`)까지만. 개인 루틴은 제한 없음.
@@ -1205,53 +772,25 @@ public class ApiResponse<T> {
 - 메모: 최대 500자. 사진·메모는 `feed_cards`에서 읽으며 완료 사실에는 중복 저장하지 않는다.
 - 사진: `image/jpeg`·`image/png`·`image/webp`, 5MB 이하, 매직넘버 검증. multipart 전체 요청은 헤더·메모를 포함해 6MB 이하.
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "루틴이 완료 처리되었습니다.",
-  "data": {
-    "executionId": 101,
-      "feedCardId": 201,
-    "routineId": 1,
-    "scheduledDate": "2026-07-24",
-    "status": "COMPLETED",
-    "completedAt": "2026-07-24T07:30:00Z",
-    "photoUrl": "https://s3.../photo.jpg"
-  }
-}
-```
+- 성공 응답: `200`
 
 ---
 
 #### `DELETE /api/v1/routines/{routineId}/executions/{date}/complete` — 완료 취소
 - Auth: ✅
 - 날짜 제한 없이 취소 가능하며, 중단한 루틴이어도 허용한다. 완료 행을 삭제해 PENDING(파생)으로 되돌린다.
+- 필드: Swagger UI의 `routine-service` 명세 · 스냅샷 [`docs/api/openapi/routine-service.json`](../api/openapi/routine-service.json)
   카드 삭제 시 리액션도 CASCADE로 삭제하며, 실행 기록은 카드 삭제를 flush한 뒤 삭제한다.
   인증 사진은 카드의 `photo_object_key`를 확보한 뒤 커밋 후 삭제한다. 롤백 시 기존 사진은 유지한다.
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "루틴 완료가 취소되었습니다.",
-  "data": {
-    "executionId": null,
-      "feedCardId": null,
-    "routineId": 1,
-    "scheduledDate": "2026-07-24",
-    "status": "PENDING",
-    "completedAt": null,
-    "photoUrl": null
-  }
-}
-```
+- 성공 응답: `200`
 
 ---
 
 #### `POST /api/v1/routine-executions/bulk-complete` — 날짜별 다중 완료
 - Auth: ✅
 - Content-Type: `application/json`
+- 필드: Swagger UI의 `routine-service` 명세 · 스냅샷 [`docs/api/openapi/routine-service.json`](../api/openapi/routine-service.json)
 
 ```json
 {"scheduledDate": "2026-09-13", "routineIds": [12, 34]}
@@ -1264,14 +803,7 @@ public class ApiResponse<T> {
 - ID는 중복 없는 양수 목록. 빈 목록은 200, `createdCount: 0`으로 정상 응답한다.
 - ID 오름차순으로 처리·응답한다. 생성 수는 응답의 `createdCount`이며 스트릭 계산은 포함하지 않는다.
 
-**Response** `200`
-```json
-{
-  "success": true,
-  "message": "루틴이 완료 처리되었습니다.",
-  "data": {"createdCount": 0, "executions": []}
-}
-```
+- 성공 응답: `200`
 `executions`의 항목은 단건 완료 응답과 동일하다. 인증 모달·상세 달력의 백필·통계 다중 완료 모두 카드 생성 경로를 공유한다.
 
 ---
