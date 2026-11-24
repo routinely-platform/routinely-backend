@@ -169,7 +169,7 @@ cp infra/.env.example infra/.env
 | `EUREKA_HOST` | prod only | registry-service 호스트명. `prod` 프로파일 전용, 로컬에서는 불필요 |
 | `RATE_LIMIT_CAPACITY` | — | 윈도우 내 최대 허용 요청 수 (기본: 30) |
 | `RATE_LIMIT_REFILL_PERIOD_SECONDS` | — | 윈도우 크기 초 단위 (기본: 60) |
-| `RATE_LIMIT_TRUSTED_PROXIES` | prod only | 신뢰할 프록시 IP. `prod` 프로파일 전용, 미설정 시 기동 실패 |
+| `RATE_LIMIT_TRUSTED_PROXY_COUNT` | prod only | 게이트웨이 앞단 신뢰 프록시 대수 — X-Forwarded-For 오른쪽에서 몇 번째 값을 클라이언트 IP로 쓸지 (Nginx 1대 = `1`). `prod`는 미설정 · 빈 값이면 기동 실패, 그 외 기본 `0`(X-Forwarded-For 무시). 게이트웨이 외부 미노출이 전제 — [ADR-0003](docs/decisions/adr-0003-nginx-gateway-structure.md) |
 | `RATE_LIMIT_FAIL_OPEN_ON_REDIS_ERROR` | — | Redis 장애 시 요청 통과 여부 (기본: false) |
 | `NICKNAME_COOLDOWN_DAYS` | — | 닉네임 재변경 허용 대기 일수 (기본: 30) — user-service |
 

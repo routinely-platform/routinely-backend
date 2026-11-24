@@ -2,14 +2,14 @@ package com.routinely.gateway_service.filter;
 
 import com.routinely.core.constant.HeaderConstants;
 import com.routinely.core.exception.ErrorCode;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.cloud.gateway.support.ipresolver.XForwardedRemoteAddressResolver;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
@@ -49,7 +49,8 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
     private final ReactiveStringRedisTemplate redisTemplate;
     private final int capacity;
     private final long refillPeriodSeconds;
-    private final Set<String> trustedProxyIps;
+    /** 앞단 신뢰 프록시가 0대이면 {@code null} — X-Forwarded-For를 읽지 않는다. */
+    private final XForwardedRemoteAddressResolver forwardedAddressResolver;
     private final boolean failOpenOnRedisError;
 
     private enum RateLimitDecision {
@@ -65,15 +66,19 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
             ReactiveStringRedisTemplate redisTemplate,
             @Value("${rate-limit.capacity}") int capacity,
             @Value("${rate-limit.refill-period-seconds}") long refillPeriodSeconds,
-            @Value("${rate-limit.trusted-proxies:}") String trustedProxyIps,
+            @Value("${rate-limit.trusted-proxy-count}") int trustedProxyCount,
             @Value("${rate-limit.fail-open-on-redis-error:false}") boolean failOpenOnRedisError) {
+        if (trustedProxyCount < 0) {
+            throw new IllegalArgumentException(
+                    "rate-limit.trusted-proxy-count는 0 이상이어야 합니다. value=" + trustedProxyCount);
+        }
         this.redisTemplate = redisTemplate;
         this.capacity = capacity;
         this.refillPeriodSeconds = refillPeriodSeconds;
-        this.trustedProxyIps = Arrays.stream(trustedProxyIps.split(","))
-                .map(String::trim)
-                .filter(ip -> !ip.isEmpty())
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        // maxTrustedIndex(0)은 IllegalArgumentException을 던지므로 0은 "resolver 없음"으로 분기한다.
+        this.forwardedAddressResolver = trustedProxyCount == 0
+                ? null
+                : XForwardedRemoteAddressResolver.maxTrustedIndex(trustedProxyCount);
         this.failOpenOnRedisError = failOpenOnRedisError;
     }
 
@@ -94,17 +99,28 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
                 });
     }
 
+    /**
+     * 클라이언트 IP를 정한다.
+     *
+     * <ul>
+     *   <li>신뢰 프록시 0대 — X-Forwarded-For를 무시하고 TCP 원격 주소를 쓴다.</li>
+     *   <li>신뢰 프록시 n대 — X-Forwarded-For의 <b>오른쪽에서 n번째</b> 값을 쓴다. 왼쪽 값은 클라이언트가 임의로 쓸 수
+     *       있고, 오른쪽 끝은 바로 앞 프록시(Nginx)가 기록한 값이다. 헤더가 없거나 2개 이상이면 원격 주소로 폴백한다.</li>
+     * </ul>
+     *
+     * <p>resolver는 원격 주소가 누구인지 검사하지 않는다. 이 방식은 게이트웨이가 신뢰 프록시를 통해서만 접근 가능하다는
+     * 전제 위에서만 안전하다(ADR-0003 "클라이언트 IP 신뢰 경계").
+     */
     private String resolveClientIp(ServerWebExchange exchange) {
-        String remoteAddress = resolveRemoteAddress(exchange);
-        if (!trustedProxyIps.contains(remoteAddress)) {
-            return remoteAddress;
+        if (forwardedAddressResolver == null) {
+            return resolveRemoteAddress(exchange);
         }
 
-        String xForwardedFor = exchange.getRequest().getHeaders().getFirst("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
-            return xForwardedFor.split(",")[0].trim();
+        InetSocketAddress resolved = forwardedAddressResolver.resolve(exchange);
+        if (resolved == null) {
+            return "unknown";
         }
-        return remoteAddress;
+        return resolved.getHostString();
     }
 
     private String resolveRemoteAddress(ServerWebExchange exchange) {

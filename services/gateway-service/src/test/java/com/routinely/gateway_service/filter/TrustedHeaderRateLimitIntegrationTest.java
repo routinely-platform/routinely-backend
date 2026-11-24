@@ -91,7 +91,7 @@ class TrustedHeaderRateLimitIntegrationTest {
         registry.add("spring.cloud.discovery.client.simple.order", () -> "-1");
         registry.add("rate-limit.capacity", () -> CAPACITY);
         registry.add("rate-limit.refill-period-seconds", () -> 60);
-        registry.add("rate-limit.trusted-proxies", () -> "");
+        registry.add("rate-limit.trusted-proxy-count", () -> 0);
     }
 
     @AfterAll
