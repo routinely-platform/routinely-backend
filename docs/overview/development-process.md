@@ -148,7 +148,7 @@ GRAFANA_PASSWORD=   # Grafana 관리자 비밀번호 (기본: admin)
 # Gateway Rate Limiting
 RATE_LIMIT_CAPACITY=              # 윈도우 내 최대 허용 요청 수 (기본: 30)
 RATE_LIMIT_REFILL_PERIOD_SECONDS= # 윈도우 크기 초 단위 (기본: 60)
-RATE_LIMIT_TRUSTED_PROXIES=       # 신뢰할 프록시 IP (prod 필수, 미설정 시 기동 실패)
+RATE_LIMIT_TRUSTED_PROXY_COUNT=   # 앞단 신뢰 프록시 대수 (prod 필수 · Nginx 1대 = 1, 미설정 · 빈 값이면 기동 실패. 그 외 기본 0 = XFF 무시)
 RATE_LIMIT_FAIL_OPEN_ON_REDIS_ERROR= # Redis 장애 시 요청 통과 여부 (기본: false)
 
 # user-service

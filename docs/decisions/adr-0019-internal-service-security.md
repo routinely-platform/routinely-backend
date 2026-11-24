@@ -174,7 +174,7 @@ public class TrustedHeaderSanitizationFilter implements GlobalFilter, Ordered {
 | 1~ | 라우트 필터 (`CircuitBreaker` 등) | — |
 
 `RateLimitFilter`가 읽는 `X-User-Id`는 이제 항상 게이트웨이가 넣은 값이거나 없다. 공개 경로는 전부 IP 키로 집계된다.
-그래서 IP 해석(`X-Forwarded-For` 처리)의 정확성이 곧 가용성에 걸린다 — #156.
+그래서 IP 해석(`X-Forwarded-For` 처리)의 정확성이 곧 가용성에 걸린다 — #156. 신뢰 경계와 배포 전제는 [ADR-0003 "클라이언트 IP 신뢰 경계"](adr-0003-nginx-gateway-structure.md#클라이언트-ip-신뢰-경계-156)에 있다.
 
 #### 채택하지 않은 방법
 

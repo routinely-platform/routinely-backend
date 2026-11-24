@@ -163,6 +163,67 @@ Gateway는 내부 네트워크에서만 접근 가능하도록 구성한다.
 
 ---
 
+## 클라이언트 IP 신뢰 경계 (#156)
+
+Gateway가 보는 TCP 원격 주소는 항상 Nginx다. 그래서 Gateway의 IP 기반 Rate Limit(`RateLimitFilter`, 공개 경로의
+`rate_limit:ip:{IP}` 키)은 클라이언트 IP를 `X-Forwarded-For`에서 읽는다.
+
+`X-Forwarded-For`는 프록시마다 오른쪽에 값을 덧붙이는 헤더다. **왼쪽 값은 클라이언트가 임의로 쓸 수 있고,
+믿을 수 있는 값은 신뢰 프록시가 기록한 오른쪽 끝뿐이다.**
+
+```
+클라이언트(1.2.3.4)가 "X-Forwarded-For: 9.9.9.9"를 보냄
+→ Nginx가 덧붙인 뒤: "9.9.9.9, 1.2.3.4"
+                      ↑ 조작 가능   ↑ Nginx가 기록 — 이 값을 쓴다
+```
+
+### 설정 — `rate-limit.trusted-proxy-count`
+
+앞단 신뢰 프록시 대수다. Gateway는 `XForwardedRemoteAddressResolver.maxTrustedIndex(n)`으로
+**오른쪽에서 n번째 값**을 쓴다. 헤더가 없거나 2개 이상이면 전부 버리고 원격 주소를 쓴다.
+
+| 값 | 의미 | 쓰는 곳 |
+|---|---|---|
+| `0` | `X-Forwarded-For`를 읽지 않고 원격 주소를 쓴다 | `application.yaml` 기본값 — Nginx가 없는 local · 테스트 |
+| `1` | 오른쪽 끝(Nginx가 기록한 값) | prod — Nginx 1대 |
+| `n` | 오른쪽에서 n번째 | 앞단 프록시가 n대일 때(예: CDN + Nginx = 2). **Nginx를 포함한 모든 프록시가 X-Forwarded-For에 append할 때만** 성립한다 — Nginx가 덮어쓰면 앞단 기록이 사라져 count를 몇으로 두든 클라이언트 IP를 얻을 수 없다 |
+
+- prod(`application-prod.yaml`)는 기본값이 없다. **누락하거나 비우면 기동에 실패**한다. 음수도 기동 실패.
+- 값이 실제 프록시 대수와 다르면 조용히 틀린다. 오류가 나지 않으므로 프록시 구성을 바꿀 때 이 값도 함께 바꾼다.
+  - 실제보다 **작으면**: 프록시의 IP가 키가 되어 모든 사용자가 한 버킷을 나눠 쓴다(가용성 장애)
+  - 실제보다 **크면**: X-Forwarded-For가 append 체인이면 클라이언트가 왼쪽에 붙인 값이 키가 되어 Rate Limit이 우회된다.
+    값이 n개보다 적으면 SCG는 왼쪽 끝을 고른다(`Math.max(0, 값 개수 - n)`)
+
+### 전제 — 배포할 때 반드시 지킨다
+
+resolver는 원격 주소가 누구인지 검사하지 않는다. 아래 전제가 지켜져야만 오른쪽 끝이 Nginx가 기록한 값이다.
+배포용 compose와 Nginx 설정은 아직 저장소에 없으므로, 도입할 때 이 목록을 체크리스트로 쓴다.
+
+1. **Gateway 포트를 외부에 publish하지 않는다.** Nginx만 80/443을 연다. Gateway는 내부 네트워크에서만 접근 가능하게 둔다
+   (`ports:` 대신 `expose:` 또는 내부 네트워크만 연결). 헬스체크용으로라도 Gateway 포트를 열지 않는다.
+2. **Nginx가 `X-Forwarded-For` 오른쪽 끝에 실제 접속 주소를 남긴다.** Nginx 1대일 때는 둘 중 하나를 쓴다. 어느 쪽이든
+   오른쪽 끝은 `$remote_addr`이므로 `trusted-proxy-count = 1`이 맞다.
+   ```nginx
+   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;  # 기존 값 뒤에 덧붙인다 (프록시 2대 이상이면 이것만)
+   # 또는
+   proxy_set_header X-Forwarded-For $remote_addr;                # 덮어쓴다 (Nginx 1대일 때만)
+   ```
+3. **앞단 프록시 구성이 바뀌면 `RATE_LIMIT_TRUSTED_PROXY_COUNT`도 같이 바꾼다.** 2대 이상이 되면 Nginx를 append
+   (`$proxy_add_x_forwarded_for`)로 바꾼다. 덮어쓰기를 그대로 두면 count를 올려도 앞단 프록시 IP가 키가 된다.
+
+### 전제가 깨지면
+
+클라이언트가 Gateway에 직접 붙으면 오른쪽 끝 값도 클라이언트가 정한다.
+
+- 요청마다 값을 바꿔 IP 기반 Rate Limit을 우회할 수 있다.
+- 값이 IP 리터럴이 아니면(예: 호스트명) resolver가 `new InetSocketAddress(값, 0)`에서 **DNS 조회**를 시도한다.
+  WebFlux 이벤트 루프 스레드를 블로킹하므로, 느린 DNS를 노린 요청이 다른 요청까지 멈출 수 있다.
+
+전제를 지키는 한 오른쪽 끝은 항상 Nginx가 기록한 IP이므로 두 문제 모두 생기지 않는다. 그래서 IP 형식 검증을
+직접 구현하지 않고 네트워크 경계에 맡긴다. Gateway로 직접 들어오는 경로가 필요해지면 이 결정을 다시 본다.
+
+---
+
 ## Architectural Principle
 
 Edge Layer는 두 단계로 구성한다:
