@@ -108,7 +108,8 @@ spring:
 rate-limit:
   capacity: ${RATE_LIMIT_CAPACITY:30}
   refill-period-seconds: ${RATE_LIMIT_REFILL_PERIOD_SECONDS:60}
-  trusted-proxies: ${RATE_LIMIT_TRUSTED_PROXIES:}
+  # 앞단 신뢰 프록시 대수. 0 = X-Forwarded-For를 읽지 않는다(Nginx가 없는 local · 테스트). ADR-0003
+  trusted-proxy-count: ${RATE_LIMIT_TRUSTED_PROXY_COUNT:0}
   fail-open-on-redis-error: ${RATE_LIMIT_FAIL_OPEN_ON_REDIS_ERROR:false}
 
 jwt:
