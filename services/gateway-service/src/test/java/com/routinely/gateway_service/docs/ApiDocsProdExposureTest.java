@@ -25,7 +25,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
  * 경로에 들어 있으므로 토큰 없이 요청해도 401이 아니라 <b>라우트가 없어 404</b>여야 한다.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "rate-limit.trusted-proxies=")
+        properties = "rate-limit.trusted-proxy-count=1")
 @ActiveProfiles({"prod", "test"})
 @DisplayName("API 문서 비노출 (prod 게이트웨이)")
 class ApiDocsProdExposureTest {

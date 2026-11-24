@@ -21,6 +21,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -29,6 +30,7 @@ class RateLimitFilterTest {
 
     private static final int CAPACITY = 3;
     private static final long REFILL_PERIOD = 60L;
+    private static final String NGINX_IP = "10.0.0.10";
 
     private RateLimitFilter filter;
     private GatewayFilterChain chain;
@@ -39,7 +41,7 @@ class RateLimitFilterTest {
         redisTemplate = mock(ReactiveStringRedisTemplate.class);
         when(redisTemplate.execute(any(), anyList(), any(), any())).thenReturn(Flux.just(List.of(1L, REFILL_PERIOD)));
 
-        filter = new RateLimitFilter(redisTemplate, CAPACITY, REFILL_PERIOD, "", false);
+        filter = filterWithTrustedProxyCount(0);
         chain = mock(GatewayFilterChain.class);
         when(chain.filter(any())).thenReturn(Mono.empty());
     }
@@ -106,23 +108,103 @@ class RateLimitFilterTest {
     }
 
     @Test
-    @DisplayName("비인증요청_신뢰프록시경유_XForwardedFor의클라이언트IP로Redis키생성")
-    void filter_unauthenticatedRequest_viaTrustedProxy_usesForwardedClientIpAsKey() {
+    @DisplayName("비인증요청_신뢰프록시1대_XForwardedFor오른쪽끝값으로Redis키생성")
+    void filter_unauthenticatedRequest_withOneTrustedProxy_usesRightmostForwardedValueAsKey() {
         givenRateLimitResult(true, REFILL_PERIOD);
-        filter = new RateLimitFilter(redisTemplate, CAPACITY, REFILL_PERIOD, "10.0.0.10", false);
-        MockServerWebExchange exchange = MockServerWebExchange.from(
-                MockServerHttpRequest.post("/api/v1/auth/login")
-                        .remoteAddress(new InetSocketAddress("10.0.0.10", 12345))
-                        .header("X-Forwarded-For", "203.0.113.5, 10.0.0.1"));
+        filter = filterWithTrustedProxyCount(1);
+        MockServerWebExchange exchange = loginRequestFromNginx("203.0.113.5, 198.51.100.7");
 
         filter.filter(exchange, chain).block();
 
-        verify(redisTemplate).execute(any(), eq(List.of("rate_limit:ip:203.0.113.5")), eq("60"), eq("3"));
+        verify(redisTemplate).execute(any(), eq(List.of("rate_limit:ip:198.51.100.7")), eq("60"), eq("3"));
     }
 
     @Test
-    @DisplayName("비인증요청_신뢰되지않은원격지_XForwardedFor무시하고remoteAddress로Redis키생성")
-    void filter_unauthenticatedRequest_withUntrustedRemoteAddress_ignoresForwardedFor() {
+    @DisplayName("비인증요청_신뢰프록시1대_왼쪽에조작된값을바꿔붙여도_실제클라이언트IP하나로집계")
+    void filter_unauthenticatedRequest_withSpoofedLeftmostValues_aggregatesToRealClientIp() {
+        givenRateLimitResult(true, REFILL_PERIOD);
+        filter = filterWithTrustedProxyCount(1);
+
+        // 공격자가 매번 다른 값을 보내도 Nginx가 오른쪽 끝에 실제 접속 주소를 덧붙인다.
+        filter.filter(loginRequestFromNginx("10.9.9.1, 198.51.100.7"), chain).block();
+        filter.filter(loginRequestFromNginx("10.9.9.2, 198.51.100.7"), chain).block();
+
+        verify(redisTemplate, times(2))
+                .execute(any(), eq(List.of("rate_limit:ip:198.51.100.7")), eq("60"), eq("3"));
+    }
+
+    @Test
+    @DisplayName("비인증요청_신뢰프록시2대_XForwardedFor오른쪽에서두번째값으로Redis키생성")
+    void filter_unauthenticatedRequest_withTwoTrustedProxies_usesSecondValueFromRight() {
+        givenRateLimitResult(true, REFILL_PERIOD);
+        filter = filterWithTrustedProxyCount(2);
+        MockServerWebExchange exchange = loginRequestFromNginx("10.9.9.1, 198.51.100.7, 172.16.0.3");
+
+        filter.filter(exchange, chain).block();
+
+        verify(redisTemplate).execute(any(), eq(List.of("rate_limit:ip:198.51.100.7")), eq("60"), eq("3"));
+    }
+
+    @Test
+    @DisplayName("비인증요청_신뢰프록시1대_포트붙은값_예외없이원문으로Redis키생성")
+    void filter_unauthenticatedRequest_withPortSuffixedForwardedValue_usesRawValueAsKey() {
+        givenRateLimitResult(true, REFILL_PERIOD);
+        filter = filterWithTrustedProxyCount(1);
+        // IP 리터럴이 아니라 resolver가 unresolved 주소(getAddress() == null)를 돌려준다.
+        // Nginx는 포트 없는 $remote_addr만 쓰므로 전제가 깨졌을 때만 들어오는 값이다 — 500으로 죽지 않아야 한다.
+        MockServerWebExchange exchange = loginRequestFromNginx("203.0.113.5, 1.2.3.4:5678");
+
+        filter.filter(exchange, chain).block();
+
+        verify(chain).filter(any());
+        verify(redisTemplate).execute(any(), eq(List.of("rate_limit:ip:1.2.3.4:5678")), eq("60"), eq("3"));
+    }
+
+    @Test
+    @DisplayName("비인증요청_신뢰프록시1대_XForwardedFor헤더2개_전부버리고remoteAddress로Redis키생성")
+    void filter_unauthenticatedRequest_withMultipleForwardedForHeaders_fallsBackToRemoteAddress() {
+        givenRateLimitResult(true, REFILL_PERIOD);
+        filter = filterWithTrustedProxyCount(1);
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.post("/api/v1/auth/login")
+                        .remoteAddress(new InetSocketAddress(NGINX_IP, 12345))
+                        .header("X-Forwarded-For", "10.9.9.1", "198.51.100.7"));
+
+        filter.filter(exchange, chain).block();
+
+        verify(redisTemplate).execute(any(), eq(List.of("rate_limit:ip:" + NGINX_IP)), eq("60"), eq("3"));
+    }
+
+    @Test
+    @DisplayName("비인증요청_신뢰프록시1대_XForwardedFor없음_remoteAddress로Redis키생성")
+    void filter_unauthenticatedRequest_withOneTrustedProxy_withoutForwardedFor_usesRemoteAddress() {
+        givenRateLimitResult(true, REFILL_PERIOD);
+        filter = filterWithTrustedProxyCount(1);
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.post("/api/v1/auth/login")
+                        .remoteAddress(new InetSocketAddress(NGINX_IP, 12345)));
+
+        filter.filter(exchange, chain).block();
+
+        verify(redisTemplate).execute(any(), eq(List.of("rate_limit:ip:" + NGINX_IP)), eq("60"), eq("3"));
+    }
+
+    @Test
+    @DisplayName("비인증요청_신뢰프록시1대_XForwardedFor와remoteAddress모두없음_unknown키생성")
+    void filter_unauthenticatedRequest_withOneTrustedProxy_withoutAnyAddress_usesUnknownKey() {
+        givenRateLimitResult(true, REFILL_PERIOD);
+        filter = filterWithTrustedProxyCount(1);
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.post("/api/v1/auth/login"));
+
+        filter.filter(exchange, chain).block();
+
+        verify(redisTemplate).execute(any(), eq(List.of("rate_limit:ip:unknown")), eq("60"), eq("3"));
+    }
+
+    @Test
+    @DisplayName("비인증요청_신뢰프록시0대_XForwardedFor무시하고remoteAddress로Redis키생성")
+    void filter_unauthenticatedRequest_withZeroTrustedProxies_ignoresForwardedFor() {
         givenRateLimitResult(true, REFILL_PERIOD);
         MockServerWebExchange exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.post("/api/v1/auth/login")
@@ -145,6 +227,14 @@ class RateLimitFilterTest {
         filter.filter(exchange, chain).block();
 
         verify(redisTemplate).execute(any(), eq(List.of("rate_limit:ip:192.168.1.1")), eq("60"), eq("3"));
+    }
+
+    @Test
+    @DisplayName("생성_신뢰프록시대수음수_IllegalArgumentException")
+    void construct_negativeTrustedProxyCount_throwsException() {
+        assertThatThrownBy(() -> filterWithTrustedProxyCount(-1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("rate-limit.trusted-proxy-count");
     }
 
     @Test
@@ -180,7 +270,7 @@ class RateLimitFilterTest {
     @Test
     @DisplayName("Redis오류_failOpen설정_요청통과")
     void filter_redisFailure_withFailOpen_passesRequest() {
-        filter = new RateLimitFilter(redisTemplate, CAPACITY, REFILL_PERIOD, "", true);
+        filter = new RateLimitFilter(redisTemplate, CAPACITY, REFILL_PERIOD, 0, true);
         givenRedisFailure();
         MockServerWebExchange exchange = exchangeWithUserId("42");
 
@@ -222,6 +312,18 @@ class RateLimitFilterTest {
     private void givenRedisFailure() {
         when(redisTemplate.execute(any(), anyList(), any(), any()))
                 .thenReturn(Flux.error(new RuntimeException("redis unavailable")));
+    }
+
+    private RateLimitFilter filterWithTrustedProxyCount(int trustedProxyCount) {
+        return new RateLimitFilter(redisTemplate, CAPACITY, REFILL_PERIOD, trustedProxyCount, false);
+    }
+
+    /** Nginx({@value #NGINX_IP})를 거쳐 들어온 로그인 요청. {@code forwardedFor}는 Nginx가 덧붙인 뒤의 값이다. */
+    private MockServerWebExchange loginRequestFromNginx(String forwardedFor) {
+        return MockServerWebExchange.from(
+                MockServerHttpRequest.post("/api/v1/auth/login")
+                        .remoteAddress(new InetSocketAddress(NGINX_IP, 12345))
+                        .header("X-Forwarded-For", forwardedFor));
     }
 
     private MockServerWebExchange exchangeWithUserId(String userId) {
