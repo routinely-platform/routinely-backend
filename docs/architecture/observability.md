@@ -1,7 +1,7 @@
 # Observability 전략
 
 > **선택적 애드온 프로파일**: `observability`는 기본 활성화 대상이 아니다.  
-> `observability` 프로파일은 단독으로 사용하지 않으며, 반드시 `local` 또는 `prod`와 조합한다.  
+> `observability` 프로파일은 단독으로 사용하지 않으며, 반드시 `local` 또는 `prod`와 조합한다. `local`과 `prod`는 함께 켤 수 없다(기동 실패, #215).  
 > - 로컬 개발 중 스택 확인: `local,observability` + `./scripts/local-up.sh --obs`  
 > - 배포 환경에서 스택 활성화: `prod,observability`
 

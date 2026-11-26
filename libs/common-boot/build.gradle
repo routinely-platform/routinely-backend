@@ -1,0 +1,10 @@
+plugins {
+    id 'java-library'
+}
+
+// 서비스 기동 공통 규칙(#215). Spring Boot 코어만 의존해 Servlet · WebFlux · Eureka 서버 어디에나 실린다.
+dependencies {
+    api 'org.springframework.boot:spring-boot'
+
+    testImplementation project(':libs:common-boot-test')
+}

@@ -191,15 +191,19 @@ cp infra/.env.example infra/.env
 
 | 프로파일 | 역할 |
 |---|---|
-| `local` | 로컬 개발 환경 설정 (GatewayAuthFilter 비활성화 등) |
+| `local` | 로컬 개발 환경 설정 (localhost 인프라 · 시크릿 기본값 · Swagger · gRPC reflection) |
 | `prod` | 배포 환경 설정 |
-| `observability` | Observability 스택(Zipkin·Prometheus·Grafana·Loki) 활성화 — 단독 사용 불가, 반드시 다른 프로파일과 조합 |
+| `observability` | Observability 스택(Zipkin·Prometheus·Grafana·Loki) 활성화 — 단독으로 쓰지 않고 반드시 다른 프로파일과 조합(사용 정책 — 기동을 막지는 않는다) |
+| `test` | 테스트 전용(`@ActiveProfiles`) |
 
 `observability`는 독립적인 애드온 프로파일이다. `local` 또는 `prod`와 조합해서 사용한다.
 
+**`local`과 `prod`는 함께 켤 수 없다.** 함께 켜면 어떤 순서로 적어도 기동이 실패한다(`libs/common-boot`의 `ProfileCombinationGuard`, #215).
+prod yaml에 없는 키(Swagger · S3 · CORS 등)는 순서와 상관없이 local 값이 남고, 양쪽에 있는 키는 나중 프로파일이 이겨 비밀 기본값이 살아나기 때문이다.
+
 | 조합 | 사용 시점 |
 |---|---|
-| `local` | 평소 로컬 개발 (기본값) |
+| `local` | 평소 로컬 개발 |
 | `local,observability` | 로컬에서 Observability 스택까지 함께 확인할 때 |
 | `prod` | 배포 |
 | `prod,observability` | 배포 환경에서 Observability 스택 활성화 |
@@ -217,8 +221,8 @@ cp infra/.env.example infra/.env
 
 `user-service`, `routine-service`, `challenge-service`, `chat-service`, `notification-service`는 `common-web`의 `GatewayAuthFilter`를 사용합니다.
 
-- `local` 프로파일에서는 Gateway 없이 직접 호출할 수 있도록 필터가 비활성화됩니다.
-- `local` 프로파일이 아니면 `gateway.secret` 설정이 필요합니다.
+- `local`에서도 필터가 켜집니다(#201). 서비스를 직접 호출할 때는 `X-Gateway-Secret: local-secret` 헤더를 붙입니다(local 기본값).
+- `prod`에서는 `GATEWAY_SECRET` 환경변수가 필요합니다. 없거나 비어 있으면 기동이 실패합니다.
 
 ### 4. 인프라 종료
 

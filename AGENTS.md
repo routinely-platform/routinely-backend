@@ -98,13 +98,23 @@ Routinely는 개인 프로젝트이고 Claude Code와 Codex를 함께 써서 개
 
 ### 프로파일 정책
 
-`local` / `prod`는 환경 프로파일, `observability`는 **애드온이라 단독 사용 불가** — 반드시 조합한다.
+`local` / `prod`는 환경 프로파일, `observability`는 **애드온이라 단독으로 쓰지 않는다** — 반드시 조합한다(사용 정책이다. 가드가 기동을 막지는 않는다).
+`test`는 테스트 전용이다(`@ActiveProfiles`). `application.yaml`에 기본 프로파일은 없다 — 실행할 때 지정한다.
 
 | 조합 | 사용 시점 |
 |---|---|
-| `local` | 평소 로컬 개발 (기본값) |
+| `local` | 평소 로컬 개발 |
 | `local,observability` | 로컬에서 Observability까지 확인 (`local-up.sh --obs`와 함께) |
 | `prod` / `prod,observability` | 배포 |
+| `local,test` · `prod,test` · `test` | 테스트 |
+| ~~`local,prod`~~ · ~~`prod,local`~~ | **기동 실패.** local 전용 값이 prod에 섞인다 |
+
+**`local`과 `prod`는 함께 켤 수 없다.** `libs/common-boot`의 `ProfileCombinationGuard`(EnvironmentPostProcessor)가
+**서비스 컨텍스트**를 만들기 전에 막는다. 순서 · 애드온 · 지정 방법(커맨드라인 · 환경변수 · yaml · `spring.profiles.default` ·
+`include` · 그룹)과 상관없다(#215). Spring Cloud bootstrap은 쓰지 않는다 — 켜면 입력 경로에 따라 그 부모 컨텍스트가 가드보다 먼저 생길 수 있다.
+실패 메시지에는 충돌한 환경 프로파일(`[local, prod]`)만 남긴다.
+**새 서비스는 `implementation project(':libs:common-boot')` · `testImplementation project(':libs:common-boot-test')`를 넣고**
+`ProfileCombinationGuardRegistrationTest`를 복사한다. 테스트 쪽은 testFixtures로 바꾸지 않는다 — 본체가 따라 들어와 운영 의존 누락을 못 잡는다.
 
 Swagger UI, DEBUG 로그 등 개발 전용 기능은 `local` 계열에서만 활성화한다.
 
@@ -160,6 +170,8 @@ Zipkin·Loki·Prometheus·Grafana(추적·로그·메트릭)
 
 `libs/`(공통 라이브러리) + `services/`(서비스) 멀티모듈. 정확한 목록은 `settings.gradle`을 본다.
 
+- `common-boot` — 기동 공통 규칙(`ProfileCombinationGuard`). Spring Boot 코어만 의존한다. **7개 서비스 전부**가 의존한다(§1)
+- `common-boot-test` — 테스트 전용. 가드 등록 확인용 `ProfileGuardProbe`. **common-boot에 의존하지 않는다**(§1)
 - `common-core` — JPA·Web 의존이 없는 순수 도메인. **여기에 JPA/Web 의존을 추가하지 않는다.**
 - `common-jpa` — `BaseEntity`, JPA Auditing 설정
 - `common-web` — 필터, MDC, `GlobalExceptionHandler` (`common-core`를 전이 포함)

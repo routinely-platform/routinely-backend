@@ -1,0 +1,10 @@
+plugins {
+    id 'java-library'
+}
+
+// 서비스 테스트 전용 — 프로파일 가드(#215)가 서비스에 실렸는지 확인하는 프로브.
+// common-boot에 의존하지 않는다. 의존하면(testFixtures처럼) 서비스가 common-boot 의존을 빠뜨려도
+// 테스트 클래스패스에는 가드가 들어와 등록 누락 테스트가 통과해 버린다.
+dependencies {
+    api 'org.springframework.boot:spring-boot'
+}
