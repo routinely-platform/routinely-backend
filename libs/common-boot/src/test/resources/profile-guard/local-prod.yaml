@@ -1,0 +1,4 @@
+# ProfileCombinationGuardTest — yaml로 준 spring.profiles.active도 가드가 보는지 확인한다
+spring:
+  profiles:
+    active: local,prod
