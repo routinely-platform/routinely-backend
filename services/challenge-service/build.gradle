@@ -8,6 +8,8 @@ ext {
 }
 
 dependencies {
+	implementation project(':libs:common-boot')   // local · prod 동시 적용 기동 차단(#215)
+	testImplementation project(':libs:common-boot-test')   // 가드 등록 누락 테스트(#215)
 	implementation project(':libs:common-web')
 	implementation "org.springdoc:springdoc-openapi-starter-webmvc-api:${springdocVersion}"
 	implementation project(':libs:common-jpa')

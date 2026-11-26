@@ -80,7 +80,7 @@ spring:
 
 > **참고**: 이 ADR 작성 시점에 Eureka 설정값 자체의 변경 여부는 아직 확정되지 않았다.  
 > registry-service의 Eureka 설정을 검토하는 과정에서 먼저 "이 프로젝트에서 프로파일을 어떻게 사용할지"를 명확히 할 필요가 있었다.  
-> 현재 확정된 프로파일 정책은 다음과 같다: `local` (평소 개발) / `local,observability` (로컬 + Observability 스택) / `prod` (배포) / `prod,observability` (배포 + Observability 스택). `observability`는 독립 애드온 프로파일로, 단독 사용 없이 `local` 또는 `prod`와 조합한다.  
+> 현재 확정된 프로파일 정책은 다음과 같다: `local` (평소 개발) / `local,observability` (로컬 + Observability 스택) / `prod` (배포) / `prod,observability` (배포 + Observability 스택). `observability`는 독립 애드온 프로파일로, 단독 사용 없이 `local` 또는 `prod`와 조합한다. `local`과 `prod`를 함께 켜면 기동이 실패한다(#215, 2026-11).  
 > Eureka 설정 변경이 필요하다고 판단될 경우, 별도 ADR 또는 이 ADR의 개정으로 기록한다.
 
 ### registry-service 구성
@@ -191,8 +191,8 @@ services:
 
 ### libs 의존성
 
-`registry-service`는 공유 라이브러리(`common-core`, `common-web`, `common-observability`, `proto`)를 의존하지 않는다.
-순수 Eureka Server로서 Spring Boot Starter와 `spring-cloud-starter-netflix-eureka-server`만 사용한다.
+`registry-service`는 공유 라이브러리 중 `common-boot`(프로파일 조합 가드, #215)만 의존한다.
+`common-core`, `common-web`, `common-observability`, `proto`는 쓰지 않는다. 그 밖에는 `spring-cloud-starter-netflix-eureka-server`만 사용한다.
 
 ---
 

@@ -352,7 +352,7 @@ gateway:
 ```
 
 - chat · notification에는 local 설정 파일이 없어, 필터를 켜면 `GATEWAY_SECRET` 없이 띄울 때 "빈 시크릿"으로 기동이 실패했다. 같은 기본값을 담은 `application-local.yaml`을 두었다
-- **`local`과 `prod`를 함께 켜는 조합은 지원하지 않는다.** local 전용 구성(문서 라우트 · Swagger · gRPC reflection)이 prod에 섞인다. 기동을 막는 가드는 #215
+- **`local`과 `prod`를 함께 켜면 기동이 실패한다(#215).** local 전용 구성(문서 라우트 · Swagger · gRPC reflection · 시크릿 기본값)이 prod에 섞이기 때문이다. `libs/common-boot`의 `ProfileCombinationGuard`가 서비스 컨텍스트 생성 전에 막고(Spring Cloud bootstrap은 쓰지 않는다 — 켜면 입력 경로에 따라 부모 컨텍스트가 먼저 생길 수 있다), 서비스마다 `ProfileCombinationGuardRegistrationTest`가 등록을 확인한다
 - local 서비스 포트는 개발자 머신 밖으로 노출하지 않는다는 전제다. 시크릿 기본값이 공개 저장소에 있기 때문이다
 
 ---
@@ -402,7 +402,7 @@ gateway:
 - `GATEWAY_SECRET` 유출 시 내부 서비스 직접 호출 가능
   - 완화: 정기적인 시크릿 로테이션, Vault 등 시크릿 관리 도구 도입 가능
 - 로컬에서 서비스 단독 실행 시 네트워크 격리 없음
-  - 완화: `local` 프로파일에서 `GatewayAuthFilter` 비활성화하여 개발 편의성 확보
+  - 완화: local 서비스 포트를 개발자 머신 밖으로 노출하지 않는다(위 "로컬 개발 — local에서도 두 인증 필터를 켠다" 절의 전제). local 시크릿 기본값(`local-secret`)은 직접 호출용이지 보호 수단이 아니다 — 공개 저장소에 있다
 
 ---
 

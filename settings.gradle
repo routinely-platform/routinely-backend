@@ -1,6 +1,8 @@
 rootProject.name = 'routinely-backend'
 
 include 'libs:common-core'
+include 'libs:common-boot'
+include 'libs:common-boot-test'
 include 'libs:common-jpa'
 include 'libs:common-web'
 include 'libs:common-observability'

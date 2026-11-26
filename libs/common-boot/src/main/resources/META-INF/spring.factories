@@ -1,0 +1,3 @@
+# Boot 4의 키다. Boot 3의 org.springframework.boot.env.EnvironmentPostProcessor가 아니다(#215).
+org.springframework.boot.EnvironmentPostProcessor=\
+com.routinely.boot.profile.ProfileCombinationGuard

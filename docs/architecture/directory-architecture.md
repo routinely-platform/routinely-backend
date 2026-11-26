@@ -61,6 +61,10 @@ routinely-backend/
 │       └── adr-0025-eureka-service-registry.md
 │
 ├── libs/                             # 공통 라이브러리 (서비스 간 공유 코드)
+│   ├── common-boot/                  # 기동 공통 규칙 — local · prod 동시 적용 차단 (#215). 7개 서비스 전부
+│   │   └── build.gradle
+│   ├── common-boot-test/             # 테스트 전용 — 가드 등록 확인 프로브. common-boot에 의존하지 않는다
+│   │   └── build.gradle
 │   ├── common-core/                  # 공통 유틸, 에러, 응답 포맷 (순수 도메인 — JPA/Web 의존 없음)
 │   │   └── build.gradle
 │   ├── common-jpa/                   # JPA 공통 설정 (BaseEntity, JpaAuditingConfig)
@@ -188,13 +192,13 @@ routinely-backend/
 
 | 모듈 | 의존하는 libs | 비고 |
 |---|---|---|
-| registry-service | 없음 | 순수 Eureka Server |
-| gateway-service | common-core, common-observability | JPA 없음 → common-jpa 미사용 |
-| user-service | common-web, common-jpa, common-observability | common-web 이 common-core 포함 |
-| routine-service | common-web, common-jpa, common-observability, proto | |
-| challenge-service | common-web, common-jpa, common-observability, proto | |
-| chat-service | common-web, common-jpa, common-observability, proto | |
-| notification-service | common-web, common-jpa, common-observability | gRPC 미사용 → proto 불필요 |
+| registry-service | common-boot | Eureka Server. 프로파일 가드만 쓴다 |
+| gateway-service | common-boot, common-core, common-observability | JPA 없음 → common-jpa 미사용 |
+| user-service | common-boot, common-web, common-jpa, common-observability | common-web 이 common-core 포함 |
+| routine-service | common-boot, common-web, common-jpa, common-observability, proto | |
+| challenge-service | common-boot, common-web, common-jpa, common-observability, proto | |
+| chat-service | common-boot, common-web, common-jpa, common-observability, proto | |
+| notification-service | common-boot, common-web, common-jpa, common-observability | gRPC 미사용 → proto 불필요 |
 
 ---
 
@@ -307,6 +311,8 @@ com.routinely.routine_service
 
 | 모듈 | 역할 | 분리 이유 |
 |---|---|---|
+| `common-boot` | 기동 공통 규칙(프로파일 조합 가드) | Spring Boot 코어만 의존해 Servlet · WebFlux · Eureka 서버 어디에나 실린다. common-core는 순수 도메인이라 넣을 수 없다 |
+| `common-boot-test` | 가드 등록 확인 프로브(테스트 전용) | common-boot에 의존하면 서비스의 운영 의존 누락을 테스트가 못 잡는다. 그래서 testFixtures가 아니라 별도 모듈이다 |
 | `common-core` | 공통 유틸, 에러, 응답 포맷 | JPA/Web 의존 없이 모든 서비스가 사용 가능한 순수 도메인 모듈 |
 | `common-jpa` | BaseEntity, JpaAuditingConfig | JPA가 필요 없는 서비스(gateway)의 클래스패스 오염 방지 |
 | `common-web` | Web 필터, MDC, Exception Handler | Web 의존이 불필요한 서비스의 오염 방지 |
